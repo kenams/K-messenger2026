@@ -1,0 +1,57 @@
+name: Web Beta Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [bootstrap/platform]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/web-beta-smoke.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/web-beta-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check public beta HTML
+        env:
+          BETA_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-beta
+        run: |
+          set -euo pipefail
+          body="$(curl --fail --silent --show-error --location --retry 3 --retry-delay 2 "$BETA_URL")"
+          test -n "$body"
+          grep -q 'K-SSENGER' <<<"$body"
+          grep -q 'app.js' <<<"$body"
+
+      - name: Check JavaScript asset
+        env:
+          BETA_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-beta
+        run: |
+          set -euo pipefail
+          headers="$(mktemp)"
+          curl --fail --silent --show-error --location --retry 3 -D "$headers" -o app.js "$BETA_URL/app.js"
+          grep -qi '^content-type: text/javascript' "$headers"
+          grep -q 'kss_send_message' app.js
+          grep -q 'signInWithPassword' app.js
+
+      - name: Check public runtime config without exposing key
+        env:
+          CONFIG_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-config
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 "$CONFIG_URL" -o config.json
+          python - <<'PY'
+          import json
+          c=json.load(open('config.json',encoding='utf-8'))
+          assert c.get('url','').startswith('https://')
+          assert len(c.get('key','')) > 20
+          print('runtime config present')
+          PY
