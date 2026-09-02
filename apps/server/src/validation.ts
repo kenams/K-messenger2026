@@ -14,3 +14,9 @@ export const messageSendSchema = z.object({
 export const presenceSchema = z.object({
   status: z.enum(['online', 'busy', 'away', 'invisible', 'offline'])
 }).strict();
+
+export const receiptSchema = z.object({
+  messageId: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  state: z.enum(['delivered', 'read']),
+}).strict();
