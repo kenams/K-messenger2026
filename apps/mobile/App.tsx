@@ -1,58 +1,21 @@
-import React, { useMemo, useState } from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import React, { useState } from 'react';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { FeedScreen } from './src/features/feed/FeedScreen';
 import { MomentsScreen } from './src/features/moments/MomentsScreen';
+import { MsnContactsScreen, Contact } from './src/features/contacts/MsnContactsScreen';
+import { ChatsHubScreen } from './src/features/chats/ChatsHubScreen';
 
-type Presence = 'online' | 'busy' | 'away' | 'offline';
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
-type Contact = {
-  id: string;
-  name: string;
-  handle: string;
-  status: Presence;
-  note?: string;
-  favorite?: boolean;
-};
-
-const CONTACTS: Contact[] = [
-  { id: '1', name: 'Sarah', handle: '@sarah', status: 'online', note: '🎵 SZA', favorite: true },
-  { id: '2', name: 'Mehdi', handle: '@mehdi', status: 'online', note: '🚗 En route · 12 min', favorite: true },
-  { id: '3', name: 'Lisa', handle: '@lisa', status: 'online', note: 'Disponible' },
-  { id: '4', name: 'Chris', handle: '@chris', status: 'busy', note: 'Au travail' },
-  { id: '5', name: 'Sofia', handle: '@sofia', status: 'away', note: 'Revient bientôt' },
-  { id: '6', name: 'Bob', handle: '@bob', status: 'offline' },
-];
-
-const presenceDot: Record<Presence, string> = {
-  online: '🟢',
-  busy: '🔴',
-  away: '🟠',
-  offline: '⚫',
-};
 
 export default function App() {
   const [tab, setTab] = useState<TabName>('contacts');
-  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Contact | null>(null);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<string[]>(['Salut 👋', 'Bienvenue sur K-ssenger.']);
   const [userAge, setUserAge] = useState<number | null>(null);
   const [ageInput, setAgeInput] = useState('');
   const [ageError, setAgeError] = useState('');
-
-  const filtered = useMemo(
-    () => CONTACTS.filter((contact) => contact.name.toLowerCase().includes(search.toLowerCase())),
-    [search],
-  );
 
   const confirmAge = () => {
     const parsed = Number(ageInput);
@@ -76,27 +39,14 @@ export default function App() {
       <SafeAreaView style={styles.safe}>
         <StatusBar style="dark" />
         <View style={styles.ageGate}>
-          <View style={styles.ageLogo}><Text style={styles.ageLogoText}>K</Text></View>
-          <Text style={styles.ageBrand}>K-SSENGER</Text>
-          <Text style={styles.ageTitle}>Quel âge as-tu ?</Text>
-          <Text style={styles.ageCopy}>
-            Ton âge sert à filtrer le contenu public du K-Feed. Les contenus 16+ et 18+ ne sont jamais affichés aux utilisateurs plus jeunes.
-          </Text>
-          <TextInput
-            value={ageInput}
-            onChangeText={setAgeInput}
-            keyboardType="number-pad"
-            placeholder="Âge"
-            maxLength={3}
-            style={styles.ageInput}
-            accessibilityLabel="Ton âge"
-            onSubmitEditing={confirmAge}
-          />
-          {!!ageError && <Text style={styles.ageError}>{ageError}</Text>}
-          <TouchableOpacity style={styles.ageButton} onPress={confirmAge} accessibilityRole="button">
-            <Text style={styles.ageButtonText}>Continuer</Text>
-          </TouchableOpacity>
-          <Text style={styles.ageLegal}>Version de test · âge déclaré, pas encore vérifié.</Text>
+          <View style={styles.logoOrb}><Text style={styles.logoText}>K</Text></View>
+          <Text style={styles.brand}>K-SSENGER</Text>
+          <Text style={styles.ageTitle}>Bienvenue dans MSN… version 2027.</Text>
+          <Text style={styles.ageCopy}>Ton âge sert à protéger le K-Feed et les Moments publics. Les contenus 16+ et 18+ sont filtrés automatiquement.</Text>
+          <TextInput value={ageInput} onChangeText={setAgeInput} keyboardType="number-pad" placeholder="Ton âge" maxLength={3} style={styles.ageInput} onSubmitEditing={confirmAge} />
+          {!!ageError && <Text style={styles.error}>{ageError}</Text>}
+          <TouchableOpacity style={styles.primary} onPress={confirmAge}><Text style={styles.primaryText}>Entrer dans K-ssenger</Text></TouchableOpacity>
+          <Text style={styles.legal}>Version test · âge déclaré, vérification renforcée prévue.</Text>
         </View>
       </SafeAreaView>
     );
@@ -107,50 +57,24 @@ export default function App() {
       <SafeAreaView style={styles.safe}>
         <StatusBar style="dark" />
         <View style={styles.chatHeader}>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retour" onPress={() => setSelected(null)}>
-            <Text style={styles.back}>‹</Text>
-          </TouchableOpacity>
-          <View style={styles.flexOne}>
-            <Text style={styles.chatName}>{presenceDot[selected.status]} {selected.name}</Text>
-            <Text style={styles.muted}>Prototype local · chiffrement E2EE non encore activé</Text>
+          <TouchableOpacity onPress={() => setSelected(null)} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
+          <View style={styles.chatAvatar}><Text style={styles.chatAvatarText}>{selected.displayName[0]}</Text></View>
+          <View style={styles.flex}>
+            <Text style={styles.chatName}>🟢 {selected.nickname}</Text>
+            <Text style={styles.chatSub}>{selected.statusMessage ?? 'Disponible'}</Text>
+            {!!selected.nowPlaying && <Text style={styles.chatMusic}>🎵 {selected.nowPlaying}</Text>}
           </View>
-          <Text style={styles.headerAction}>📞</Text>
-          <Text style={styles.headerAction}>📍</Text>
+          <Text style={styles.headerAction}>📞</Text><Text style={styles.headerAction}>📍</Text>
         </View>
-
+        <View style={styles.securityStrip}><Text style={styles.securityText}>🛡️ Prototype local · E2EE réel non encore activé</Text></View>
         <ScrollView style={styles.chatBody} contentContainerStyle={styles.chatContent}>
-          <View style={styles.systemBubble}>
-            <Text style={styles.systemText}>Mode démonstration — aucun message réel n'est envoyé.</Text>
-          </View>
-          {messages.map((item, index) => (
-            <View key={`${index}-${item}`} style={[styles.bubble, index % 2 ? styles.mine : styles.theirs]}>
-              <Text style={styles.bubbleText}>{item}</Text>
-            </View>
-          ))}
+          {messages.map((item, index) => <View key={`${index}-${item}`} style={[styles.bubble, index % 2 ? styles.mine : styles.theirs]}><Text style={styles.bubbleText}>{item}</Text></View>)}
         </ScrollView>
-
         <View style={styles.composer}>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ajouter une pièce jointe">
-            <Text style={styles.plus}>＋</Text>
-          </TouchableOpacity>
-          <TextInput
-            value={message}
-            onChangeText={setMessage}
-            placeholder="Message..."
-            style={styles.input}
-            returnKeyType="send"
-            onSubmitEditing={sendLocalDemoMessage}
-          />
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Envoyer" onPress={sendLocalDemoMessage}>
-            <Text style={styles.send}>➤</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Envoyer un Wizz de démonstration"
-            onPress={() => setMessages((current) => [...current, '⚡ WIZZ de démonstration !'])}
-          >
-            <Text style={styles.wizz}>⚡</Text>
-          </TouchableOpacity>
+          <TouchableOpacity><Text style={styles.plus}>＋</Text></TouchableOpacity>
+          <TextInput value={message} onChangeText={setMessage} placeholder="Écris un message..." style={styles.input} onSubmitEditing={sendLocalDemoMessage} returnKeyType="send" />
+          <TouchableOpacity onPress={sendLocalDemoMessage}><Text style={styles.send}>➤</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setMessages((current) => [...current, '⚡ WIZZ !'])}><View style={styles.wizzBtn}><Text style={styles.wizz}>⚡</Text></View></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -159,160 +83,47 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-
-      {tab !== 'feed' && tab !== 'moments' && (
-        <View style={styles.hero}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>K</Text></View>
-          <View style={styles.flexOne}>
-            <Text style={styles.brand}>K-SSENGER</Text>
-            <Text style={styles.name}>KAH 😎</Text>
-            <Text style={styles.status}>🟢 Disponible · 🎵 Changes — 2Pac</Text>
-          </View>
-          <Text style={styles.headerAction}>⚙️</Text>
-        </View>
-      )}
-
-      {tab === 'contacts' && (
-        <ScrollView style={styles.content}>
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Rechercher un contact"
-            style={styles.search}
-          />
-          <Section title="⭐ FAVORIS" contacts={filtered.filter((contact) => contact.favorite)} onOpen={setSelected} />
-          <Section
-            title={`EN LIGNE — ${filtered.filter((contact) => contact.status !== 'offline').length}`}
-            contacts={filtered.filter((contact) => contact.status !== 'offline' && !contact.favorite)}
-            onOpen={setSelected}
-          />
-          <Section
-            title={`HORS LIGNE — ${filtered.filter((contact) => contact.status === 'offline').length}`}
-            contacts={filtered.filter((contact) => contact.status === 'offline')}
-            onOpen={setSelected}
-          />
-        </ScrollView>
-      )}
-
-      {tab === 'chats' && <Placeholder title="Chats" subtitle="Tes conversations récentes apparaîtront ici." icon="💬" />}
+      {tab !== 'feed' && tab !== 'moments' && <ProfileHeader />}
+      {tab === 'contacts' && <MsnContactsScreen onOpen={setSelected} />}
+      {tab === 'chats' && <ChatsHubScreen />}
       {tab === 'feed' && <FeedScreen userAge={userAge} />}
-      {tab === 'map' && <Placeholder title="K-MAP" subtitle="Partage ta position uniquement quand tu le décides." icon="📍" action="👻 Ghost Mode" />}
+      {tab === 'map' && <MapPreview />}
       {tab === 'moments' && <MomentsScreen />}
-      {tab === 'me' && <Placeholder title="Mon profil" subtitle={`Âge déclaré : ${userAge} ans · pseudo, statut, musique, sécurité et confidentialité.`} icon="😎" action="🔒 Sécurité" />}
-
+      {tab === 'me' && <MeScreen userAge={userAge} />}
       <View style={styles.tabs}>
-        <Tab active={tab === 'contacts'} label="Contacts" icon="👥" onPress={() => setTab('contacts')} />
-        <Tab active={tab === 'chats'} label="Chats" icon="💬" onPress={() => setTab('chats')} />
-        <Tab active={tab === 'feed'} label="K-Feed" icon="▶️" onPress={() => setTab('feed')} />
-        <Tab active={tab === 'map'} label="K-Map" icon="📍" onPress={() => setTab('map')} />
-        <Tab active={tab === 'moments'} label="Moments" icon="✨" onPress={() => setTab('moments')} />
-        <Tab active={tab === 'me'} label="Moi" icon="🙂" onPress={() => setTab('me')} />
+        <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
+        <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
+        <Tab active={tab === 'feed'} icon="▶️" label="K-Feed" onPress={() => setTab('feed')} />
+        <Tab active={tab === 'map'} icon="📍" label="K-Map" onPress={() => setTab('map')} />
+        <Tab active={tab === 'moments'} icon="✨" label="Moments" onPress={() => setTab('moments')} />
+        <Tab active={tab === 'me'} icon="🙂" label="Moi" onPress={() => setTab('me')} />
       </View>
     </SafeAreaView>
   );
 }
 
-function Section({ title, contacts, onOpen }: { title: string; contacts: Contact[]; onOpen: (contact: Contact) => void }) {
-  if (!contacts.length) return null;
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {contacts.map((contact) => (
-        <TouchableOpacity
-          key={contact.id}
-          style={styles.contact}
-          onPress={() => onOpen(contact)}
-          accessibilityRole="button"
-          accessibilityLabel={`Ouvrir la conversation avec ${contact.name}`}
-        >
-          <View style={styles.contactAvatar}><Text style={styles.contactAvatarText}>{contact.name[0]}</Text></View>
-          <View style={styles.flexOne}>
-            <Text style={styles.contactName}>{presenceDot[contact.status]} {contact.name}</Text>
-            <Text style={styles.muted}>{contact.note ?? contact.handle}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+function ProfileHeader() {
+  return <View style={styles.hero}><View style={styles.avatarRing}><View style={styles.avatar}><Text style={styles.avatarText}>K</Text></View><View style={styles.onlineDot} /></View><View style={styles.flex}><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.name}>KAH 😎 <Text style={styles.handle}>@kah</Text></Text><Text style={styles.status}>🟢 Disponible · « On est là. »</Text><View style={styles.musicPill}><Text style={styles.musicText}>🎵 Changes — 2Pac</Text></View></View><TouchableOpacity><Text style={styles.headerAction}>⚙️</Text></TouchableOpacity></View>;
 }
 
-function Placeholder({ title, subtitle, icon, action }: { title: string; subtitle: string; icon: string; action?: string }) {
-  return (
-    <View style={styles.placeholder}>
-      <Text style={styles.placeholderIcon}>{icon}</Text>
-      <Text style={styles.placeholderTitle}>{title}</Text>
-      <Text style={styles.placeholderText}>{subtitle}</Text>
-      {action && <TouchableOpacity style={styles.primary}><Text style={styles.primaryText}>{action}</Text></TouchableOpacity>}
-    </View>
-  );
+function MapPreview() {
+  return <View style={styles.center}><Text style={styles.bigIcon}>📍</Text><Text style={styles.centerTitle}>K-MAP</Text><Text style={styles.centerText}>Tes amis apparaissent uniquement lorsqu’ils choisissent de partager leur position.</Text><View style={styles.mapButtons}><TouchableOpacity style={styles.secondary}><Text style={styles.secondaryText}>👻 Ghost Mode</Text></TouchableOpacity><TouchableOpacity style={styles.primary}><Text style={styles.primaryText}>🤝 On se capte ?</Text></TouchableOpacity></View></View>;
 }
 
-function Tab({ active, label, icon, onPress }: { active: boolean; label: string; icon: string; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}>
-      <Text style={styles.tabIcon}>{icon}</Text>
-      <Text style={[styles.tabLabel, active && styles.tabActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
+function MeScreen({ userAge }: { userAge: number }) {
+  return <ScrollView contentContainerStyle={styles.profilePage}><View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>K</Text></View><Text style={styles.profileName}>KAH 😎</Text><Text style={styles.profileHandle}>@kah</Text><Text style={styles.profilePresence}>🟢 Disponible</Text><Text style={styles.profileQuote}>« Work hard, disappear, come back different. »</Text><View style={styles.profileMusic}><Text style={styles.profileMusicTitle}>🎵 EN ÉCOUTE</Text><Text style={styles.profileMusicSong}>Changes — 2Pac</Text></View><View style={styles.profileGrid}><ProfileButton icon="✏️" label="Pseudo"/><ProfileButton icon="🎵" label="Musique"/><ProfileButton icon="👥" label="Groupes"/><ProfileButton icon="🔒" label="Sécurité"/></View><Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text></ScrollView>;
 }
+
+function ProfileButton({ icon, label }: { icon: string; label: string }) { return <TouchableOpacity style={styles.profileButton}><Text style={styles.profileButtonIcon}>{icon}</Text><Text style={styles.profileButtonLabel}>{label}</Text></TouchableOpacity>; }
+function Tab({ active, icon, label, onPress }: { active: boolean; icon: string; label: string; onPress: () => void }) { return <TouchableOpacity style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}><Text style={styles.tabIcon}>{icon}</Text><Text style={[styles.tabLabel, active && styles.tabActive]}>{label}</Text></TouchableOpacity>; }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#eef6fb' },
-  flexOne: { flex: 1 },
-  ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, backgroundColor: '#eef6fb' },
-  ageLogo: { width: 74, height: 74, borderRadius: 24, backgroundColor: '#4aa3df', alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#b9e5ff' },
-  ageLogoText: { color: '#fff', fontSize: 34, fontWeight: '900' },
-  ageBrand: { marginTop: 14, fontSize: 12, letterSpacing: 2.4, color: '#3d83b8', fontWeight: '900' },
-  ageTitle: { marginTop: 20, fontSize: 28, color: '#173448', fontWeight: '900' },
-  ageCopy: { maxWidth: 430, marginTop: 10, textAlign: 'center', color: '#668293', lineHeight: 21 },
-  ageInput: { width: 150, marginTop: 20, paddingHorizontal: 18, paddingVertical: 12, textAlign: 'center', fontSize: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d6e4ec', borderRadius: 16 },
-  ageError: { maxWidth: 360, marginTop: 10, textAlign: 'center', color: '#b42318', fontWeight: '700' },
-  ageButton: { marginTop: 16, backgroundColor: '#238ac8', paddingHorizontal: 30, paddingVertical: 13, borderRadius: 16 },
-  ageButtonText: { color: '#fff', fontWeight: '900', fontSize: 16 },
-  ageLegal: { marginTop: 16, fontSize: 11, color: '#8197a4' },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d9e7ef' },
-  avatar: { width: 54, height: 54, borderRadius: 18, backgroundColor: '#4aa3df', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#b9e5ff' },
-  avatarText: { color: '#fff', fontSize: 24, fontWeight: '800' },
-  brand: { fontSize: 11, letterSpacing: 2.1, color: '#3d83b8', fontWeight: '800' },
-  name: { fontSize: 19, fontWeight: '800', color: '#173448', marginTop: 2 },
-  status: { fontSize: 12, color: '#517286', marginTop: 2 },
-  headerAction: { fontSize: 20, marginLeft: 10 },
-  content: { flex: 1, paddingHorizontal: 14 },
-  search: { marginVertical: 14, backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, borderColor: '#d6e4ec' },
-  section: { marginBottom: 14 },
-  sectionTitle: { fontSize: 12, color: '#55778a', fontWeight: '800', marginBottom: 6, marginLeft: 4 },
-  contact: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderRadius: 16, marginBottom: 7, borderWidth: 1, borderColor: '#e1edf3' },
-  contactAvatar: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#dff2ff', alignItems: 'center', justifyContent: 'center' },
-  contactAvatarText: { fontWeight: '800', color: '#2e76a8', fontSize: 18 },
-  contactName: { fontWeight: '700', color: '#173448', fontSize: 15 },
-  muted: { color: '#718a99', fontSize: 12, marginTop: 2 },
-  chevron: { fontSize: 28, color: '#91a7b5' },
-  tabs: { flexDirection: 'row', backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d9e7ef', paddingTop: 8, paddingBottom: 10 },
-  tab: { flex: 1, alignItems: 'center' },
-  tabIcon: { fontSize: 19 },
-  tabLabel: { fontSize: 9, color: '#8197a4', marginTop: 2 },
-  tabActive: { color: '#2788c4', fontWeight: '800' },
-  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 36 },
-  placeholderIcon: { fontSize: 60 },
-  placeholderTitle: { fontSize: 28, fontWeight: '900', color: '#173448', marginTop: 12 },
-  placeholderText: { textAlign: 'center', color: '#668293', fontSize: 15, marginTop: 8, lineHeight: 21 },
-  primary: { backgroundColor: '#238ac8', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 16, marginTop: 18 },
-  primaryText: { color: '#fff', fontWeight: '800' },
-  chatHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d9e7ef' },
-  back: { fontSize: 38, color: '#238ac8', lineHeight: 40 },
-  chatName: { fontWeight: '800', fontSize: 17, color: '#173448' },
-  chatBody: { flex: 1, padding: 14 },
-  chatContent: { paddingBottom: 24 },
-  systemBubble: { alignSelf: 'center', backgroundColor: '#dfeef6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 12 },
-  systemText: { fontSize: 11, color: '#597484' },
-  bubble: { maxWidth: '80%', padding: 11, borderRadius: 16, marginBottom: 8 },
-  mine: { alignSelf: 'flex-end', backgroundColor: '#caecff' },
-  theirs: { alignSelf: 'flex-start', backgroundColor: '#fff' },
-  bubbleText: { color: '#173448', fontSize: 15 },
-  composer: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d9e7ef', padding: 10 },
-  plus: { fontSize: 28, color: '#238ac8' },
-  input: { flex: 1, backgroundColor: '#edf5f9', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
-  send: { fontSize: 22, color: '#238ac8' },
-  wizz: { fontSize: 26 },
+  safe: { flex: 1, backgroundColor: '#edf7fc' }, flex: { flex: 1 },
+  ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 }, logoOrb: { width: 82, height: 82, borderRadius: 28, backgroundColor: '#278dcc', borderWidth: 5, borderColor: '#bfe8ff', alignItems: 'center', justifyContent: 'center' }, logoText: { color: '#fff', fontSize: 37, fontWeight: '900' }, brand: { color: '#3784b5', fontSize: 10, letterSpacing: 2.2, fontWeight: '900' }, ageTitle: { marginTop: 22, fontSize: 27, lineHeight: 33, textAlign: 'center', color: '#15364a', fontWeight: '900' }, ageCopy: { marginTop: 10, maxWidth: 430, textAlign: 'center', color: '#648292', lineHeight: 20 }, ageInput: { width: 160, marginTop: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 17, padding: 13, textAlign: 'center', fontSize: 19 }, error: { color: '#b42318', marginTop: 9, textAlign: 'center' }, legal: { marginTop: 14, color: '#8197a4', fontSize: 10 },
+  primary: { backgroundColor: '#2189c5', borderRadius: 16, paddingHorizontal: 22, paddingVertical: 12, marginTop: 14 }, primaryText: { color: '#fff', fontWeight: '900' }, secondary: { borderWidth: 1, borderColor: '#a8d5ed', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 12, marginTop: 14 }, secondaryText: { color: '#347da8', fontWeight: '900' },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, avatarRing: { position: 'relative' }, avatar: { width: 58, height: 58, borderRadius: 19, backgroundColor: '#2f93cf', borderWidth: 4, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 25, fontWeight: '900' }, onlineDot: { position: 'absolute', width: 15, height: 15, borderRadius: 8, backgroundColor: '#4ac769', right: -2, bottom: -2, borderWidth: 3, borderColor: '#fff' }, name: { color: '#16394e', fontSize: 18, fontWeight: '900', marginTop: 2 }, handle: { color: '#7b97a7', fontSize: 11, fontWeight: '600' }, status: { color: '#5d7c8e', fontSize: 11, marginTop: 2 }, musicPill: { alignSelf: 'flex-start', marginTop: 5, backgroundColor: '#e5f5ff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9 }, musicText: { color: '#2f83b5', fontSize: 10, fontStyle: 'italic' }, headerAction: { fontSize: 20, marginLeft: 5 },
+  chatHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, back: { fontSize: 39, lineHeight: 40, color: '#2189c5' }, chatAvatar: { width: 46, height: 46, borderRadius: 15, backgroundColor: '#dff2ff', alignItems: 'center', justifyContent: 'center' }, chatAvatarText: { color: '#2a79a8', fontSize: 18, fontWeight: '900' }, chatName: { color: '#173448', fontSize: 15, fontWeight: '900' }, chatSub: { color: '#6e8796', fontSize: 10, marginTop: 2 }, chatMusic: { color: '#3387b8', fontSize: 10, marginTop: 2, fontStyle: 'italic' }, securityStrip: { alignItems: 'center', backgroundColor: '#eaf3f7', paddingVertical: 6 }, securityText: { color: '#6a8290', fontSize: 9 }, chatBody: { flex: 1, padding: 13 }, chatContent: { paddingVertical: 8 }, bubble: { maxWidth: '80%', padding: 11, borderRadius: 17, marginBottom: 8 }, mine: { alignSelf: 'flex-end', backgroundColor: '#cdeeff', borderBottomRightRadius: 5 }, theirs: { alignSelf: 'flex-start', backgroundColor: '#fff', borderBottomLeftRadius: 5 }, bubbleText: { color: '#173448' }, composer: { flexDirection: 'row', alignItems: 'center', gap: 7, padding: 9, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, plus: { color: '#2189c5', fontSize: 27 }, input: { flex: 1, backgroundColor: '#edf5f9', borderRadius: 19, paddingHorizontal: 14, paddingVertical: 9 }, send: { color: '#2189c5', fontSize: 22 }, wizzBtn: { width: 39, height: 39, borderRadius: 14, backgroundColor: '#fff2bd', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#efcf65' }, wizz: { fontSize: 22 },
+  tabs: { flexDirection: 'row', paddingTop: 7, paddingBottom: 9, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, tab: { flex: 1, alignItems: 'center' }, tabIcon: { fontSize: 18 }, tabLabel: { marginTop: 2, color: '#8299a7', fontSize: 8 }, tabActive: { color: '#238ac8', fontWeight: '900' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 }, bigIcon: { fontSize: 62 }, centerTitle: { color: '#173448', fontWeight: '900', fontSize: 27, marginTop: 10 }, centerText: { color: '#688493', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 400 }, mapButtons: { flexDirection: 'row', gap: 8 },
+  profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileQuote: { maxWidth: 330, textAlign: 'center', color: '#657e8d', marginTop: 14, fontStyle: 'italic', lineHeight: 20 }, profileMusic: { width: '100%', marginTop: 18, backgroundColor: '#e5f5ff', borderRadius: 18, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#bee2f5' }, profileMusicTitle: { color: '#4a87aa', fontSize: 10, letterSpacing: 1.3, fontWeight: '900' }, profileMusicSong: { color: '#173448', fontWeight: '900', marginTop: 4 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 12 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
 });
