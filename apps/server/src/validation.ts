@@ -20,3 +20,20 @@ export const receiptSchema = z.object({
   conversationId: z.string().uuid(),
   state: z.enum(['delivered', 'read']),
 }).strict();
+
+export const conversationJoinSchema = z.object({
+  conversationId: z.string().uuid(),
+}).strict();
+
+export const contactTargetSchema = z.object({
+  userId: z.string().uuid(),
+}).strict();
+
+export const contactRequestSchema = z.object({
+  requestId: z.string().uuid(),
+}).strict();
+
+export const wizzSchema = z.object({
+  recipientId: z.string().uuid(),
+  variant: z.enum(['classic', 'love', 'fire', 'troll']).default('classic'),
+}).strict();
