@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 8
     env:
       BETA_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-beta
-      API_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-app/api
+      API_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-api
       ORIGIN: https://vlofsaivgydbzghptlfj.supabase.co
     steps:
       - name: Check public beta assets
@@ -33,7 +33,8 @@ jobs:
           curl --fail --silent --show-error --location --retry 3 -D headers.txt "$BETA_URL/app.js" -o app.js
           grep -qi '^content-type: text/javascript' headers.txt
           grep -q '/api/send' app.js
-          grep -q 'kssenger-app' app.js
+          grep -q 'kss-api' app.js
+          curl --fail --silent --show-error "$API_URL/health" | jq -e '.ok == true' >/dev/null
 
       - name: Two-user auth contacts chat Wizz block flow
         run: |
