@@ -1,46 +1,36 @@
-# K-ssenger — Choix de la bibliothèque E2EE (Phase B.10)
+# K-ssenger — Choix de la bibliothèque E2EE (Phase B.10 → décision Kenams 02/09)
 
-Statut : **EN ATTENTE DE VALIDATION KENAMS** — aucune ligne de crypto de production n'est écrite tant que ce doc n'est pas tranché. C'est la demande explicite de Kenams : contrôler ce choix avant qu'il soit gravé dans l'architecture.
+Statut : **partiellement tranché par Kenams.** `react-native-libsodium` = primitives auxiliaires (random, AEAD, X25519/Ed25519, chiffrement pièces jointes) validé. **Le protocole de session (Double Ratchet/X3DH) N'EST PAS encore autorisé en implémentation maison** — un dernier spike de faisabilité sur une implémentation complète et maintenue est requis avant.
 
-## Rappel de la contrainte
-Interdit : primitives cryptographiques (AES/ChaCha20/X25519/Curve25519...) écrites à la main.
-Autorisé : implémenter un **protocole publié et éprouvé** (Double Ratchet, X3DH) en assemblant des **primitives auditées** fournies par une bibliothèque reconnue — c'est exactement ainsi que sont construits libsignal, Olm (Matrix) et Proteus (Wire) en interne. Il n'existe pas de "libraire universelle Double Ratchet" prête à l'emploi pour toutes les stacks ; chaque écosystème assemble le protocole sur des primitives auditées.
+## Décision Kenams (02/09/2026)
+> Sécurité > simplicité Expo. On accepte Expo Dev Client, EAS et du natif. On n'accepte pas une crypto « presque Signal ».
 
-## Options évaluées
+1. ❌ Pas de spike Olm/libolm — **libolm est officiellement déprécié depuis 2024** au profit de `vodozemac` (annonce Matrix.org). Confirmé, écarté.
+2. ✅ `react-native-libsodium` conservé pour les primitives auxiliaires uniquement (pas pour porter seul tout le protocole de session).
+3. 🔍 Spike de faisabilité requis, dans cet ordre :
+   - `vodozemac` (Rust, successeur officiel de libolm chez Matrix) — bindings React Native ?
+   - Bridge natif Kotlin/Swift autour de `libsignal` officiel (accepter plus de natif si ça évite de coder le ratchet nous-mêmes).
+   - Comparatif : maintenance, multi-device, sessions offline, key verification, migration, builds EAS.
+4. Si aucune implémentation complète n'est raisonnablement intégrable → implémentation interne autorisée **seulement** avec : module crypto isolé, vecteurs de test officiels Signal, tests de compatibilité, fuzzing, tests out-of-order/replay/skipped-keys, `MAX_SKIP` strict, effacement des anciennes clés, versionnement explicite du protocole, **audit sécurité externe avant toute mise en production publique**. Ne jamais la présenter comme "aussi sûre que Signal" sans audit.
 
-### 1. `signalapp/libsignal` (officiel Signal) — ❌ rejeté
-- Cœur en Rust, bindings officiels Java (Android), Swift (iOS), Node (N-API).
-- **Aucun binding React Native officiel.** Le README du projet précise lui-même que l'usage hors des clients Signal officiels n'est pas supporté.
-- Intégration = écrire et maintenir deux modules natifs (JNI Android + Swift iOS) exposant l'API Rust via une passerelle RN maison, en tenant ça à jour à chaque release Signal. Charge de maintenance disproportionnée pour une seule personne.
-- **Verdict : pas raisonnablement intégrable maintenant.** Ré-évaluable si Signal publie un jour des bindings RN officiels.
+## Recherche — vodozemac (bureau, pas encore de POC compilé)
+- Rust, publié par Matrix.org comme remplacement officiel de libolm (annonce août 2024), implémente Olm (Double Ratchet 1:1, équivalent X3DH+DR) et Megolm (groupes). Utilisé en production par le Matrix Rust SDK / clients Element modernes.
+- Pas de package npm officiel `react-native-vodozemac`. Les bindings existants ciblent WASM (web, via `@matrix-org/matrix-sdk-crypto-wasm`) ou Node (via le Matrix Rust SDK compilé). **Aucun binding React Native/Hermes officiel identifié à ce jour.**
+- Piste réaliste : `vodozemac` étant du Rust pur (contrairement à Olm/WASM), il est **théoriquement bindable en JSI/TurboModule** (Rust → C ABI → Kotlin/Swift → RN), à l'image de ce que fait le Matrix Rust SDK côté mobile natif (utilisé nativement par les apps Element Android/iOS, pas via RN). Ça veut dire : pas de lib RN prête à l'emploi, mais un bridge natif est plus réaliste techniquement qu'avec Olm/WASM.
+- ⚠️ Cette section est une évaluation documentaire, **pas un POC compilé**. Un vrai test de faisabilité demande soit (a) un binding JSI expérimental à écrire et compiler pour Android/iOS, soit (b) un projet communautaire existant à auditer — aucun n'a été trouvé packagé et maintenu au moment de cet audit.
 
-### 2. `@matrix-org/olm` (Matrix/Element) — ⚠️ candidat sérieux mais risqué
-- Implémentation **Double Ratchet complète et auditée** (audit NCC Group), maintenue par Matrix.org, en production dans Element depuis des années.
-- Problème : distribuée en **WebAssembly**. **Hermes (le moteur JS de React Native) ne supporte pas WebAssembly nativement.** Les wrappers communautaires (`react-native-olm` et dérivés) sont abandonnés ou très peu maintenus, et reposent sur des contournements fragiles (moteur JSC + polyfill WASM) qui peuvent casser à chaque montée de version Expo/RN.
-- Faisable en théorie via un Dev Client + JSC forcé, mais fragilité + dette de maintenance élevées pour un projet solo.
-- **Verdict : à garder en tête comme option si le choix n°3 se révèle insuffisant, mais pas le premier choix pour la vitesse de mise en prod.**
+## Recherche — bridge natif autour de `libsignal` officiel (bureau, pas encore de POC compilé)
+- `libsignal` fournit des bindings **officiels** Java (Android) et Swift (iOS) — donc pas de portage à faire depuis Rust brut comme pour vodozemac, juste un **pont RN classique** (Kotlin/Swift → module natif Expo → JS).
+- C'est le chemin le plus proche de "vraie implémentation Signal", avec le coût : maintenir 2 modules natifs (un par plateforme) synchronisés avec les releases `libsignal`, et le README du projet rappelle que l'usage hors clients Signal officiels n'est pas garanti/supporté par l'équipe Signal (pas d'engagement de stabilité d'API pour usage tiers).
+- Plus de travail natif que vodozemac à court terme (deux bindings au lieu d'un), mais la lib elle-même est la référence absolue et déjà auditée à grande échelle (c'est littéralement Signal).
 
-### 3. `react-native-libsodium` + Double Ratchet implémenté sur ces primitives — ✅ recommandé
-- Bindings natifs (pas de WASM) autour de **libsodium**, la bibliothèque C auditée la plus déployée au monde (utilisée par Signal, WireGuard, Tresorit, etc. pour leurs primitives bas niveau).
-- Fournit tout ce qu'il faut comme **primitives auditées** : `crypto_kx`/X25519 (échange de clé), `crypto_aead_xchacha20poly1305` (AEAD authentifié), `crypto_kdf`/`crypto_generichash` (dérivation de clé façon HKDF), `crypto_sign` Ed25519 (signatures d'identité).
-- Maintenu activement, compatible Expo via **config plugin + Expo Dev Client / EAS Build** (pas Expo Go — attendu et accepté dans la spec de Kenams).
-- On implémente par-dessus le **protocole Double Ratchet + X3DH tel que publié dans les spécifications officielles Signal** (documents publics, pas une invention) : c'est la même démarche que Wire pour Proteus. Le code du protocole sera testé contre les propriétés attendues (forward secrecy, rejet de ciphertext altéré, etc. — cf. `TEST 4/5/6` du cahier des charges).
-- **Verdict : candidat retenu par défaut**, sous réserve de validation Kenams — meilleur rapport maintenabilité / niveau de sécurité réel pour une stack Expo/RN aujourd'hui.
+## Ce qu'il manque pour trancher définitivement
+Un **POC compilé Android + iOS réel** (pas juste de la doc) pour au moins une des deux pistes, incluant :
+- build qui compile effectivement (EAS Build ou local si SDK dispo),
+- un aller-retour de session chiffré entre deux instances de l'app,
+- mesure de la charge de maintenance perçue (taille du bridge natif, surface d'API à maintenir).
 
-### 4. `wireapp/proteus` — ❌ rejeté
-- Implémentation Rust indépendante et auditée du protocole Axolotl/Double Ratchet, utilisée par Wire.
-- Pas de bindings RN packagés/maintenus publiquement (Wire l'intègre nativement dans ses propres apps Swift/Kotlin, pas distribué pour RN).
-- Même problème que libsignal : il faudrait maintenir des bindings natifs maison.
+**Cet environnement de dev ne dispose pas d'Android Studio/Xcode local** — un POC compilé nécessitera soit un accès EAS Build (cloud, compte Expo requis), soit que Kenams lance le build lui-même avec mon code. Je le signale maintenant plutôt que de prétendre avoir "testé" quelque chose que je n'ai pas réellement compilé.
 
-## Recommandation
-**Option 3 : `react-native-libsodium`**, avec l'implémentation du protocole Double Ratchet + X3DH-like faite en JS/TS mais strictement à partir des primitives auditées de la lib (pas de primitive inventée), testée avec des tests automatisés démontrant les propriétés de sécurité attendues (§18 du cahier des charges).
-
-Si Kenams préfère qu'on tente d'abord Olm (option 2) malgré le risque WASM/Hermes, on peut faire un spike technique isolé (quelques heures) avant de trancher définitivement — mais ce n'est pas la recommandation par défaut vu la fragilité de la piste RN.
-
-## Prochaine étape (bloquée tant que non validée)
-Dès le feu vert de Kenams sur l'option 3 (ou l'alternative choisie) :
-1. `npx expo install react-native-libsodium` + config plugin + passage en Expo Dev Client.
-2. `CryptoService` : génération identité (Ed25519 + X25519), stockage clé privée via `expo-secure-store`.
-3. X3DH-like : établissement de session Alice/Bob sans échange manuel de clé.
-4. Double Ratchet : dérivation de clé par message, chiffrement AEAD, déchiffrement, rejet ciphertext altéré.
-5. Tests automatisés (Vitest) prouvant les propriétés ci-dessus, exécutés et montrés avec leur output réel.
+## Prochaine étape
+Pendant que ce spike se prépare, la Phase C non-controversée démarre immédiatement (voir commit suivant) : identité device, `SecureKeyStore`, modèle `devices`, abstractions `CryptoProvider`/`SessionStore` — sans écrire la state machine Double Ratchet, pour ne pas graver un choix non encore validé.

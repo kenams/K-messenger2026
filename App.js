@@ -13,14 +13,19 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { io } from "socket.io-client";
-import CryptoES from "crypto-es";
+import {
+  legacyDeriveKeyFromPassphrase,
+  legacyEncryptText,
+  legacyDecryptText,
+} from "./src/crypto/legacyAes";
 
-// 🔁 MET ICI L'IP DE TON SERVEUR + :3000
-// Exemple: "http://192.168.1.100:3000"
+// ⚠️ Chat de démo legacy (AES partagé) — voir docs/CRYPTO_DECISION.md.
+// Sera remplacé par la vraie session E2EE par device en Phase E.
+// SERVER_URL sera lu depuis la config d'environnement une fois le
+// backend réel créé (Phase D) ; laissé en placeholder LAN pour l'instant,
+// il n'y a de toute façon aucun serveur à joindre tant que Phase D
+// n'est pas commencée.
 const SERVER_URL = "http://192.168.1.100:3000";
-
-const PBKDF2_SALT = "k-ssenger-salt-v1";
-const PBKDF2_ITER = 100000;
 
 export default function App() {
   const socketRef = useRef(null);
@@ -105,49 +110,14 @@ export default function App() {
     showToast(`Nudge de ${from}`);
   };
 
-  // ---------- Crypto AES ----------
-
-  const deriveKeyFromPassphrase = (pwd) => {
-    const salt = CryptoES.enc.Utf8.parse(PBKDF2_SALT);
-    const key = CryptoES.PBKDF2(pwd, salt, {
-      keySize: 256 / 32,
-      iterations: PBKDF2_ITER,
-      hasher: CryptoES.algo.SHA256,
-    });
-    return key;
-  };
-
-  const encryptText = (plain) => {
-    if (!cryptoKey) throw new Error("Pas de clé");
-    const iv = CryptoES.lib.WordArray.random(16);
-    const encrypted = CryptoES.AES.encrypt(plain, cryptoKey, {
-      iv,
-      mode: CryptoES.mode.CBC,
-      padding: CryptoES.pad.Pkcs7,
-    });
-    return {
-      cipherText: encrypted.toString(),
-      iv: CryptoES.enc.Base64.stringify(iv),
-    };
-  };
-
-  const decryptText = (cipherText, ivBase64) => {
-    if (!cryptoKey) throw new Error("Pas de clé");
-    const iv = CryptoES.enc.Base64.parse(ivBase64);
-    const decrypted = CryptoES.AES.decrypt(cipherText, cryptoKey, {
-      iv,
-      mode: CryptoES.mode.CBC,
-      padding: CryptoES.pad.Pkcs7,
-    });
-    return decrypted.toString(CryptoES.enc.Utf8);
-  };
+  // ---------- Crypto AES (legacy — voir src/crypto/legacyAes.js) ----------
 
   const decryptIfNeeded = (msg) => {
     if (msg.system) return msg.text || "";
     if (!msg.cipherText || !msg.iv) return msg.text || "";
     if (!cryptoKey) return "🔒 Message chiffré (aucune clé définie)";
     try {
-      return decryptText(msg.cipherText, msg.iv);
+      return legacyDecryptText(msg.cipherText, msg.iv, cryptoKey);
     } catch {
       return "🔒 Message chiffré (clé incorrecte)";
     }
@@ -193,7 +163,7 @@ export default function App() {
       return;
     }
     try {
-      const key = deriveKeyFromPassphrase(passphrase.trim());
+      const key = legacyDeriveKeyFromPassphrase(passphrase.trim());
       setCryptoKey(key);
       showToast("Clé de chiffrement définie ✅");
     } catch {
@@ -233,7 +203,7 @@ export default function App() {
       return;
     }
     try {
-      const encrypted = encryptText(text);
+      const encrypted = legacyEncryptText(text, cryptoKey);
       socketRef.current?.emit("sendMessage", encrypted);
       setInput("");
     } catch {
