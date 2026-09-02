@@ -21,7 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      BETA_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-app
+      BETA_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-beta
+      API_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-app/api
       ORIGIN: https://vlofsaivgydbzghptlfj.supabase.co
     steps:
       - name: Check public beta assets
@@ -44,7 +45,7 @@ jobs:
           email_b="${user_b}@kssenger.test"
           pass="Kssenger-QA-${suffix}!"
           message="hello-${suffix}"
-          api="$BETA_URL/api"
+          api="$API_URL"
           cleanup() {
             curl -sS -o /dev/null -X DELETE -H "Origin: $ORIGIN" -b b.cookie "$api/account" || true
             curl -sS -o /dev/null -X DELETE -H "Origin: $ORIGIN" -b a.cookie "$api/account" || true
