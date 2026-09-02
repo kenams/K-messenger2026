@@ -6,10 +6,32 @@ import { Server } from 'socket.io';
 import { config } from './config.js';
 import { authenticateSocket } from './auth.js';
 import { requireActiveDevice, requireConversationMember } from './authorization.js';
-import { messageSendSchema, presenceSchema } from './validation.js';
+import {
+  contactRequestSchema,
+  contactTargetSchema,
+  conversationJoinSchema,
+  messageSendSchema,
+  presenceSchema,
+  wizzSchema,
+} from './validation.js';
 import { persistEncryptedMessage } from './messageStore.js';
-import { joinLimiter, messageLimiter, presenceLimiter } from './rateLimit.js';
+import {
+  joinLimiter,
+  messageLimiter,
+  presenceLimiter,
+  socialLimiter,
+  wizzLimiter,
+} from './rateLimit.js';
 import { logger } from './logger.js';
+import {
+  acceptContact,
+  blockUser,
+  canWizz,
+  getContactAudience,
+  listContacts,
+  requestContact,
+  setPresence,
+} from './social.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -43,7 +65,7 @@ io.on('connection', (socket) => {
   socket.on('conversation:join', async (raw, ack) => {
     try {
       if (!joinLimiter.consume(userId)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
-      const conversationId = String(raw?.conversationId ?? '');
+      const { conversationId } = conversationJoinSchema.parse(raw);
       await requireConversationMember(userId, conversationId);
       socket.join(`conversation:${conversationId}`);
       ack?.({ ok: true });
@@ -76,7 +98,57 @@ io.on('connection', (socket) => {
         clientMessageId: envelope.clientMessageId,
       });
     } catch (error) {
-      logger.warn('message_send_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      logger.warn('message_send_rejected', {
+        userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('contacts:list', async (_raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:list`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const contacts = await listContacts(userId);
+      ack?.({ ok: true, contacts });
+    } catch {
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('contact:request', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:request`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const { userId: recipientId } = contactTargetSchema.parse(raw);
+      const request = await requestContact(userId, recipientId);
+      io.to(`user:${recipientId}`).emit('contact:request', { requestId: request.id, senderId: userId });
+      ack?.({ ok: true, requestId: request.id });
+    } catch {
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('contact:accept', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:accept`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const { requestId } = contactRequestSchema.parse(raw);
+      const request = await acceptContact(userId, requestId);
+      io.to(`user:${request.sender_id}`).emit('contact:accepted', { userId });
+      io.to(`user:${userId}`).emit('contact:accepted', { userId: request.sender_id });
+      ack?.({ ok: true });
+    } catch {
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('contact:block', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:block`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const { userId: blockedId } = contactTargetSchema.parse(raw);
+      await blockUser(userId, blockedId);
+      io.to(`user:${blockedId}`).emit('contact:removed', { userId });
+      ack?.({ ok: true });
+    } catch {
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
@@ -85,10 +157,33 @@ io.on('connection', (socket) => {
     try {
       if (!presenceLimiter.consume(userId)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
       const { status } = presenceSchema.parse(raw);
-      await io.to(`user:${userId}`).emit('presence:self', { userId, status });
+      await setPresence(userId, status);
+
+      const visibleStatus = status === 'invisible' ? 'offline' : status;
+      const audience = await getContactAudience(userId);
+      for (const contactId of audience) {
+        io.to(`user:${contactId}`).emit('presence:changed', { userId, status: visibleStatus });
+      }
+      io.to(`user:${userId}`).emit('presence:self', { userId, status });
       ack?.({ ok: true });
     } catch {
       ack?.({ ok: false, error: 'INVALID_PRESENCE' });
+    }
+  });
+
+  socket.on('nudge:send', async (raw, ack) => {
+    try {
+      const { recipientId, variant } = wizzSchema.parse(raw);
+      if (!wizzLimiter.consume(`${userId}:${recipientId}`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      await canWizz(userId, recipientId);
+      io.to(`user:${recipientId}`).emit('nudge:receive', {
+        senderId: userId,
+        variant,
+        sentAt: new Date().toISOString(),
+      });
+      ack?.({ ok: true });
+    } catch {
+      ack?.({ ok: false, error: 'REJECTED' });
     }
   });
 
@@ -101,6 +196,8 @@ setInterval(() => {
   joinLimiter.clearExpired();
   messageLimiter.clearExpired();
   presenceLimiter.clearExpired();
+  socialLimiter.clearExpired();
+  wizzLimiter.clearExpired();
 }, 60_000).unref();
 
 httpServer.listen(config.PORT, () => {
