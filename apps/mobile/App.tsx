@@ -44,12 +44,24 @@ export default function App() {
   const [selected, setSelected] = useState<Contact | null>(null);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<string[]>(['Salut 👋', 'Bienvenue sur K-ssenger.']);
-  const [userAge] = useState(18);
+  const [userAge, setUserAge] = useState<number | null>(null);
+  const [ageInput, setAgeInput] = useState('');
+  const [ageError, setAgeError] = useState('');
 
   const filtered = useMemo(
     () => CONTACTS.filter((contact) => contact.name.toLowerCase().includes(search.toLowerCase())),
     [search],
   );
+
+  const confirmAge = () => {
+    const parsed = Number(ageInput);
+    if (!Number.isInteger(parsed) || parsed < 13 || parsed > 120) {
+      setAgeError('K-ssenger est actuellement réservé aux utilisateurs de 13 ans et plus.');
+      return;
+    }
+    setAgeError('');
+    setUserAge(parsed);
+  };
 
   const sendLocalDemoMessage = () => {
     const value = message.trim();
@@ -57,6 +69,37 @@ export default function App() {
     setMessages((current) => [...current, value]);
     setMessage('');
   };
+
+  if (userAge === null) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="dark" />
+        <View style={styles.ageGate}>
+          <View style={styles.ageLogo}><Text style={styles.ageLogoText}>K</Text></View>
+          <Text style={styles.ageBrand}>K-SSENGER</Text>
+          <Text style={styles.ageTitle}>Quel âge as-tu ?</Text>
+          <Text style={styles.ageCopy}>
+            Ton âge sert à filtrer le contenu public du K-Feed. Les contenus 16+ et 18+ ne sont jamais affichés aux utilisateurs plus jeunes.
+          </Text>
+          <TextInput
+            value={ageInput}
+            onChangeText={setAgeInput}
+            keyboardType="number-pad"
+            placeholder="Âge"
+            maxLength={3}
+            style={styles.ageInput}
+            accessibilityLabel="Ton âge"
+            onSubmitEditing={confirmAge}
+          />
+          {!!ageError && <Text style={styles.ageError}>{ageError}</Text>}
+          <TouchableOpacity style={styles.ageButton} onPress={confirmAge} accessibilityRole="button">
+            <Text style={styles.ageButtonText}>Continuer</Text>
+          </TouchableOpacity>
+          <Text style={styles.ageLegal}>Version de test · âge déclaré, pas encore vérifié.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (selected) {
     return (
@@ -154,7 +197,7 @@ export default function App() {
       {tab === 'feed' && <FeedScreen userAge={userAge} />}
       {tab === 'map' && <Placeholder title="K-MAP" subtitle="Partage ta position uniquement quand tu le décides." icon="📍" action="👻 Ghost Mode" />}
       {tab === 'moments' && <Placeholder title="Moments" subtitle="Photos, vidéos et statuts éphémères de tes amis." icon="✨" />}
-      {tab === 'me' && <Placeholder title="Mon profil" subtitle="Pseudo, statut, musique, sécurité et confidentialité." icon="😎" action="🔒 Sécurité" />}
+      {tab === 'me' && <Placeholder title="Mon profil" subtitle={`Âge déclaré : ${userAge} ans · pseudo, statut, musique, sécurité et confidentialité.`} icon="😎" action="🔒 Sécurité" />}
 
       <View style={styles.tabs}>
         <Tab active={tab === 'contacts'} label="Contacts" icon="👥" onPress={() => setTab('contacts')} />
@@ -216,6 +259,17 @@ function Tab({ active, label, icon, onPress }: { active: boolean; label: string;
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#eef6fb' },
   flexOne: { flex: 1 },
+  ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, backgroundColor: '#eef6fb' },
+  ageLogo: { width: 74, height: 74, borderRadius: 24, backgroundColor: '#4aa3df', alignItems: 'center', justifyContent: 'center', borderWidth: 4, borderColor: '#b9e5ff' },
+  ageLogoText: { color: '#fff', fontSize: 34, fontWeight: '900' },
+  ageBrand: { marginTop: 14, fontSize: 12, letterSpacing: 2.4, color: '#3d83b8', fontWeight: '900' },
+  ageTitle: { marginTop: 20, fontSize: 28, color: '#173448', fontWeight: '900' },
+  ageCopy: { maxWidth: 430, marginTop: 10, textAlign: 'center', color: '#668293', lineHeight: 21 },
+  ageInput: { width: 150, marginTop: 20, paddingHorizontal: 18, paddingVertical: 12, textAlign: 'center', fontSize: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d6e4ec', borderRadius: 16 },
+  ageError: { maxWidth: 360, marginTop: 10, textAlign: 'center', color: '#b42318', fontWeight: '700' },
+  ageButton: { marginTop: 16, backgroundColor: '#238ac8', paddingHorizontal: 30, paddingVertical: 13, borderRadius: 16 },
+  ageButtonText: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  ageLegal: { marginTop: 16, fontSize: 11, color: '#8197a4' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d9e7ef' },
   avatar: { width: 54, height: 54, borderRadius: 18, backgroundColor: '#4aa3df', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#b9e5ff' },
   avatarText: { color: '#fff', fontSize: 24, fontWeight: '800' },
