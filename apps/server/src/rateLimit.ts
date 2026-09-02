@@ -26,3 +26,5 @@ export class FixedWindowRateLimiter {
 export const messageLimiter = new FixedWindowRateLimiter(120, 60_000);
 export const presenceLimiter = new FixedWindowRateLimiter(30, 60_000);
 export const joinLimiter = new FixedWindowRateLimiter(60, 60_000);
+export const socialLimiter = new FixedWindowRateLimiter(30, 60_000);
+export const wizzLimiter = new FixedWindowRateLimiter(6, 60_000);
