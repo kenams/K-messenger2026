@@ -1,32 +1,36 @@
-# Implementation Status
+# Implementation status
 
-## Implemented in branch bootstrap/platform
+## Implemented on `bootstrap/platform`
 
-- Monorepo workspace skeleton
-- Shared ciphertext-only message contract
-- Node.js/TypeScript/Socket.IO server scaffold
+- Monorepo baseline
+- Node.js + TypeScript + Socket.IO server
 - Supabase JWT socket authentication
-- Conversation membership authorization helper
-- Active-device authorization helper
-- Block helper scaffold
-- Zod validation for message/presence network payloads
-- Helmet/CORS/body-size/socket-buffer hardening baseline
-- Core Supabase schema
-- Core RLS baseline
-- K-MAP location-share schema
-- K-MAP expiration/revocation RLS baseline
-- Contract tests rejecting plaintext message fields
+- Conversation membership authorization
+- Active-device ownership/revocation check
+- Strict ciphertext-only message DTO validation
+- Server-side encrypted-message persistence with clientMessageId idempotency
+- Message/conversation/presence rate limiting
+- Sensitive log redaction (tokens, keys, ciphertext, precise GPS)
+- Helmet/CORS/body-size/socket buffer hardening
+- Core Supabase schema and RLS draft
+- K-MAP schema/policies baseline
+- Security unit tests
+- GitHub Actions CI baseline
+- Agent-Kah import procedure
 
-## Intentionally not claimed complete
+## Deliberately not claimed complete
 
-- Existing Agent-Kah local crypto code has not been imported yet
-- E2EE session protocol is not implemented here
-- Mobile app is not yet imported
-- Supabase migrations have not yet been applied to a production project
-- Native Android/iOS builds have not been run
-- Full negative authorization tests need an actual Supabase test environment
-- Push, media, voice, groups, calls, Moments and Communities remain pending
+- Production E2EE session protocol on Android/iOS
+- Secure native key storage verified on physical devices
+- Full mobile UI
+- Push
+- encrypted attachments
+- calls
+- groups
+- complete K-MAP client
+- Moments/Communities
+- store builds/review
 
-## Import rule
+## Critical next integration
 
-Do not overwrite this work or Agent-Kah's local history. Push Agent-Kah histories to import branches, inspect, then merge/cherry-pick intentionally.
+Import Agent-Kah local commits before duplicating mobile/crypto work. Then run server tests/typecheck and resolve any conflicts. Authentication/authorization remains the first release gate.
