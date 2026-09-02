@@ -1,0 +1,21 @@
+name: Kss Edge Diagnostic
+on:
+  workflow_dispatch:
+  push:
+    branches: [bootstrap/platform]
+    paths: ['.github/workflows/kss-edge-diagnostic.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: |
+          set -euo pipefail
+          echo 'ENV CHECK:'
+          curl -sS -w '\nHTTP=%{http_code}\n' https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-env-check
+          echo 'DB CHECK:'
+          curl -sS -w '\nHTTP=%{http_code}\n' https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-db-check
+          echo 'API UNAUTH CHECK:'
+          curl -sS -w '\nHTTP=%{http_code}\n' https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-app/api/me
