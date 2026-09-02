@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { FeedScreen } from './src/features/feed/FeedScreen';
+import { MomentsScreen } from './src/features/moments/MomentsScreen';
 
 type Presence = 'online' | 'busy' | 'away' | 'offline';
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
@@ -159,7 +160,7 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
 
-      {tab !== 'feed' && (
+      {tab !== 'feed' && tab !== 'moments' && (
         <View style={styles.hero}>
           <View style={styles.avatar}><Text style={styles.avatarText}>K</Text></View>
           <View style={styles.flexOne}>
@@ -196,7 +197,7 @@ export default function App() {
       {tab === 'chats' && <Placeholder title="Chats" subtitle="Tes conversations récentes apparaîtront ici." icon="💬" />}
       {tab === 'feed' && <FeedScreen userAge={userAge} />}
       {tab === 'map' && <Placeholder title="K-MAP" subtitle="Partage ta position uniquement quand tu le décides." icon="📍" action="👻 Ghost Mode" />}
-      {tab === 'moments' && <Placeholder title="Moments" subtitle="Photos, vidéos et statuts éphémères de tes amis." icon="✨" />}
+      {tab === 'moments' && <MomentsScreen />}
       {tab === 'me' && <Placeholder title="Mon profil" subtitle={`Âge déclaré : ${userAge} ans · pseudo, statut, musique, sécurité et confidentialité.`} icon="😎" action="🔒 Sécurité" />}
 
       <View style={styles.tabs}>
