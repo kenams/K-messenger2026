@@ -19,5 +19,7 @@ jobs:
           curl -sS -w '\nHTTP=%{http_code}\n' https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-db-check
           echo 'AUTH RPC CHECK:'
           curl -sS -w '\nHTTP=%{http_code}\n' https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-auth-check
+          echo 'SIGNUP PIPELINE CHECK:'
+          curl -sS -w '\nHTTP=%{http_code}\n' https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-signup-check
           echo 'API UNAUTH CHECK:'
           curl -sS -w '\nHTTP=%{http_code}\n' https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-app/api/me
