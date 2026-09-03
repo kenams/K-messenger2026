@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import App from '../App';
 import { AuthScreen } from './features/auth/AuthScreen';
 import { useAuthSession } from './features/auth/useAuthSession';
+import { useRealtimePresence } from './features/presence/useRealtimePresence';
 import { ProfileBootstrapScreen } from './features/profile/ProfileBootstrapScreen';
 import { useMyProfile } from './features/profile/useMyProfile';
 
@@ -11,7 +12,6 @@ export function Root() {
   const auth = useAuthSession();
 
   if (!auth.configured) return <AuthScreen />;
-
   if (auth.loading) return <Loading label="Connexion à K-ssenger…" />;
   if (!auth.session) return <AuthScreen />;
 
@@ -19,6 +19,7 @@ export function Root() {
 }
 
 function AuthenticatedRoot({ userId }: { userId: string }) {
+  useRealtimePresence();
   const profile = useMyProfile(userId);
 
   if (profile.loading) return <Loading label="Chargement de ton profil K-ssenger…" />;
