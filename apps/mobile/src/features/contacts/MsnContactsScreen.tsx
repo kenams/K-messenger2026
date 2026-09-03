@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
+import { getBackend } from '../../lib/backend';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
@@ -13,7 +14,7 @@ export type Contact = {
   statusMessage?: string;
   nowPlaying?: string;
   favorite?: boolean;
-  group: 'Favoris' | 'Amis' | 'Travail' | 'Famille';
+  group: string;
 };
 
 type ContactResponse = {
@@ -21,13 +22,17 @@ type ContactResponse = {
   contacts?: Array<{
     contact_id: string;
     favorite: boolean;
+    list_name: string;
     profiles: {
       id: string;
       username: string;
       display_name: string;
+      nickname: string | null;
       avatar_url: string | null;
       custom_status: string | null;
       presence: Presence;
+      now_playing_title: string | null;
+      now_playing_artist: string | null;
     };
   }>;
   error?: string;
@@ -48,6 +53,7 @@ type SearchResponse = {
 
 type ContactRequest = { id: string; sender_id: string; recipient_id: string; status: string };
 type RequestsResponse = { ok: boolean; requests?: ContactRequest[] };
+type LoginNotifications = 'all_contacts' | 'favorites' | 'nobody';
 
 const presenceIcon: Record<Presence, string> = {
   online: '🟢', busy: '🔴', away: '🟠', invisible: '👻', offline: '⚫',
@@ -63,25 +69,49 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(isRealtimeConfigured);
   const [notice, setNotice] = useState('');
+  const contactsRef = useRef<Contact[]>([]);
+  const loginNotificationsRef = useRef<LoginNotifications>('favorites');
+
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
 
   const loadContacts = async (client: Socket) => {
     const response = await emitAck<ContactResponse>(client, 'contacts:list');
     if (!response.ok) throw new Error(response.error ?? 'CONTACTS_FAILED');
-    setContacts((response.contacts ?? []).map((row) => ({
-      id: row.profiles.id,
-      displayName: row.profiles.display_name,
-      nickname: row.profiles.display_name,
-      handle: `@${row.profiles.username}`,
-      presence: row.profiles.presence,
-      statusMessage: row.profiles.custom_status ?? undefined,
-      favorite: row.favorite,
-      group: row.favorite ? 'Favoris' : 'Amis',
-    })));
+    setContacts((response.contacts ?? []).map((row) => {
+      const nowPlaying = row.profiles.now_playing_title
+        ? `${row.profiles.now_playing_artist ? `${row.profiles.now_playing_artist} — ` : ''}${row.profiles.now_playing_title}`
+        : undefined;
+      return {
+        id: row.profiles.id,
+        displayName: row.profiles.display_name,
+        nickname: row.profiles.nickname ?? row.profiles.display_name,
+        handle: `@${row.profiles.username}`,
+        presence: row.profiles.presence,
+        statusMessage: row.profiles.custom_status ?? undefined,
+        nowPlaying,
+        favorite: row.favorite,
+        group: row.favorite ? 'Favoris' : (row.list_name || 'Amis'),
+      };
+    }));
   };
 
   const loadRequests = async (client: Socket) => {
     const response = await emitAck<RequestsResponse>(client, 'contacts:requests');
     if (response.ok) setRequests(response.requests ?? []);
+  };
+
+  const loadLoginNotificationPreference = async (userId: string) => {
+    const { data } = await getBackend()
+      .from('privacy_settings')
+      .select('login_notifications')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const value = (data as { login_notifications?: LoginNotifications } | null)?.login_notifications;
+    if (value === 'all_contacts' || value === 'favorites' || value === 'nobody') {
+      loginNotificationsRef.current = value;
+    }
   };
 
   useEffect(() => {
@@ -100,6 +130,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       clientRef = client;
       setSocket(client);
       setCurrentUserId(userId);
+      void loadLoginNotificationPreference(userId);
 
       const refresh = () => {
         void loadContacts(client).catch(() => setNotice('Impossible de charger les contacts.'));
@@ -108,15 +139,22 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       const onPresence = ({ userId: changedUserId, status }: { userId: string; status: Presence }) => {
         setContacts((items) => items.map((item) => item.id === changedUserId ? { ...item, presence: status } : item));
       };
+      const onPresenceLogin = ({ userId: changedUserId, status }: { userId: string; status: Presence }) => {
+        onPresence({ userId: changedUserId, status });
+        const sender = contactsRef.current.find((item) => item.id === changedUserId);
+        const preference = loginNotificationsRef.current;
+        const shouldNotify = preference === 'all_contacts' || (preference === 'favorites' && sender?.favorite);
+        if (sender && shouldNotify) setNotice(`🟢 ${sender.nickname} vient de se connecter.`);
+      };
       const onRequest = () => void loadRequests(client);
       const onKPulse = ({ senderId }: { senderId: string }) => {
-        const sender = contacts.find((item) => item.id === senderId);
-        setNotice(`⚡ K-Pulse reçu${sender ? ` de ${sender.displayName}` : ''} !`);
+        const sender = contactsRef.current.find((item) => item.id === senderId);
+        setNotice(`⚡ K-Pulse reçu${sender ? ` de ${sender.nickname}` : ''} !`);
       };
 
       client.on('connect', refresh);
       client.on('presence:changed', onPresence);
-      client.on('presence:login', onPresence);
+      client.on('presence:login', onPresenceLogin);
       client.on('contact:request', onRequest);
       client.on('contact:accepted', refresh);
       client.on('contact:removed', refresh);
@@ -124,7 +162,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       cleanupListeners = () => {
         client.off('connect', refresh);
         client.off('presence:changed', onPresence);
-        client.off('presence:login', onPresence);
+        client.off('presence:login', onPresenceLogin);
         client.off('contact:request', onRequest);
         client.off('contact:accepted', refresh);
         client.off('contact:removed', refresh);
@@ -169,8 +207,9 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return contacts;
-    return contacts.filter((c) => `${c.displayName} ${c.nickname} ${c.handle}`.toLowerCase().includes(term));
+    return contacts.filter((c) => `${c.displayName} ${c.nickname} ${c.handle} ${c.statusMessage ?? ''} ${c.nowPlaying ?? ''}`.toLowerCase().includes(term));
   }, [contacts, search]);
+  const groups = useMemo(() => Array.from(new Set(filtered.map((contact) => contact.group))), [filtered]);
   const incomingRequests = requests.filter((request) => request.recipient_id === currentUserId);
   const outgoingRequests = requests.filter((request) => request.sender_id === currentUserId);
   const onlineCount = filtered.filter((c) => c.presence !== 'offline').length;
@@ -234,9 +273,8 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         </View>
       )}
 
-      {(['Favoris', 'Amis', 'Travail', 'Famille'] as const).map((group) => {
+      {groups.map((group) => {
         const items = filtered.filter((c) => c.group === group);
-        if (!items.length) return null;
         const isCollapsed = collapsed[group];
         return (
           <View key={group} style={styles.group}>
@@ -251,6 +289,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
                   <View style={styles.flex}>
                     <View style={styles.nameRow}><Text style={styles.presence}>{presenceIcon[contact.presence]}</Text><Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text>{contact.favorite && <Text> ⭐</Text>}</View>
                     {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
+                    {!!contact.nowPlaying && <Text style={styles.music} numberOfLines={1}>♫ {contact.nowPlaying}</Text>}
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse(contact)} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
@@ -272,6 +311,6 @@ const styles = StyleSheet.create({
   group: { marginTop: 14, borderRadius: 18, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.70)', borderWidth: 1, borderColor: '#daeaf3' },
   groupHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 10, backgroundColor: '#dff1fb' }, groupTitle: { fontSize: 11, letterSpacing: 1, color: '#326e94', fontWeight: '900' }, groupCount: { color: '#5b8098', fontSize: 11, fontWeight: '700' },
   contact: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 11, borderTopWidth: 1, borderTopColor: '#edf4f7' }, contactMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11 }, avatar: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#dcecf5', borderWidth: 2, borderColor: '#c2d7e3' }, avatarOnline: { borderColor: '#65c568', backgroundColor: '#e7f8ed' }, avatarText: { color: '#276b93', fontSize: 18, fontWeight: '900' },
-  nameRow: { flexDirection: 'row', alignItems: 'center' }, presence: { fontSize: 10, marginRight: 5 }, nickname: { color: '#173448', fontSize: 15, fontWeight: '800', maxWidth: '82%' }, status: { color: '#668696', marginTop: 2, fontSize: 12 },
+  nameRow: { flexDirection: 'row', alignItems: 'center' }, presence: { fontSize: 10, marginRight: 5 }, nickname: { color: '#173448', fontSize: 15, fontWeight: '800', maxWidth: '82%' }, status: { color: '#668696', marginTop: 2, fontSize: 12 }, music: { color: '#4e7d55', marginTop: 2, fontSize: 11, fontStyle: 'italic' },
   accept: { backgroundColor: '#2189c5', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 11 }, acceptText: { color: '#fff', fontSize: 11, fontWeight: '900' }, pulse: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#fff2bd', borderWidth: 1, borderColor: '#efcf65', alignItems: 'center', justifyContent: 'center' }, pulseText: { fontSize: 20 },
 });
