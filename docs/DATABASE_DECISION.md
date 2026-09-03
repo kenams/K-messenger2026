@@ -1,19 +1,24 @@
-# Database decision — 2026-09-03
+# Database Decision - Superseded 2026-09-03
 
-## Finding: no dedicated Neon/raw-Postgres K-ssenger infra exists
-Searched the full repo (all files, all git history) for `NEON`, `DATABASE_URL`, `PGHOST`, `PGDATABASE`, `POSTGRES` — zero matches anywhere. `apps/server/src/config.ts` requires exactly two DB-related env vars: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. The entire platform (auth, RLS, schema, K-MAP, K-Feed) is built Supabase-native from commit 1.
+## Current Decision
 
-**dedicated K-ssenger DB not found** (Neon or otherwise) — nothing to connect to, nothing to migrate away from. No existing infra was touched or repurposed.
+K-ssenger targets the dedicated Neon/Lakebase Postgres backend only:
 
-## A vs B vs C
-| | A. Supabase | B. Neon + separate auth/storage | C. Hybrid |
-|---|---|---|---|
-| Mobile auth | built-in, already coded (`auth.ts`) | build from scratch | partial rebuild |
-| RLS | built-in, already coded (11 migrations) | Neon has no RLS/auth layer — reimplement authz in app code | mixed authz model, more surface for bugs |
-| Realtime | built-in (used for presence/contacts) | not available, need a separate service | mixed |
-| Storage (K-Feed video/images) | built-in | separate service (S3-compatible) needed | mixed |
-| Cost/complexity for a beta | low — one provider | higher — Postgres + auth + storage + realtime as separate pieces | highest — worst of both |
-| Time to working beta | fastest (already built) | slowest (rebuild auth+RLS+realtime+storage) | slow |
+- Neon project: `K-ssenger`
+- project id/name in handoff: `late-flower-65059830`
+- database: `kssenger`
+- auth: Neon Auth / Managed Better Auth
+- client direct data path: Neon Data API with RLS
+- server runtime path: parameterized Postgres SQL after server-side JWT authentication and authorization checks
 
-## Decision
-**Stay on Supabase.** There is no existing Neon deployment to justify a switch, and moving now would mean re-implementing auth, 11 migrations' worth of RLS, realtime presence, and storage from scratch for zero found benefit. Revisit only if a concrete Supabase limitation blocks the beta (none identified so far).
+No Supabase project, service-role key or runtime client is part of the current target backend.
+
+## Historical Note
+
+An earlier 2026-09-03 decision said to stay on Supabase because no dedicated Neon infrastructure had been found at that time. That finding is no longer current. Later verified project state identified a dedicated K-ssenger Neon backend and the active branch began migrating to it.
+
+The historical Supabase migrations remain in the repository only as legacy implementation history until the team decides whether to archive or remove them.
+
+## Guardrail
+
+Do not reuse or modify any backend from another project. If Neon credentials are unavailable in an execution environment, document that blocker and continue only with local isolated validation or code changes that do not touch remote data.

@@ -19,22 +19,27 @@ jobs:
 
   rls-integration:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kssenger_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kssenger_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-      - name: Start isolated local Supabase
-        run: npx supabase start
-      - name: Install PostgreSQL test client
-        run: npm install --no-save pg
-      - name: Run Alice/Bob/Charlie RLS integration suite
+      - run: npm install
+      - name: Run Alice/Bob/Charlie Neon RLS integration suite
         env:
-          DB_URL: postgresql://postgres:postgres@127.0.0.1:55322/postgres
-        run: node scripts/rls-integration-test.mjs
-      - name: Stop local Supabase
-        if: always()
-        run: npx supabase stop --no-backup
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+          KSSENGER_RLS_RESET: "1"
+        run: node scripts/neon-rls-integration-test.mjs

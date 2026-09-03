@@ -83,6 +83,26 @@ async function broadcastPresence(userId: string, status: 'online' | 'busy' | 'aw
   io.to(`user:${userId}`).emit('presence:self', { userId, status });
 }
 
+async function handleKPulseSend(
+  userId: string,
+  raw: unknown,
+  ack: ((response: unknown) => void) | undefined,
+  emitLegacyNudge: boolean,
+) {
+  try {
+    const { recipientId, variant } = wizzSchema.parse(raw);
+    if (!wizzLimiter.consume(`${userId}:${recipientId}`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+    await canWizz(userId, recipientId);
+
+    const payload = { senderId: userId, variant, sentAt: new Date().toISOString() };
+    io.to(`user:${recipientId}`).emit('kpulse:receive', payload);
+    if (emitLegacyNudge) io.to(`user:${recipientId}`).emit('nudge:receive', payload);
+    ack?.({ ok: true });
+  } catch {
+    ack?.({ ok: false, error: 'REJECTED' });
+  }
+}
+
 io.use(async (socket, next) => {
   try {
     socket.data.userId = await authenticateSocket(socket);
@@ -317,16 +337,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('nudge:send', async (raw, ack) => {
-    try {
-      const { recipientId, variant } = wizzSchema.parse(raw);
-      if (!wizzLimiter.consume(`${userId}:${recipientId}`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
-      await canWizz(userId, recipientId);
-      io.to(`user:${recipientId}`).emit('nudge:receive', { senderId: userId, variant, sentAt: new Date().toISOString() });
-      ack?.({ ok: true });
-    } catch {
-      ack?.({ ok: false, error: 'REJECTED' });
-    }
+  socket.on('kpulse:send', (raw, ack) => {
+    void handleKPulseSend(userId, raw, ack, false);
+  });
+
+  socket.on('nudge:send', (raw, ack) => {
+    void handleKPulseSend(userId, raw, ack, true);
   });
 
   socket.on('disconnect', (reason) => {

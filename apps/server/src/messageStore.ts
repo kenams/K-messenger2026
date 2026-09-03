@@ -1,5 +1,5 @@
-import { supabaseAdmin } from './supabase.js';
 import type { z } from 'zod';
+import { query } from './db.js';
 import { messageHistorySchema, messageSendSchema } from './validation.js';
 
 type Envelope = z.infer<typeof messageSendSchema>;
@@ -13,50 +13,86 @@ type HistoryRequest = z.infer<typeof messageHistorySchema>;
 // ever added, it MUST perform the same checks first; this function does not
 // re-verify on its own.
 export async function persistEncryptedMessage(userId: string, envelope: Envelope) {
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from('messages')
-    .select('id, created_at')
-    .eq('sender_user_id', userId)
-    .eq('client_message_id', envelope.clientMessageId)
-    .maybeSingle();
+  const { rows } = await query<{ id: string; created_at: string; duplicate: boolean }>(
+    `with inserted as (
+       insert into public.messages (
+         client_message_id,
+         conversation_id,
+         sender_user_id,
+         sender_device_id,
+         algorithm,
+         ciphertext,
+         nonce,
+         aad,
+         created_at
+       )
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       on conflict (sender_user_id, client_message_id) do nothing
+       returning id, created_at, false as duplicate
+     )
+     select id, created_at, duplicate from inserted
+     union all
+     select id, created_at, true as duplicate
+       from public.messages
+      where sender_user_id = $3
+        and client_message_id = $1
+     limit 1`,
+    [
+      envelope.clientMessageId,
+      envelope.conversationId,
+      userId,
+      envelope.senderDeviceId,
+      envelope.algorithm,
+      envelope.ciphertext,
+      envelope.nonce ?? null,
+      envelope.aad ?? null,
+      envelope.createdAt,
+    ],
+  );
 
-  if (existingError) throw new Error('MESSAGE_LOOKUP_FAILED');
-  if (existing) return { id: existing.id, createdAt: existing.created_at, duplicate: true as const };
-
-  const { data, error } = await supabaseAdmin
-    .from('messages')
-    .insert({
-      client_message_id: envelope.clientMessageId,
-      conversation_id: envelope.conversationId,
-      sender_user_id: userId,
-      sender_device_id: envelope.senderDeviceId,
-      algorithm: envelope.algorithm,
-      ciphertext: envelope.ciphertext,
-      nonce: envelope.nonce ?? null,
-      aad: envelope.aad ?? null,
-      created_at: envelope.createdAt,
-    })
-    .select('id, created_at')
-    .single();
-
-  if (error || !data) throw new Error('MESSAGE_PERSIST_FAILED');
-  return { id: data.id, createdAt: data.created_at, duplicate: false as const };
+  const stored = rows[0];
+  if (!stored) throw new Error('MESSAGE_PERSIST_FAILED');
+  return { id: stored.id, createdAt: stored.created_at, duplicate: stored.duplicate };
 }
 
 export async function listEncryptedMessages(request: HistoryRequest) {
-  let query = supabaseAdmin
-    .from('messages')
-    .select('id,client_message_id,conversation_id,sender_user_id,sender_device_id,algorithm,ciphertext,nonce,aad,created_at')
-    .eq('conversation_id', request.conversationId)
-    .order('created_at', { ascending: false })
-    .limit(request.limit + 1);
+  const values: unknown[] = [request.conversationId, request.limit + 1];
+  let beforeClause = '';
+  if (request.before) {
+    values.push(request.before);
+    beforeClause = 'and created_at < $3';
+  }
 
-  if (request.before) query = query.lt('created_at', request.before);
+  const { rows } = await query<{
+    id: string;
+    client_message_id: string;
+    conversation_id: string;
+    sender_user_id: string;
+    sender_device_id: string | null;
+    algorithm: string;
+    ciphertext: string;
+    nonce: string | null;
+    aad: string | null;
+    created_at: string;
+  }>(
+    `select id,
+            client_message_id,
+            conversation_id,
+            sender_user_id,
+            sender_device_id,
+            algorithm,
+            ciphertext,
+            nonce,
+            aad,
+            created_at
+       from public.messages
+      where conversation_id = $1
+        ${beforeClause}
+      order by created_at desc
+      limit $2`,
+    values,
+  );
 
-  const { data, error } = await query;
-  if (error) throw new Error('MESSAGE_HISTORY_FAILED');
-
-  const rows = data ?? [];
   const hasMore = rows.length > request.limit;
   const page = rows.slice(0, request.limit);
   const nextCursor = hasMore && page.length > 0 ? page[page.length - 1].created_at : null;
