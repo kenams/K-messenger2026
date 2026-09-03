@@ -5,17 +5,27 @@ import { getSupabase, isBackendConfigured } from '../../lib/supabase';
 
 type Mode = 'login' | 'signup';
 
+function normalizeUsername(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
+}
+
 export function AuthScreen() {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
+  const normalizedUsername = normalizeUsername(username);
+  const signupIdentityValid = mode === 'login' || (normalizedUsername.length >= 3 && displayName.trim().length >= 1);
+  const canSubmit = !!email.trim() && password.length >= 8 && signupIdentityValid && !busy && isBackendConfigured;
+
   const submit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || password.length < 8 || busy || !isBackendConfigured) return;
+    if (!canSubmit || !normalizedEmail) return;
 
     setBusy(true);
     setError('');
@@ -32,9 +42,15 @@ export function AuthScreen() {
         const { data, error: authError } = await supabase.auth.signUp({
           email: normalizedEmail,
           password,
+          options: {
+            data: {
+              username: normalizedUsername,
+              display_name: displayName.trim().slice(0, 64),
+            },
+          },
         });
         if (authError) {
-          setError('Création du compte impossible pour le moment.');
+          setError('Création du compte impossible. Essaie un autre pseudo ou réessaie dans un instant.');
         } else if (!data.session) {
           setNotice('Compte créé. Confirme ton e-mail pour te connecter.');
         }
@@ -70,6 +86,28 @@ export function AuthScreen() {
         <Text style={styles.title}>{mode === 'login' ? 'Se connecter' : 'Créer mon compte'}</Text>
         <Text style={styles.copy}>MSN revient, avec une sécurité moderne.</Text>
 
+        {mode === 'signup' && (
+          <>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="@pseudo (3 caractères minimum)"
+              value={username}
+              onChangeText={(value) => setUsername(normalizeUsername(value))}
+              maxLength={24}
+              style={styles.input}
+            />
+            <TextInput
+              autoCorrect={false}
+              placeholder="Nom affiché / surnom MSN"
+              value={displayName}
+              onChangeText={setDisplayName}
+              maxLength={64}
+              style={styles.input}
+            />
+          </>
+        )}
+
         <TextInput
           autoCapitalize="none"
           autoCorrect={false}
@@ -90,12 +128,15 @@ export function AuthScreen() {
           onSubmitEditing={submit}
         />
 
+        {mode === 'signup' && normalizedUsername.length > 0 && normalizedUsername.length < 3 && (
+          <Text style={styles.hint}>Le pseudo doit contenir au moins 3 caractères.</Text>
+        )}
         {!!error && <Text style={styles.error}>{error}</Text>}
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
 
         <TouchableOpacity
-          style={[styles.primary, (!email.trim() || password.length < 8 || busy) && styles.disabled]}
-          disabled={!email.trim() || password.length < 8 || busy}
+          style={[styles.primary, !canSubmit && styles.disabled]}
+          disabled={!canSubmit}
           onPress={submit}
         >
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{mode === 'login' ? 'Connexion' : 'Créer mon compte'}</Text>}
@@ -124,6 +165,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.5 },
   primaryText: { color: '#fff', fontWeight: '900' },
   switch: { color: '#278dcc', fontWeight: '800', marginTop: 18 },
+  hint: { color: '#7b5d00', marginTop: 8, textAlign: 'center', fontSize: 11 },
   error: { color: '#b42318', marginTop: 12, textAlign: 'center' },
   notice: { color: '#217a45', marginTop: 12, textAlign: 'center' },
   foot: { color: '#8197a4', fontSize: 10, marginTop: 18, textAlign: 'center' },
