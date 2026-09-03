@@ -11,7 +11,7 @@
 - `import/mobile-agent-kah`, `import/server-agent-kah` — imported Agent-Kah crypto POC/history; not blindly merged
 
 ## Latest verified CI
-- GitHub Actions CI run #89 on commit `1e63f31c973b7ebbd92ba82e42d4165f30ca7b40` completed SUCCESS
+- GitHub Actions CI run #90 on commit `8dc8c7fe7633752188fbfd7d1341181e5e7a0e1c` completed SUCCESS
 - install: success
 - TypeScript workspace typecheck: success
 - server tests: success
@@ -22,11 +22,11 @@ A dedicated free Neon project named `K-ssenger` exists and is the only remote da
 
 Provisioned and verified:
 - PostgreSQL 17, Europe
-- Neon Auth with email/password sign-up enabled
-- Neon Data API bound to Neon Auth
+- Neon Auth (`better_auth`) is active on the default `main` branch
+- Neon Data API is active and bound to the `kssenger` database
 - JWT-aware database helpers `auth.user_id()` and `auth.session()` are present
 - Data API roles `authenticated` / `anonymous` exist
-- the complete current V1 core table set from `neon/migrations/0001_v1_core.sql` now exists remotely: `profiles`, `privacy_settings`, `contacts`, `contact_requests`, `blocks`, `conversations`, `conversation_members`, `devices`, `messages`, `message_receipts`
+- the complete current V1 core table set from `neon/migrations/0001_v1_core.sql` exists remotely: `profiles`, `privacy_settings`, `contacts`, `contact_requests`, `blocks`, `conversations`, `conversation_members`, `devices`, `messages`, `message_receipts`
 - RLS is enabled on all ten public V1 core tables and policy presence has been verified directly in PostgreSQL
 - profile self-write/contact-read restrictions are live
 - privacy settings are self-only
@@ -37,7 +37,7 @@ Provisioned and verified:
 - devices are self-controlled
 - message persistence remains ciphertext-only in schema and is idempotent by `(sender_user_id, client_message_id)`
 
-The full current Neon V1 core schema is versioned in `neon/migrations/0001_v1_core.sql` and has now been applied incrementally to the dedicated remote K-ssenger database. The remaining remote database gate is not table creation anymore: it is authenticated end-to-end Neon Auth/Data API authorization testing with multiple real test identities, followed by moving runtime server/mobile calls off Supabase-specific APIs.
+The full current Neon V1 core schema is versioned in `neon/migrations/0001_v1_core.sql`. The remaining remote database gate is authenticated end-to-end Neon Auth/Data API authorization testing with multiple real test identities, followed by moving runtime server/mobile calls off Supabase-specific APIs.
 
 ## Historical Supabase validation
 The historical Supabase migration chain remains useful as the security/reference model and passes the isolated local Alice/Bob/Charlie RLS integration suite. It must not be connected to or reuse any unrelated Supabase project.
@@ -59,45 +59,37 @@ The historical Supabase migration chain remains useful as the security/reference
 - list pending sent/received requests
 - username search
 - request contact with self/block/existing/pending checks
-- accept
-- decline
-- cancel outgoing request
+- accept / decline / cancel
 - remove contact mutually
 - set/unset favorite per owner
 - block removes mutual contact and cancels pending requests
 - realtime Socket.IO events added for these actions
-- migration `0016_contact_lifecycle.sql` adds secure pending-pair/index constraints in the historical path
 
 ## Presence hardening implemented
 - per-user multi-socket connection tracking
 - disconnect only marks a user offline when their last socket disconnects
 - invisible is always fanned out to contacts as offline
-- explicit presence updates are broadcast only to contact audience plus self state
-- MSN-style `presence:login` event is emitted only on offline -> visible transition
-- login event has a 30-second debounce to avoid reconnect storms
-- unit coverage added for multi-socket disconnect semantics, invisible masking and login debounce
+- MSN-style `presence:login` event emitted only on offline -> visible transition
+- 30-second login debounce avoids reconnect storms
 
 ## Messaging reliability progress
 - ciphertext-only message persistence remains idempotent by client message id
 - delivered/read receipt path added without plaintext payloads
-- encrypted history replay added with membership/block checks, pagination and deterministic cursor semantics
-- no plaintext body is introduced by history/receipt transport
+- encrypted history replay added with membership/block checks and deterministic cursor semantics
 
 ## Groups — current progress
-- migration `0017_group_creation_rpc.sql` adds atomic service-role-only group creation in the historical path
-- group title and member-count validation added (owner + up to 49 invited members)
-- server group creation requires every invitee to already be a contact
-- group creation rejects users blocked in either direction
+- atomic service-role-only group creation exists in historical path
+- owner + up to 49 invited members
+- invitees must be contacts; blocks reject creation
 - Socket.IO `group:create` + `group:created` flow added
-- owner is inserted as `owner`, invitees as `member`, and default group settings are created atomically
 
 ## Mobile wiring — current progress
 - existing MSN-style visual shell is preserved; no cosmetic rewrite
-- current mobile auth/session implementation still uses the Supabase client API and must be migrated to Neon Auth before remote use
-- persisted session root exists
-- MSN-style login/signup screen exists
-- real profile bootstrap / sign-out flow exists on the current branch
-- the app refuses to silently reuse another project's backend
+- persisted session root, login/signup UI, profile bootstrap and sign-out flow exist
+- legacy runtime still uses Supabase APIs and is not allowed to target a remote Supabase project
+- Neon migration has now started: `apps/mobile/src/lib/neonConfig.ts` defines fail-closed dedicated Neon Auth/Data API public endpoint configuration
+- `apps/mobile/.env.example` documents only public Neon service URLs; no database credential or secret is required/allowed there
+- next code step is replacing `useAuthSession`, `AuthScreen`, profile reads/writes, then contacts with official Neon Auth/Data API semantics
 
 ## Remaining V1 blockers / priorities
 1. Add authenticated end-to-end Neon Auth + Data API authorization tests using dedicated K-ssenger test identities; prove cross-user RLS isolation remotely.
@@ -110,21 +102,17 @@ The historical Supabase migration chain remains useful as the security/reference
 8. E2EE: select/integrate a vetted native protocol implementation and prove it on Android/iOS; do not claim production E2EE before this.
 9. Produce signed/testable Android/iOS builds when signing/tooling is actually available.
 
-## Claude handoff checkpoint
-- Read this file first before changing anything.
-- Continue ONLY K-ssenger. Do not touch MyLife, Kah-Digital, DSE, or any unrelated repository/database/deployment.
-- Work from `fix/feed-kmap-contact-security` unless the user explicitly asks for another branch.
-- Keep commits small, descriptive, and pushed to GitHub frequently so another agent can resume safely.
-- Before each work session: pull/fetch current branch, inspect PR #2 and latest CI, then continue from the newest commit instead of replaying older work.
+## Handoff checkpoint
+- Continue ONLY K-ssenger.
+- Work from `fix/feed-kmap-contact-security` unless explicitly changed.
+- Inspect PR #2 and CI before each run; keep commits small and coherent.
 - Keep PR #2 draft while critical DB/security/mobile integration gates remain unresolved.
-- Do not force-push.
-- Do not commit secrets, Neon credentials, JWTs, signing keys, service-role keys, `.env` files, or connection strings.
-- Dedicated backend is Neon project `K-ssenger` only. Never reuse another project's database.
-- Current handoff priority: prove remote Neon Auth/Data API authorization, migrate mobile + server away from Supabase-specific runtime assumptions, then finish real multi-user chat/contact/presence/group flows.
-- Update this `PROJECT_STATE.md` at meaningful checkpoints so ChatGPT/Claude/Codex can hand off without losing context.
+- Never force-push, expose secrets, or reuse another project's backend.
+- Dedicated backend is Neon project `K-ssenger` only.
+- Current priority: finish official Neon mobile auth/Data API wiring, prove remote multi-user RLS, then wire real contacts/presence/Wizz/chat/groups.
 
 ## Hard rules
-- K-ssenger resources only; do not reuse or modify databases/deployments belonging to other projects
+- K-ssenger resources only
 - no force push
 - no secrets in the public repository
 - no custom Double Ratchet casually
