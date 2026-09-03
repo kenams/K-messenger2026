@@ -11,21 +11,17 @@
 - `import/mobile-agent-kah`, `import/server-agent-kah` — imported Agent-Kah crypto POC/history; not blindly merged
 
 ## Latest verified CI
-- GitHub Actions CI run #69 on commit `dc564f67d72c810f128d09122a9e125d9b65c355` completed SUCCESS
+- GitHub Actions CI run #74 on commit `0161554980a25e571415de3a040195c5dae82e30` completed SUCCESS
 - install: success
-- TypeScript typecheck: success
+- TypeScript workspace typecheck: success
 - server tests: success
-- real local Supabase RLS integration job: success
-- latest group commits are newer than #69; fresh CI is running and must pass before they are treated as verified
+- isolated local Supabase RLS integration job: success
+- mobile-auth commits are newer than #74; fresh CI must pass before they are treated as verified
 
 ## Migrations — actually run locally (2026-09-03)
-`supabase start` + `supabase db reset` (Docker, isolated K-ssenger ports) applied the migration chain end to end. Static review previously missed real issues that were fixed before continuing:
-- duplicate migration numbering
-- missing `public.is_conversation_member(uuid)` helper
-- recursive `conversation_members` RLS policy causing PostgreSQL `42P17`
-- subsequent migration numbering collision after parallel integration
+`supabase start` + `supabase db reset` on isolated K-ssenger ports applies the migration chain end to end. Fixed issues found by real execution include duplicate numbering, a missing membership helper, recursive `conversation_members` RLS causing PostgreSQL `42P17`, and later numbering drift.
 
-`scripts/rls-integration-test.mjs` runs real Alice/Bob/Charlie scenarios against local Postgres. The verified #69 version covers profile privacy, presence masking, service-role RPC protection, K-Feed age gating, K-MAP precision isolation, receipt privacy/direct-write lockdown, and block-triggered K-MAP revocation.
+`scripts/rls-integration-test.mjs` runs real Alice/Bob/Charlie authorization scenarios against local Postgres. Coverage includes profile privacy, presence masking, service-role RPC protection, K-Feed age gating, K-MAP precision isolation, receipt privacy/direct-write lockdown and block-triggered K-MAP revocation.
 
 Still not done: no dedicated remote K-ssenger database/backend is connected yet. Local validation is real, but remote staging validation is still required before production claims.
 
@@ -39,7 +35,7 @@ Still not done: no dedicated remote K-ssenger database/backend is connected yet.
 - Direct authenticated contact-request UPDATE path removed
 - Pending contact requests are cleaned up when either participant blocks the other
 - receipt rows are owner-readable only and authenticated clients cannot create them directly
-- RLS integration CI now exercises these rules against a real local Supabase instance
+- RLS integration CI exercises the important rules against a real local Supabase instance
 
 ## Contact lifecycle implemented server-side
 - list contacts
@@ -69,7 +65,6 @@ Still not done: no dedicated remote K-ssenger database/backend is connected yet.
 - delivered/read receipt path added without plaintext payloads
 - encrypted history replay added with membership/block checks, pagination and deterministic cursor semantics
 - no plaintext body is introduced by history/receipt transport
-- CI #68 verified encrypted history changes; CI #69 verified the expanded RLS suite
 
 ## Groups — current progress
 - migration `0017_group_creation_rpc.sql` adds atomic service-role-only group creation
@@ -78,16 +73,26 @@ Still not done: no dedicated remote K-ssenger database/backend is connected yet.
 - group creation rejects users blocked in either direction
 - Socket.IO `group:create` + `group:created` flow added
 - owner is inserted as `owner`, invitees as `member`, and default group settings are created atomically
-- these newest group commits are still waiting for the current CI/RLS run to finish
+- CI #74 verifies the current group path compiles/tests with the rest of the branch
+
+## Mobile wiring — current progress
+- existing MSN-style visual shell is preserved; no cosmetic rewrite
+- dedicated Supabase client added using only `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- no service-role/server secret is embedded in mobile code
+- real persisted Supabase session hook added with auth-state subscription
+- MSN-style login/signup screen added using `signInWithPassword` / `signUp`
+- missing remote K-ssenger configuration is shown explicitly instead of silently reusing another project's backend
+- Expo entrypoint now boots through an authenticated root; the MSN shell is only mounted after a real session exists
+- these newest mobile-auth commits are waiting for fresh CI verification
 
 ## Remaining release blockers / priorities
-1. Finish verification of the new group migration/server path in CI and add group-specific Alice/Bob/Charlie tests.
+1. Verify the new mobile auth/session entrypoint in CI, then wire real profile bootstrap and sign-out.
 2. Connect a dedicated remote K-ssenger database/backend only; re-run migrations and RLS integration there.
-3. Wire the MSN-style mobile shell to real auth/contacts/presence/Wizz/chat/group backend.
+3. Wire mobile contacts/presence/Wizz/chat/group calls to the authenticated backend and replace remaining local demo data progressively.
 4. Complete profile/avatar/status editing, group admin/member lifecycle, K-Feed upload/moderation, K-MAP UX and Moments progressively.
 5. Finish offline queue/retry semantics on the mobile client around the existing idempotent encrypted transport.
 6. E2EE: select/integrate a vetted native protocol implementation and prove it on Android/iOS; do not claim production E2EE before this.
-7. Produce signed/testable Android/iOS builds when build credentials/tooling are available.
+7. Produce signed/testable Android/iOS builds when build credentials/tooling are actually available.
 
 ## Database/backend blocker
 No dedicated remote K-ssenger database is connected yet. Do not reuse, pause, modify or repurpose databases belonging to other projects. Local Supabase exists only as an isolated K-ssenger validation environment.
