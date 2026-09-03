@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
-import { emitAck, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
+import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
 export type Contact = {
@@ -46,10 +46,8 @@ type SearchResponse = {
   error?: string;
 };
 
-type RequestsResponse = {
-  ok: boolean;
-  requests?: Array<{ id: string; sender_id: string; recipient_id: string; status: string }>;
-};
+type ContactRequest = { id: string; sender_id: string; recipient_id: string; status: string };
+type RequestsResponse = { ok: boolean; requests?: ContactRequest[] };
 
 const presenceIcon: Record<Presence, string> = {
   online: '🟢', busy: '🔴', away: '🟠', invisible: '👻', offline: '⚫',
@@ -57,13 +55,14 @@ const presenceIcon: Record<Presence, string> = {
 
 export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => void }) {
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [currentUserId, setCurrentUserId] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<SearchResponse['profiles']>([]);
-  const [requests, setRequests] = useState<RequestsResponse['requests']>([]);
+  const [requests, setRequests] = useState<ContactRequest[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(isRealtimeConfigured);
-  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const loadContacts = async (client: Socket) => {
     const response = await emitAck<ContactResponse>(client, 'contacts:list');
@@ -88,26 +87,32 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   useEffect(() => {
     if (!isRealtimeConfigured) {
       setLoading(false);
-      setError('Serveur temps réel K-ssenger non configuré pour ce build.');
+      setNotice('Serveur temps réel K-ssenger non configuré pour ce build.');
       return;
     }
 
     let active = true;
-    let current: Socket | null = null;
+    let clientRef: Socket | null = null;
+    let cleanupListeners: (() => void) | null = null;
 
-    void getRealtimeSocket().then(async (client) => {
+    void Promise.all([getRealtimeSocket(), getAuthenticatedUserId()]).then(async ([client, userId]) => {
       if (!active) return;
-      current = client;
+      clientRef = client;
       setSocket(client);
+      setCurrentUserId(userId);
 
       const refresh = () => {
-        void loadContacts(client).catch(() => setError('Impossible de charger les contacts.'));
+        void loadContacts(client).catch(() => setNotice('Impossible de charger les contacts.'));
         void loadRequests(client);
       };
-      const onPresence = ({ userId, status }: { userId: string; status: Presence }) => {
-        setContacts((items) => items.map((item) => item.id === userId ? { ...item, presence: status } : item));
+      const onPresence = ({ userId: changedUserId, status }: { userId: string; status: Presence }) => {
+        setContacts((items) => items.map((item) => item.id === changedUserId ? { ...item, presence: status } : item));
       };
       const onRequest = () => void loadRequests(client);
+      const onKPulse = ({ senderId }: { senderId: string }) => {
+        const sender = contacts.find((item) => item.id === senderId);
+        setNotice(`⚡ K-Pulse reçu${sender ? ` de ${sender.displayName}` : ''} !`);
+      };
 
       client.on('connect', refresh);
       client.on('presence:changed', onPresence);
@@ -115,34 +120,36 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       client.on('contact:request', onRequest);
       client.on('contact:accepted', refresh);
       client.on('contact:removed', refresh);
-
-      try {
-        await Promise.all([loadContacts(client), loadRequests(client)]);
-        if (active) setError('');
-      } catch {
-        if (active) setError('Connexion aux contacts K-ssenger impossible.');
-      } finally {
-        if (active) setLoading(false);
-      }
-
-      return () => {
+      client.on('kpulse:receive', onKPulse);
+      cleanupListeners = () => {
         client.off('connect', refresh);
         client.off('presence:changed', onPresence);
         client.off('presence:login', onPresence);
         client.off('contact:request', onRequest);
         client.off('contact:accepted', refresh);
         client.off('contact:removed', refresh);
+        client.off('kpulse:receive', onKPulse);
       };
+
+      try {
+        await Promise.all([loadContacts(client), loadRequests(client)]);
+        if (active) setNotice('');
+      } catch {
+        if (active) setNotice('Connexion aux contacts K-ssenger impossible.');
+      } finally {
+        if (active) setLoading(false);
+      }
     }).catch(() => {
       if (active) {
         setLoading(false);
-        setError('Connexion temps réel impossible.');
+        setNotice('Connexion temps réel impossible.');
       }
     });
 
     return () => {
       active = false;
-      current = null;
+      cleanupListeners?.();
+      clientRef = null;
     };
   }, []);
 
@@ -164,12 +171,15 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     if (!term) return contacts;
     return contacts.filter((c) => `${c.displayName} ${c.nickname} ${c.handle}`.toLowerCase().includes(term));
   }, [contacts, search]);
+  const incomingRequests = requests.filter((request) => request.recipient_id === currentUserId);
+  const outgoingRequests = requests.filter((request) => request.sender_id === currentUserId);
   const onlineCount = filtered.filter((c) => c.presence !== 'offline').length;
 
   const requestContact = async (userId: string) => {
     if (!socket) return;
     const response = await emitAck<{ ok: boolean; error?: string }>(socket, 'contact:request', { userId });
-    setError(response.ok ? 'Demande envoyée.' : 'Demande impossible.');
+    setNotice(response.ok ? 'Demande envoyée.' : 'Demande impossible.');
+    if (response.ok) await loadRequests(socket);
   };
 
   const acceptRequest = async (requestId: string) => {
@@ -177,8 +187,14 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     const response = await emitAck<{ ok: boolean }>(socket, 'contact:accept', { requestId });
     if (response.ok) {
       await Promise.all([loadContacts(socket), loadRequests(socket)]);
-      setError('Contact ajouté.');
+      setNotice('Contact ajouté.');
     }
+  };
+
+  const sendKPulse = async (contact: Contact) => {
+    if (!socket) return;
+    const response = await emitAck<{ ok: boolean; error?: string }>(socket, 'kpulse:send', { recipientId: contact.id, variant: 'classic' });
+    setNotice(response.ok ? `⚡ K-Pulse envoyé à ${contact.displayName}.` : 'K-Pulse refusé ou limité.');
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator /><Text style={styles.counter}>Chargement de tes contacts…</Text></View>;
@@ -189,12 +205,12 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         <TextInput value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo..." placeholderTextColor="#7690a0" style={styles.search} autoCapitalize="none" />
       </View>
       <Text style={styles.counter}>{onlineCount} en ligne · {filtered.length} contacts</Text>
-      {!!error && <Text style={styles.notice}>{error}</Text>}
+      {!!notice && <Text style={styles.notice}>{notice}</Text>}
 
-      {!!requests?.length && (
+      {!!incomingRequests.length && (
         <View style={styles.group}>
-          <View style={styles.groupHeader}><Text style={styles.groupTitle}>DEMANDES</Text><Text style={styles.groupCount}>{requests.length}</Text></View>
-          {requests.map((request) => (
+          <View style={styles.groupHeader}><Text style={styles.groupTitle}>DEMANDES REÇUES</Text><Text style={styles.groupCount}>{incomingRequests.length}</Text></View>
+          {incomingRequests.map((request) => (
             <View key={request.id} style={styles.contact}>
               <View style={styles.avatar}><Text style={styles.avatarText}>?</Text></View>
               <View style={styles.flex}><Text style={styles.nickname}>Nouvelle demande</Text><Text style={styles.status}>{request.sender_id}</Text></View>
@@ -203,6 +219,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
           ))}
         </View>
       )}
+      {!!outgoingRequests.length && <Text style={styles.pending}>{outgoingRequests.length} demande(s) envoyée(s) en attente.</Text>}
 
       {search.trim().length >= 2 && !!results?.length && (
         <View style={styles.group}>
@@ -228,14 +245,16 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
               <Text style={styles.groupCount}>{items.filter((c) => c.presence !== 'offline').length}/{items.length}</Text>
             </TouchableOpacity>
             {!isCollapsed && items.map((contact) => (
-              <TouchableOpacity key={contact.id} style={styles.contact} onPress={() => onOpen(contact)} accessibilityRole="button">
-                <View style={[styles.avatar, contact.presence === 'online' && styles.avatarOnline]}><Text style={styles.avatarText}>{contact.displayName[0]}</Text></View>
-                <View style={styles.flex}>
-                  <View style={styles.nameRow}><Text style={styles.presence}>{presenceIcon[contact.presence]}</Text><Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text>{contact.favorite && <Text> ⭐</Text>}</View>
-                  {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </TouchableOpacity>
+              <View key={contact.id} style={styles.contact}>
+                <TouchableOpacity style={styles.contactMain} onPress={() => onOpen(contact)} accessibilityRole="button">
+                  <View style={[styles.avatar, contact.presence === 'online' && styles.avatarOnline]}><Text style={styles.avatarText}>{contact.displayName[0]}</Text></View>
+                  <View style={styles.flex}>
+                    <View style={styles.nameRow}><Text style={styles.presence}>{presenceIcon[contact.presence]}</Text><Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text>{contact.favorite && <Text> ⭐</Text>}</View>
+                    {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse(contact)} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
+              </View>
             ))}
           </View>
         );
@@ -249,10 +268,10 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
 const styles = StyleSheet.create({
   page: { flex: 1 }, content: { padding: 14, paddingBottom: 28 }, flex: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   toolbar: { flexDirection: 'row', gap: 9, alignItems: 'center' }, search: { flex: 1, backgroundColor: '#fff', borderRadius: 17, borderWidth: 1, borderColor: '#d6e8f2', paddingHorizontal: 15, paddingVertical: 12, color: '#173448' },
-  counter: { marginTop: 8, marginLeft: 5, color: '#7893a3', fontSize: 11 }, notice: { marginTop: 10, color: '#326e94', fontWeight: '700' }, empty: { marginTop: 30, textAlign: 'center', color: '#7893a3' },
+  counter: { marginTop: 8, marginLeft: 5, color: '#7893a3', fontSize: 11 }, notice: { marginTop: 10, color: '#326e94', fontWeight: '700' }, pending: { marginTop: 9, color: '#7893a3', fontSize: 11 }, empty: { marginTop: 30, textAlign: 'center', color: '#7893a3' },
   group: { marginTop: 14, borderRadius: 18, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.70)', borderWidth: 1, borderColor: '#daeaf3' },
   groupHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 10, backgroundColor: '#dff1fb' }, groupTitle: { fontSize: 11, letterSpacing: 1, color: '#326e94', fontWeight: '900' }, groupCount: { color: '#5b8098', fontSize: 11, fontWeight: '700' },
-  contact: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11, borderTopWidth: 1, borderTopColor: '#edf4f7' }, avatar: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#dcecf5', borderWidth: 2, borderColor: '#c2d7e3' }, avatarOnline: { borderColor: '#65c568', backgroundColor: '#e7f8ed' }, avatarText: { color: '#276b93', fontSize: 18, fontWeight: '900' },
-  nameRow: { flexDirection: 'row', alignItems: 'center' }, presence: { fontSize: 10, marginRight: 5 }, nickname: { color: '#173448', fontSize: 15, fontWeight: '800', maxWidth: '82%' }, status: { color: '#668696', marginTop: 2, fontSize: 12 }, chevron: { fontSize: 28, color: '#8fa7b5' },
-  accept: { backgroundColor: '#2189c5', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 11 }, acceptText: { color: '#fff', fontSize: 11, fontWeight: '900' },
+  contact: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 11, borderTopWidth: 1, borderTopColor: '#edf4f7' }, contactMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11 }, avatar: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#dcecf5', borderWidth: 2, borderColor: '#c2d7e3' }, avatarOnline: { borderColor: '#65c568', backgroundColor: '#e7f8ed' }, avatarText: { color: '#276b93', fontSize: 18, fontWeight: '900' },
+  nameRow: { flexDirection: 'row', alignItems: 'center' }, presence: { fontSize: 10, marginRight: 5 }, nickname: { color: '#173448', fontSize: 15, fontWeight: '800', maxWidth: '82%' }, status: { color: '#668696', marginTop: 2, fontSize: 12 },
+  accept: { backgroundColor: '#2189c5', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 11 }, acceptText: { color: '#fff', fontSize: 11, fontWeight: '900' }, pulse: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#fff2bd', borderWidth: 1, borderColor: '#efcf65', alignItems: 'center', justifyContent: 'center' }, pulseText: { fontSize: 20 },
 });
