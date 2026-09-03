@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-03:
-- latest functional head: `044ad19b59d5d42c41267345bcef3d213c3fb265`
-- CI #142 (`33806455879`): SUCCESS
+- latest functional head: `756a081f4a9f9d576b6896c7eb78cbd0e938cc0c`
+- CI #148 (`33807145021`): SUCCESS
 - workspace typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS suite: SUCCESS
 - K-Feed/Moments/K-MAP RLS integration suite: SUCCESS
-- Android Debug APK #19 (`33804469873`) completed successfully and uploaded artifact `k-ssenger-android-debug`
-- Android Debug APK #21 for the latest group-conversation head is currently running and must not be called successful until GitHub reports completion and uploads the artifact
+- Android Debug APK #19 completed successfully and uploaded artifact `k-ssenger-android-debug`
+- Android Debug APK #22 for the latest functional head is still building and must not be called successful until GitHub reports completion and uploads the artifact
 
 ## Dedicated Remote K-ssenger Backend
 Only the dedicated free Neon project `K-ssenger` (`late-flower-65059830`) may be used.
@@ -54,11 +54,13 @@ Completed and CI-validated:
 - contacts/request/accept/decline/cancel/remove/favorite/block paths are Neon/Postgres-backed
 - presence and K-Pulse authorization are real server paths
 - message history/persistence/receipts remain ciphertext-envelope only
-- secure group creation remains contact/block validated and transaction-backed
 - direct conversation creation/reuse uses contact/block checks plus transaction advisory locking to prevent duplicate 1:1 conversations
-- Socket.IO `conversation:direct` opens/reuses a conversation and joins the initiating socket
-- authenticated `conversations:list` returns only conversations where the verified user is a member
-- conversation list summaries include members and last-message metadata without exposing ciphertext/plaintext message bodies
+- authenticated `conversations:list` returns only conversations where the verified user is a member and exposes member role plus safe last-message metadata without plaintext/ciphertext bodies
+- group creation is transaction-backed and restricted to contacts with block checks
+- group member add/remove, role promotion/demotion and leave operations are transaction-backed
+- group member add requires owner/admin, target contact status and no block conflict with current members
+- admin cannot remove owner/admin; only owner can promote/demote; owner cannot silently leave without ownership transfer
+- removed/leaving sockets are evicted from the group Socket.IO room; newly invited online sockets are joined only after database authorization succeeds
 
 ## Mobile Runtime
 Completed and CI-validated:
@@ -67,23 +69,21 @@ Completed and CI-validated:
 - authenticated Socket.IO client uses the current Neon access token; endpoint is `EXPO_PUBLIC_KSSENGER_SOCKET_URL`
 - reconnect behavior enabled
 - app lifecycle publishes online/away/offline presence
-- Contacts screen uses real server contacts instead of fake Sarah/Mehdi/Lisa data
+- Contacts screen uses real server contacts instead of fake demo data
 - real contact list/search/request/accept flows are wired to Socket.IO
 - incoming vs outgoing contact requests are distinguished
 - real presence updates/login events are consumed
 - K-Pulse sends/receives through the real server path
 - selecting a contact opens/reuses a real direct conversation and loads encrypted-envelope history
-- direct conversation now emits authenticated `read` receipts for remote messages when the conversation is open and consumes realtime receipt updates
+- direct conversations emit authenticated `read` receipts for remote messages when open and consume realtime receipt updates
 - Chats private list uses authenticated `conversations:list` rather than static demo chats
-- direct chat list never exposes encrypted message payloads as previews; it shows only safe conversation metadata
-- Groups screen lists real group conversations and creates groups from selected existing contacts through `group:create`
-- group creation remains server-validated against contact and block rules
-- tapping a group now joins the authorized conversation channel, loads real encrypted-envelope history, renders real members/presence and emits read receipts for remote group messages
-- group realtime history consumes new encrypted-envelope events without exposing message plaintext
+- Groups screen lists real groups and creates groups from selected contacts
+- opening a group joins the authorized room, loads encrypted-envelope history, renders real members/presence and emits read receipts
+- owner/admin controls are wired to real server mutations: invite contact, remove member, promote/demote admin and leave group
 - plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated; no crypto workaround is permitted
 - live Neon profile is rendered in the app shell
 - username, display name, custom status, bio and HTTPS avatar URL editing are wired through Neon Data API/RLS
-- authenticated account export is exposed in the profile data screen; messages remain encrypted envelopes in the export
+- authenticated account export is exposed; messages remain encrypted envelopes in the export
 
 ## Neon Social Modules Prepared
 New CI-validated Neon-native schema covers:
@@ -110,7 +110,7 @@ CI security checks include:
 - no K-ssenger realtime production deployment is verified yet; never reuse another project's deployment
 - mobile realtime fails closed when `EXPO_PUBLIC_KSSENGER_SOCKET_URL` is missing
 - Android debug APK CI is wired to the active branch and builds through Expo prebuild + Gradle
-- at least one current integration APK artifact has completed successfully; latest-head APK #21 remains pending verification
+- at least one current integration APK artifact has completed successfully; latest-head APK #22 remains pending verification
 - no verified iOS signing environment or Apple signing credentials are available here
 
 ## Account / Auth Safety
@@ -129,9 +129,9 @@ CI security checks include:
 ## Remaining V1 Priorities
 1. apply and verify K-Feed/Moments/K-MAP migrations on the dedicated remote Neon branch using an explicitly authorized migration step
 2. deploy the dedicated K-ssenger realtime server and configure its public mobile endpoint; never reuse another project's deployment
-3. perform real multi-user Neon Auth + remote runtime validation: account A/B -> contacts -> presence -> K-Pulse -> direct conversation -> group creation/read receipts
+3. perform real multi-user Neon Auth + remote runtime validation: account A/B -> contacts -> presence -> K-Pulse -> direct/group conversations -> read receipts -> group membership changes
 4. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending on devices; do not claim E2EE before proof
-5. complete group admin/member lifecycle (invite/remove/promote/leave/mute/ban as specified)
+5. finish remaining group lifecycle items that require product/schema decisions such as mute/ban and ownership transfer
 6. replace K-Feed/Moments/K-MAP placeholder UI with their Neon-native tables/runtime and approved media storage
 7. add native media upload/storage and push notifications
 8. complete moderation/report/block UX and correctly verified Auth account deletion
