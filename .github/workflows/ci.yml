@@ -16,3 +16,25 @@ jobs:
       - run: npm install
       - run: npm run typecheck
       - run: npm run test:server
+
+  rls-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start isolated local Supabase
+        run: npx supabase start
+      - name: Install PostgreSQL test client
+        run: npm install --no-save pg
+      - name: Run Alice/Bob/Charlie RLS integration suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55322/postgres
+        run: node scripts/rls-integration-test.mjs
+      - name: Stop local Supabase
+        if: always()
+        run: npx supabase stop --no-backup
