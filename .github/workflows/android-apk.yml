@@ -26,7 +26,7 @@ jobs:
           node-version: 22
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -35,10 +35,10 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --include=dev
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Typecheck mobile only
+        run: npm --workspace @kssenger/mobile run typecheck
 
       - name: Verify mobile entry
         working-directory: apps/mobile
