@@ -122,12 +122,10 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     }
 
     let active = true;
-    let clientRef: Socket | null = null;
     let cleanupListeners: (() => void) | null = null;
 
     void Promise.all([getRealtimeSocket(), getAuthenticatedUserId()]).then(async ([client, userId]) => {
       if (!active) return;
-      clientRef = client;
       setSocket(client);
       setCurrentUserId(userId);
       void loadLoginNotificationPreference(userId);
@@ -187,7 +185,6 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     return () => {
       active = false;
       cleanupListeners?.();
-      clientRef = null;
     };
   }, []);
 
@@ -228,6 +225,21 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       await Promise.all([loadContacts(socket), loadRequests(socket)]);
       setNotice('Contact ajouté.');
     }
+  };
+
+  const toggleFavorite = async (contact: Contact) => {
+    if (!socket) return;
+    const nextFavorite = !contact.favorite;
+    const response = await emitAck<{ ok: boolean; error?: string }>(socket, 'contact:favorite', {
+      userId: contact.id,
+      favorite: nextFavorite,
+    });
+    if (!response.ok) {
+      setNotice('Impossible de modifier ce favori.');
+      return;
+    }
+    await loadContacts(socket);
+    setNotice(nextFavorite ? `⭐ ${contact.nickname} ajouté aux Favoris.` : `${contact.nickname} retiré des Favoris.`);
   };
 
   const sendKPulse = async (contact: Contact) => {
@@ -287,11 +299,12 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
                 <TouchableOpacity style={styles.contactMain} onPress={() => onOpen(contact)} accessibilityRole="button">
                   <View style={[styles.avatar, contact.presence === 'online' && styles.avatarOnline]}><Text style={styles.avatarText}>{contact.displayName[0]}</Text></View>
                   <View style={styles.flex}>
-                    <View style={styles.nameRow}><Text style={styles.presence}>{presenceIcon[contact.presence]}</Text><Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text>{contact.favorite && <Text> ⭐</Text>}</View>
+                    <View style={styles.nameRow}><Text style={styles.presence}>{presenceIcon[contact.presence]}</Text><Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text></View>
                     {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
                     {!!contact.nowPlaying && <Text style={styles.music} numberOfLines={1}>♫ {contact.nowPlaying}</Text>}
                   </View>
                 </TouchableOpacity>
+                <TouchableOpacity style={[styles.favorite, contact.favorite && styles.favoriteActive]} onPress={() => void toggleFavorite(contact)} accessibilityLabel={contact.favorite ? `Retirer ${contact.displayName} des favoris` : `Ajouter ${contact.displayName} aux favoris`}><Text style={styles.favoriteText}>{contact.favorite ? '★' : '☆'}</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse(contact)} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
               </View>
             ))}
@@ -312,5 +325,5 @@ const styles = StyleSheet.create({
   groupHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 10, backgroundColor: '#dff1fb' }, groupTitle: { fontSize: 11, letterSpacing: 1, color: '#326e94', fontWeight: '900' }, groupCount: { color: '#5b8098', fontSize: 11, fontWeight: '700' },
   contact: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 11, borderTopWidth: 1, borderTopColor: '#edf4f7' }, contactMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11 }, avatar: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#dcecf5', borderWidth: 2, borderColor: '#c2d7e3' }, avatarOnline: { borderColor: '#65c568', backgroundColor: '#e7f8ed' }, avatarText: { color: '#276b93', fontSize: 18, fontWeight: '900' },
   nameRow: { flexDirection: 'row', alignItems: 'center' }, presence: { fontSize: 10, marginRight: 5 }, nickname: { color: '#173448', fontSize: 15, fontWeight: '800', maxWidth: '82%' }, status: { color: '#668696', marginTop: 2, fontSize: 12 }, music: { color: '#4e7d55', marginTop: 2, fontSize: 11, fontStyle: 'italic' },
-  accept: { backgroundColor: '#2189c5', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 11 }, acceptText: { color: '#fff', fontSize: 11, fontWeight: '900' }, pulse: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#fff2bd', borderWidth: 1, borderColor: '#efcf65', alignItems: 'center', justifyContent: 'center' }, pulseText: { fontSize: 20 },
+  accept: { backgroundColor: '#2189c5', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 11 }, acceptText: { color: '#fff', fontSize: 11, fontWeight: '900' }, favorite: { width: 34, height: 38, borderRadius: 12, borderWidth: 1, borderColor: '#d5e2e9', backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }, favoriteActive: { backgroundColor: '#fff7d6', borderColor: '#e7ca5c' }, favoriteText: { color: '#b48a00', fontSize: 19, fontWeight: '900' }, pulse: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#fff2bd', borderWidth: 1, borderColor: '#efcf65', alignItems: 'center', justifyContent: 'center' }, pulseText: { fontSize: 20 },
 });
