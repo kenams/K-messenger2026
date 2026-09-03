@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getSupabase } from '../../lib/supabase';
+import { getBackend } from '../../lib/backend';
 
 export type MyProfile = {
   id: string;
@@ -22,7 +22,7 @@ export function useMyProfile(userId: string) {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: queryError } = await getSupabase()
+    const { data, error: queryError } = await getBackend()
       .from('profiles')
       .select('id,username,display_name,nickname,avatar_url,bio,custom_status,presence,now_playing_title,now_playing_artist')
       .eq('id', userId)
