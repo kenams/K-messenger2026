@@ -44,7 +44,7 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
       <View style={styles.card}>
         <View style={styles.logo}><Text style={styles.logoText}>K</Text></View>
         <Text style={styles.brand}>K-SSENGER</Text>
-        <Text style={styles.title}>Crée ton identité MSN</Text>
+        <Text style={styles.title}>Crée ton identité K-ssenger</Text>
         <Text style={styles.copy}>Choisis le pseudo que tes contacts verront dans leur liste.</Text>
         <TextInput autoCapitalize="none" autoCorrect={false} value={username} onChangeText={(value) => setUsername(normalizeUsername(value))} placeholder="@pseudo" maxLength={24} style={styles.input} />
         <TextInput value={displayName} onChangeText={setDisplayName} placeholder="Nom affiché / surnom" maxLength={64} style={styles.input} onSubmitEditing={save} />

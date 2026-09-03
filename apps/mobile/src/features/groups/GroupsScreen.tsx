@@ -11,11 +11,11 @@ export function GroupsScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <View style={styles.head}>
-        <View><Text style={styles.eyebrow}>MES GROUPES</Text><Text style={styles.title}>Comme les salons MSN, en mieux.</Text></View>
+        <View><Text style={styles.eyebrow}>MES GROUPES</Text><Text style={styles.title}>Des salons vivants, en mieux.</Text></View>
         <TouchableOpacity style={styles.newBtn}><Text style={styles.newText}>＋</Text></TouchableOpacity>
       </View>
       <View style={styles.quickRow}>
-        <Quick icon="⚡" label="Wizz le groupe" />
+        <Quick icon="⚡" label="K-Pulse groupe" />
         <Quick icon="🎵" label="Playlist" />
         <Quick icon="📍" label="Se rejoindre" />
       </View>
@@ -30,7 +30,7 @@ export function GroupsScreen() {
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
       ))}
-      <View style={styles.note}><Text style={styles.noteTitle}>💡 ADN MSN</Text><Text style={styles.noteText}>Les groupes gardent pseudos, présence, musique, Wizz, appels et Moments partagés. Les administrateurs gèrent invitations, rôles, mute et bannissement.</Text></View>
+      <View style={styles.note}><Text style={styles.noteTitle}>💡 ADN K-ssenger</Text><Text style={styles.noteText}>Les groupes gardent pseudos, présence, musique, K-Pulse, appels et Moments partagés. Les administrateurs gèrent invitations, rôles, mute et bannissement.</Text></View>
     </ScrollView>
   );
 }

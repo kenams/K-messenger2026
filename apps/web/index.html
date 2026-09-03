@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0878d1" />
-  <meta name="description" content="K-ssenger — l'esprit MSN, version 2027." />
+  <meta name="description" content="K-ssenger — messagerie sociale indépendante." />
   <title>K-ssenger Beta</title>
   <link rel="preconnect" href="https://esm.sh" />
   <link rel="stylesheet" href="./styles.css" />
@@ -16,7 +16,7 @@
     <section class="auth-card glass">
       <div class="brand-mark">K</div>
       <h1>K-SSENGER</h1>
-      <p class="tagline">MSN n'est jamais vraiment parti.</p>
+      <p class="tagline">Les contacts reviennent au centre.</p>
       <div class="auth-tabs">
         <button id="loginTab" class="active" type="button">Connexion</button>
         <button id="signupTab" type="button">Créer un compte</button>
@@ -35,10 +35,10 @@
     <section class="auth-card glass">
       <div class="brand-mark">K</div>
       <h2>Ton identité K-ssenger</h2>
-      <p class="tagline">Le pseudo, le statut, la musique. Comme avant — mais mieux.</p>
+      <p class="tagline">Le pseudo, le statut, la musique. Clair, vivant, personnel.</p>
       <form id="profileForm">
         <label>Identifiant @<input id="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_.-]{3,24}" placeholder="kenams" /></label>
-        <label>Pseudo MSN<input id="nickname" required maxlength="40" placeholder="KAH 😎" /></label>
+        <label>Nom affiché<input id="nickname" required maxlength="40" placeholder="KAH 😎" /></label>
         <label>Message perso<input id="mood" maxlength="120" placeholder="On est là." /></label>
         <label>🎵 En écoute<input id="music" maxlength="160" placeholder="Changes — 2Pac" /></label>
         <label>Statut<select id="status"><option value="online">🟢 Disponible</option><option value="busy">🔴 Occupé</option><option value="away">🟠 Absent</option><option value="invisible">⚫ Invisible</option></select></label>
@@ -96,8 +96,8 @@
       <div id="welcomeChat" class="welcome-chat">
         <div class="legacy-bubble">🟢</div>
         <h2>Qui est en ligne ?</h2>
-        <p>Sélectionne un contact, envoie un message… ou un bon vieux Wizz.</p>
-        <div class="feature-pills"><span>⚡ Wizz</span><span>🎵 Musique</span><span>🟢 Présence</span><span>💬 Temps réel</span></div>
+        <p>Sélectionne un contact, envoie un message… ou un K-Pulse.</p>
+        <div class="feature-pills"><span>⚡ K-Pulse</span><span>🎵 Musique</span><span>🟢 Présence</span><span>💬 Temps réel</span></div>
       </div>
 
       <div id="chatView" class="chat-view hidden">
@@ -107,10 +107,10 @@
           <div class="chat-title"><strong id="peerNickname"></strong><span id="peerStatus"></span><span id="peerMusic" class="music"></span></div>
           <button id="blockPeer" class="icon-btn danger" title="Bloquer ce contact">⊘</button>
         </header>
-        <div id="wizzBanner" class="wizz-banner hidden">⚡ WIZZ ! ⚡</div>
+        <div id="wizzBanner" class="wizz-banner hidden">⚡ K-Pulse ! ⚡</div>
         <div id="messages" class="messages" aria-live="polite"></div>
         <form id="messageForm" class="composer">
-          <button id="wizz" class="wizz-btn" type="button" title="Envoyer un Wizz">⚡</button>
+          <button id="wizz" class="wizz-btn" type="button" title="Envoyer un K-Pulse">⚡</button>
           <textarea id="messageInput" rows="1" maxlength="2000" placeholder="Écris un message…" required></textarea>
           <button class="send-btn" type="submit">➤</button>
         </form>

@@ -41,7 +41,7 @@ export default function App() {
         <View style={styles.ageGate}>
           <View style={styles.logoOrb}><Text style={styles.logoText}>K</Text></View>
           <Text style={styles.brand}>K-SSENGER</Text>
-          <Text style={styles.ageTitle}>Bienvenue dans MSN… version 2027.</Text>
+          <Text style={styles.ageTitle}>Bienvenue dans K-ssenger.</Text>
           <Text style={styles.ageCopy}>Ton âge sert à protéger le K-Feed et les Moments publics. Les contenus 16+ et 18+ sont filtrés automatiquement.</Text>
           <TextInput value={ageInput} onChangeText={setAgeInput} keyboardType="number-pad" placeholder="Ton âge" maxLength={3} style={styles.ageInput} onSubmitEditing={confirmAge} />
           {!!ageError && <Text style={styles.error}>{ageError}</Text>}
@@ -74,7 +74,7 @@ export default function App() {
           <TouchableOpacity><Text style={styles.plus}>＋</Text></TouchableOpacity>
           <TextInput value={message} onChangeText={setMessage} placeholder="Écris un message..." style={styles.input} onSubmitEditing={sendLocalDemoMessage} returnKeyType="send" />
           <TouchableOpacity onPress={sendLocalDemoMessage}><Text style={styles.send}>➤</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setMessages((current) => [...current, '⚡ WIZZ !'])}><View style={styles.wizzBtn}><Text style={styles.wizz}>⚡</Text></View></TouchableOpacity>
+          <TouchableOpacity onPress={() => setMessages((current) => [...current, '⚡ K-Pulse !'])}><View style={styles.wizzBtn}><Text style={styles.wizz}>⚡</Text></View></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
