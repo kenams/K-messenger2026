@@ -12,13 +12,13 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- latest CI-verified functional head before this documentation checkpoint: `006771dbb886e211c07c0e3f9b2e6d006c8b8983`
+- latest fully CI-verified functional head remains `006771dbb886e211c07c0e3f9b2e6d006c8b8983`
 - CI #162 (`33815219284`): SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
-- Android Debug APK #31 (`33815215943`) is building for functional head `006771dbb886e211c07c0e3f9b2e6d006c8b8983`; do not call it successful until the artifact upload is verified
+- current functional head `6f0b7d929e75b481e3ba8c652f24a86d52346f02` hardens group ownership transfer; CI #167 (`33816279969`) is running and must not be called successful until completion
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -43,14 +43,14 @@ are committed and CI-validated against isolated PostgreSQL 17, but are not yet a
 - applying remote schema changes requires an explicit migration approval step; never bypass that safeguard
 
 ## Server Runtime
-Completed and CI-validated:
+Completed and CI-validated unless explicitly marked pending on the current head:
 - Socket.IO access token authentication uses Neon Auth JWT/JWKS validation through `jose`
 - identity is derived from verified JWT `sub`; client-supplied identity is never trusted
 - server runtime has no `@supabase/supabase-js` dependency
 - PostgreSQL access uses `pg`, parameterized SQL and explicit transactions
 - contacts/request/accept/decline/cancel/remove/favorite/block paths are Neon/Postgres-backed
 - presence and K-Pulse authorization are real server paths
-- realtime presence audience now honors `privacy_settings.show_online`; users set to `nobody` are not broadcast to contacts
+- realtime presence audience honors `privacy_settings.show_online`; users set to `nobody` are not broadcast to contacts
 - contacts/list and search mask invisible/private presence instead of leaking the stored state
 - contact list exposes nickname, custom status and now-playing metadata only through privacy-aware server shaping
 - `show_music='nobody'` suppresses now-playing title/artist from the contact list response
@@ -58,6 +58,7 @@ Completed and CI-validated:
 - direct conversation creation/reuse uses contact/block checks plus transaction advisory locking to prevent duplicate 1:1 conversations
 - authenticated `conversations:list` returns only conversations where the verified user is a member and exposes safe metadata without plaintext/ciphertext bodies
 - group creation/member add/remove/role promotion/demotion/leave are transaction-backed and authorization checked server-side
+- group ownership transfer is now transaction-backed with explicit row-count conflict checks: the current owner is demoted before the selected member is promoted, avoiding a transient duplicate-owner conflict once single-owner DB enforcement is added; CI validation for this current-head change is pending
 - removed/leaving sockets are evicted from group rooms; newly invited online sockets join only after DB authorization succeeds
 
 ## Mobile Runtime
@@ -72,14 +73,14 @@ Completed and CI-validated unless explicitly noted:
 - real presence updates and debounced login events are consumed
 - K-Pulse sends/receives through the real authorization/rate-limit path
 - contact groups/list names, nicknames, custom status and now-playing music are rendered from real backend data
-- profile editing now supports display name, username, custom status, bio, HTTPS avatar URL and now-playing title/artist
+- profile editing supports display name, username, custom status, bio, HTTPS avatar URL and now-playing title/artist
 - login-event notices honor the local authenticated user's `login_notifications` preference (`all_contacts`, `favorites`, `nobody`)
 - a real `Moi -> Vie privée` screen edits self-scoped Neon privacy settings for online visibility, music visibility, K-Pulse policy, login alerts and direct-chat read receipts
 - direct conversations honor `read_receipts=false` by emitting only `delivered` instead of `read` while open
 - selecting a contact opens/reuses a real direct conversation and loads encrypted-envelope history
 - Chats private list uses authenticated `conversations:list` rather than static demo chats
 - Groups lists/creates/opens real groups and renders real members/presence/history
-- owner/admin group controls call real server mutations: invite contact, remove member, promote/demote admin and leave group
+- owner/admin group controls call real server mutations: invite contact, remove member, promote/demote admin, transfer ownership and leave group
 - group read-receipt preference parity is not yet complete; current privacy UI explicitly describes the direct-chat behavior only
 - plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated and device-tested
 - authenticated account export is exposed; exported messages remain encrypted envelopes
@@ -119,7 +120,7 @@ CI security checks include:
 - the endpoint was reported healthy during the real-preview setup; this checkpoint does not claim that the latest privacy-aware server commit is already the deployed Render revision without a deployment-version proof
 - mobile realtime fails closed when `EXPO_PUBLIC_KSSENGER_SOCKET_URL` is missing
 - Android debug APK CI builds through Expo prebuild + Gradle
-- Android Debug APK #31 is the current build for the latest CI-verified social-presence/privacy head and is pending artifact verification at this checkpoint
+- earlier Android APK artifacts are verified; verify the current functional head separately before treating it as the release candidate
 - no verified iOS signing environment or Apple signing credentials are available here
 
 ## Account / Auth Safety
@@ -134,12 +135,12 @@ CI security checks include:
 - trademark clearance remains required before commercial launch
 
 ## Remaining V1 Priorities
-1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership changes -> forced reconnect/token refresh
+1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership changes -> ownership transfer -> forced reconnect/token refresh
 2. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending; do not claim production E2EE before device proof
 3. apply and verify K-Feed/Moments/K-MAP migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. finish remaining group lifecycle/product items such as ownership transfer and mute/ban
+6. finish remaining group lifecycle/product items such as mute/ban and add DB-level single-owner enforcement after migration validation
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
