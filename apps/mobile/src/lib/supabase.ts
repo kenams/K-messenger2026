@@ -1,23 +1,30 @@
 import 'react-native-url-polyfill/auto';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseAuthAdapter } from '@neondatabase/neon-js';
+import { isNeonBackendConfigured, requireNeonBackend } from './neonConfig';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? '';
+/**
+ * Transitional compatibility shim: existing mobile call sites still import
+ * getSupabase(), but the returned client is now the dedicated K-ssenger Neon
+ * Auth + Data API client. No Supabase project or key is used at runtime.
+ */
+export const isBackendConfigured = isNeonBackendConfigured;
 
-export const isBackendConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-
-let client: SupabaseClient | null = null;
-
-export function getSupabase(): SupabaseClient {
-  if (!isBackendConfigured) {
-    throw new Error('KSSENGER_BACKEND_NOT_CONFIGURED');
-  }
-  client ??= createClient(supabaseUrl, supabaseAnonKey, {
+function createKssengerClient() {
+  const { authUrl, dataApiUrl } = requireNeonBackend();
+  return createClient({
     auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
+      adapter: SupabaseAuthAdapter(),
+      url: authUrl,
+    },
+    dataApi: {
+      url: dataApiUrl,
     },
   });
+}
+
+let client: ReturnType<typeof createKssengerClient> | null = null;
+
+export function getSupabase() {
+  if (!client) client = createKssengerClient();
   return client;
 }
