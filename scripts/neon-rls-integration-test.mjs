@@ -53,6 +53,17 @@ async function asUser(userId, fn) {
 }
 
 async function bootstrapNeonAuthContext() {
+  // Sur un projet local jetable, auth.uid()/user_id() n'existent pas encore
+  // -> on les crée nous-memes pour simuler Neon Auth. Sur le projet Neon
+  // reel (late-flower-65059830), Neon Auth managé possede deja ce schema et
+  // notre role n'a pas les privileges CREATE dessus (et n'en a pas besoin) -
+  // on detecte sa presence et on saute la creation.
+  const { rows } = await client.query(
+    `select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'auth' and p.proname = 'uid'`
+  );
+  if (rows.length > 0) return;
+
   await client.query(`
     do $$
     begin
@@ -104,14 +115,23 @@ async function resetLocalDatabase() {
 }
 
 async function applyNeonMigration() {
+  // Idempotence identique a bootstrapNeonAuthContext : sur le projet Neon
+  // reel, la migration a deja ete appliquee (voir docs/PROJECT_STATE.md) - la
+  // rejouer echoue sur les `create policy` (pas de IF NOT EXISTS pour les
+  // policies). On ne l'applique que si les tables core ne sont pas encore la.
+  const { rows } = await client.query(
+    `select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
+  );
+  if (rows.length > 0) return;
+
   const migration = await fs.readFile('neon/migrations/0001_v1_core.sql', 'utf8');
   await client.query(migration);
 }
 
 async function makeUser(id, username) {
   await client.query(
-    `insert into neon_auth."user" (id, email, name)
-     values ($1, $2, $3)
+    `insert into neon_auth."user" (id, email, name, "emailVerified", "createdAt", "updatedAt")
+     values ($1, $2, $3, true, now(), now())
      on conflict (id) do nothing`,
     [id, `${username}@kssenger.test`, username],
   );
