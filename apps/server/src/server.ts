@@ -23,6 +23,7 @@ import {
   receiptSchema,
   wizzSchema,
 } from './validation.js';
+import { createOrGetDirectConversation } from './directConversationStore.js';
 import { createGroup } from './groupStore.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
@@ -118,6 +119,26 @@ io.on('connection', (socket) => {
   socket.join(`user:${userId}`);
   const { firstSocket } = presenceRuntime.connect(userId, socket.id);
   logger.info('socket_connected', { userId, socketId: socket.id, firstSocket });
+
+  socket.on('conversation:direct', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:conversation:direct`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const { userId: contactId } = contactTargetSchema.parse(raw);
+      const direct = await createOrGetDirectConversation(userId, contactId);
+      socket.join(`conversation:${direct.conversationId}`);
+      io.to(`user:${contactId}`).emit('conversation:direct-ready', {
+        conversationId: direct.conversationId,
+        peerId: userId,
+      });
+      ack?.({ ok: true, ...direct });
+    } catch (error) {
+      logger.warn('direct_conversation_rejected', {
+        userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
 
   socket.on('conversation:join', async (raw, ack) => {
     try {
