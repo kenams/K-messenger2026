@@ -132,9 +132,11 @@ export async function searchProfiles(userId: string, searchQuery: string) {
 
 export async function getContactAudience(userId: string): Promise<string[]> {
   const { rows } = await query<{ contact_id: string }>(
-    `select contact_id
-       from public.contacts
-      where owner_id = $1`,
+    `select c.contact_id
+       from public.contacts c
+       left join public.privacy_settings ps on ps.user_id = $1
+      where c.owner_id = $1
+        and coalesce(ps.show_online, 'contacts') <> 'nobody'`,
     [userId],
   );
   return rows.map((row) => row.contact_id);
