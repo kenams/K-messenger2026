@@ -5,7 +5,11 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 import { config } from './config.js';
 import { authenticateSocket } from './auth.js';
-import { requireActiveDevice, requireConversationMember } from './authorization.js';
+import {
+  requireActiveDevice,
+  requireConversationMember,
+  requireConversationNotBlocked,
+} from './authorization.js';
 import {
   contactRequestSchema,
   contactTargetSchema,
@@ -67,6 +71,7 @@ io.on('connection', (socket) => {
       if (!joinLimiter.consume(userId)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
       const { conversationId } = conversationJoinSchema.parse(raw);
       await requireConversationMember(userId, conversationId);
+      await requireConversationNotBlocked(userId, conversationId);
       socket.join(`conversation:${conversationId}`);
       ack?.({ ok: true });
     } catch {
@@ -80,6 +85,7 @@ io.on('connection', (socket) => {
       const envelope = messageSendSchema.parse(raw);
       await requireConversationMember(userId, envelope.conversationId);
       await requireActiveDevice(userId, envelope.senderDeviceId);
+      await requireConversationNotBlocked(userId, envelope.conversationId);
 
       const stored = await persistEncryptedMessage(userId, envelope);
       if (!stored.duplicate) {
