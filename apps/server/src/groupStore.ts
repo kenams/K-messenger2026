@@ -145,7 +145,7 @@ export async function setGroupMemberRole(
   actorId: string,
   conversationId: string,
   memberId: string,
-  role: Exclude<GroupRole, 'owner'>,
+  role: GroupRole,
 ) {
   if (actorId === memberId) throw new Error('GROUP_OWNER_ROLE_IMMUTABLE');
   return transaction(async (client) => {
@@ -153,6 +153,21 @@ export async function setGroupMemberRole(
     if (actorRole !== 'owner') throw new Error('GROUP_OWNER_REQUIRED');
     const targetRole = await requireTargetMember(client, conversationId, memberId);
     if (targetRole === 'owner') throw new Error('GROUP_OWNER_ROLE_IMMUTABLE');
+
+    if (role === 'owner') {
+      await client.query(
+        `update public.conversation_members
+            set role = case
+              when user_id = $2 then 'owner'
+              when user_id = $3 then 'admin'
+              else role
+            end
+          where conversation_id = $1
+            and user_id in ($2, $3)`,
+        [conversationId, memberId, actorId],
+      );
+      return { conversationId, memberId, role: 'owner' as const, previousOwnerId: actorId };
+    }
 
     await client.query(
       `update public.conversation_members
