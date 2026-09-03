@@ -7,6 +7,7 @@ import { MsnContactsScreen, type Contact } from './src/features/contacts/MsnCont
 import { ChatsHubScreen } from './src/features/chats/ChatsHubScreen';
 import { DirectConversationScreen } from './src/features/chats/DirectConversationScreen';
 import { AccountDataScreen } from './src/features/profile/AccountDataScreen';
+import { PrivacySettingsScreen } from './src/features/profile/PrivacySettingsScreen';
 import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
 import type { MyProfile } from './src/features/profile/useMyProfile';
 
@@ -22,6 +23,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const [selected, setSelected] = useState<Contact | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [accountData, setAccountData] = useState(false);
+  const [privacySettings, setPrivacySettings] = useState(false);
   const [userAge, setUserAge] = useState<number | null>(null);
   const [ageInput, setAgeInput] = useState('');
   const [ageError, setAgeError] = useState('');
@@ -57,6 +59,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   if (selected) return <DirectConversationScreen contact={selected} onBack={() => setSelected(null)} />;
   if (editingProfile) return <ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={() => setEditingProfile(false)} />;
   if (accountData) return <AccountDataScreen profile={profile} onBack={() => setAccountData(false)} />;
+  if (privacySettings) return <PrivacySettingsScreen userId={profile.id} onBack={() => setPrivacySettings(false)} />;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -67,7 +70,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
       {tab === 'feed' && <FeedScreen userAge={userAge} />}
       {tab === 'map' && <MapPreview />}
       {tab === 'moments' && <MomentsScreen />}
-      {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} />}
+      {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} />}
       <View style={styles.tabs}>
         <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
         <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
@@ -108,14 +111,15 @@ function MapPreview() {
   );
 }
 
-function MeScreen({ profile, userAge, onEdit, onAccountData }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void }) {
+function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void }) {
   return (
     <ScrollView contentContainerStyle={styles.profilePage}>
       <Avatar profile={profile} size="large" />
       <Text style={styles.profileName}>{profile.display_name}</Text><Text style={styles.profileHandle}>@{profile.username}</Text>
       <Text style={styles.profilePresence}>{profile.custom_status || 'Disponible'}</Text>
+      {!!profile.now_playing_title && <Text style={styles.profileMusic}>♫ {profile.now_playing_artist ? `${profile.now_playing_artist} — ` : ''}{profile.now_playing_title}</Text>}
       {!!profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>}
-      <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes"/><ProfileButton icon="🔒" label="Sécurité"/></View>
+      <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes"/><ProfileButton icon="🔒" label="Vie privée" onPress={onPrivacy}/></View>
       <Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text>
     </ScrollView>
   );
@@ -136,5 +140,5 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, avatarRing: { position: 'relative' }, avatar: { width: 58, height: 58, borderRadius: 19, backgroundColor: '#2f93cf', borderWidth: 4, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 25, fontWeight: '900' }, onlineDot: { position: 'absolute', width: 15, height: 15, borderRadius: 8, backgroundColor: '#4ac769', right: -2, bottom: -2, borderWidth: 3, borderColor: '#fff' }, name: { color: '#16394e', fontSize: 18, fontWeight: '900', marginTop: 2 }, status: { color: '#5d7c8e', fontSize: 11, marginTop: 2 }, headerAction: { fontSize: 20, marginLeft: 5 },
   tabs: { flexDirection: 'row', paddingTop: 7, paddingBottom: 9, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, tab: { flex: 1, alignItems: 'center' }, tabIcon: { fontSize: 18 }, tabLabel: { marginTop: 2, color: '#8299a7', fontSize: 8 }, tabActive: { color: '#238ac8', fontWeight: '900' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 }, bigIcon: { fontSize: 62 }, centerTitle: { color: '#173448', fontWeight: '900', fontSize: 27, marginTop: 10 }, centerText: { color: '#688493', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 400 }, mapButtons: { flexDirection: 'row', gap: 8 },
-  profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900', textAlign: 'center' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileBio: { color: '#657e8d', marginTop: 10, textAlign: 'center', lineHeight: 19, maxWidth: 360 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 18 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
+  profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900', textAlign: 'center' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileMusic: { color: '#4e7d55', marginTop: 5, fontSize: 12, fontStyle: 'italic', textAlign: 'center' }, profileBio: { color: '#657e8d', marginTop: 10, textAlign: 'center', lineHeight: 19, maxWidth: 360 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 18 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
 });
