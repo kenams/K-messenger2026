@@ -18,9 +18,11 @@ import {
   conversationJoinSchema,
   messageSendSchema,
   presenceSchema,
+  receiptSchema,
   wizzSchema,
 } from './validation.js';
 import { persistEncryptedMessage } from './messageStore.js';
+import { markMessageReceipt } from './receiptStore.js';
 import {
   joinLimiter,
   messageLimiter,
@@ -108,6 +110,27 @@ io.on('connection', (socket) => {
       ack?.({ ok: true, id: stored.id, duplicate: stored.duplicate, clientMessageId: envelope.clientMessageId });
     } catch (error) {
       logger.warn('message_send_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('message:receipt', async (raw, ack) => {
+    try {
+      if (!messageLimiter.consume(`${userId}:receipt`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const receipt = receiptSchema.parse(raw);
+      await requireConversationMember(userId, receipt.conversationId);
+      await requireConversationNotBlocked(userId, receipt.conversationId);
+      const stored = await markMessageReceipt(userId, receipt);
+      io.to(`conversation:${receipt.conversationId}`).emit('message:receipt', {
+        messageId: stored.message_id,
+        userId: stored.user_id,
+        state: stored.read_at ? 'read' : 'delivered',
+        deliveredAt: stored.delivered_at,
+        readAt: stored.read_at,
+      });
+      ack?.({ ok: true, receipt: stored });
+    } catch (error) {
+      logger.warn('message_receipt_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
