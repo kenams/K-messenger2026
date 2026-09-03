@@ -51,25 +51,29 @@ export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBa
 
   useEffect(() => {
     let active = true;
-    void getBackend()
-      .from('privacy_settings')
-      .select('show_online,show_music,allow_wizz,login_notifications,read_receipts')
-      .eq('user_id', userId)
-      .maybeSingle()
-      .then(({ data, error }) => {
+    const load = async () => {
+      try {
+        const { data, error } = await getBackend()
+          .from('privacy_settings')
+          .select('show_online,show_music,allow_wizz,login_notifications,read_receipts')
+          .eq('user_id', userId)
+          .maybeSingle();
         if (!active) return;
-        if (!error && data) {
+        if (error) {
+          setNotice('Impossible de charger les réglages.');
+          return;
+        }
+        if (data) {
           setSettings(data as PrivacySettings);
           setExists(true);
         }
-        setLoading(false);
-      })
-      .catch(() => {
-        if (active) {
-          setNotice('Impossible de charger les réglages.');
-          setLoading(false);
-        }
-      });
+      } catch {
+        if (active) setNotice('Impossible de charger les réglages.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
     return () => { active = false; };
   }, [userId]);
 
@@ -88,6 +92,8 @@ export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBa
       }
       setExists(true);
       setNotice('Confidentialité enregistrée.');
+    } catch {
+      setNotice('Impossible d’enregistrer les réglages.');
     } finally {
       setSaving(false);
     }
@@ -115,7 +121,7 @@ export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBa
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>ACCUSÉS DE LECTURE</Text>
           <TouchableOpacity style={styles.toggleRow} onPress={() => setSettings((value) => ({ ...value, read_receipts: !value.read_receipts }))}>
-            <View style={styles.flex}><Text style={styles.optionLabel}>Afficher « lu »</Text><Text style={styles.hint}>Tu peux désactiver cette préférence sans modifier la sécurité des messages.</Text></View>
+            <View style={styles.flex}><Text style={styles.optionLabel}>Afficher « lu » dans les chats privés</Text><Text style={styles.hint}>Désactivé, K-ssenger confirme seulement la réception sur ce parcours.</Text></View>
             <Text style={styles.toggle}>{settings.read_receipts ? '🟢' : '⚪'}</Text>
           </TouchableOpacity>
         </View>
