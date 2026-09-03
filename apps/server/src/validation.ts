@@ -11,6 +11,12 @@ export const messageSendSchema = z.object({
   createdAt: z.string().datetime(),
 }).strict();
 
+export const messageHistorySchema = z.object({
+  conversationId: z.string().uuid(),
+  before: z.string().datetime().optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+}).strict();
+
 export const presenceSchema = z.object({
   status: z.enum(['online', 'busy', 'away', 'invisible', 'offline'])
 }).strict();
