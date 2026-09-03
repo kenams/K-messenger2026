@@ -155,17 +155,26 @@ export async function setGroupMemberRole(
     if (targetRole === 'owner') throw new Error('GROUP_OWNER_ROLE_IMMUTABLE');
 
     if (role === 'owner') {
-      await client.query(
+      const demoted = await client.query(
         `update public.conversation_members
-            set role = case
-              when user_id = $2 then 'owner'
-              when user_id = $3 then 'admin'
-              else role
-            end
+            set role = 'admin'
           where conversation_id = $1
-            and user_id in ($2, $3)`,
-        [conversationId, memberId, actorId],
+            and user_id = $2
+            and role = 'owner'`,
+        [conversationId, actorId],
       );
+      if ((demoted.rowCount ?? 0) !== 1) throw new Error('GROUP_OWNER_TRANSFER_CONFLICT');
+
+      const promoted = await client.query(
+        `update public.conversation_members
+            set role = 'owner'
+          where conversation_id = $1
+            and user_id = $2
+            and role <> 'owner'`,
+        [conversationId, memberId],
+      );
+      if ((promoted.rowCount ?? 0) !== 1) throw new Error('GROUP_OWNER_TRANSFER_CONFLICT');
+
       return { conversationId, memberId, role: 'owner' as const, previousOwnerId: actorId };
     }
 
