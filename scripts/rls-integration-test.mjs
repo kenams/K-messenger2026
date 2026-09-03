@@ -65,14 +65,11 @@ async function main() {
   await makeUser(CHARLIE, 'charlie_rls_test');
 
   // ---- Profiles / presence privacy ----
-  // Charlie is a stranger to Bob (no contact row). Direct SELECT of Bob's
-  // profile must return 0 rows for Charlie (fixed in 0012).
   await asUser(CHARLIE, async () => {
     const { rows } = await client.query('select id from public.profiles where id = $1', [BOB]);
     check('stranger cannot SELECT another user profile row', rows.length === 0, `got ${rows.length} rows`);
   });
 
-  // Make Alice/Bob contacts, then Alice should be able to read Bob's row.
   await client.query(
     `insert into public.contacts (owner_id, contact_id) values ($1,$2),($2,$1) on conflict do nothing`,
     [ALICE, BOB]
@@ -82,7 +79,6 @@ async function main() {
     check('contact CAN SELECT profile row', rows.length === 1);
   });
 
-  // presence column must not be directly selectable by the authenticated role.
   await asUser(ALICE, async () => {
     try {
       await client.query('select presence from public.profiles where id = $1', [BOB]);
@@ -92,7 +88,6 @@ async function main() {
     }
   });
 
-  // invisible must resolve to offline via presence_for(), even for a contact.
   await client.query(`update public.profiles set presence = 'invisible' where id = $1`, [BOB]);
   await asUser(ALICE, async () => {
     const { rows } = await client.query('select public.presence_for($1) as presence', [BOB]);
@@ -114,6 +109,69 @@ async function main() {
     }
   });
 
+  // ---- Message/receipt RLS ----
+  const { rows: conversationRows } = await client.query(
+    `insert into public.conversations (kind, created_by) values ('direct', $1) returning id`,
+    [ALICE]
+  );
+  const conversationId = conversationRows[0].id;
+  await client.query(
+    `insert into public.conversation_members (conversation_id, user_id) values ($1,$2),($1,$3)`,
+    [conversationId, ALICE, BOB]
+  );
+  const { rows: deviceRows } = await client.query(
+    `insert into public.devices (user_id, name, identity_sign_public, identity_dh_public)
+     values ($1, 'alice-test-device', 'sign-test', 'dh-test') returning id`,
+    [ALICE]
+  );
+  const { rows: messageRows } = await client.query(
+    `insert into public.messages
+       (client_message_id, conversation_id, sender_user_id, sender_device_id, algorithm, ciphertext, created_at)
+     values (gen_random_uuid(), $1, $2, $3, 'test-envelope', 'opaque-ciphertext', now())
+     returning id`,
+    [conversationId, ALICE, deviceRows[0].id]
+  );
+  const messageId = messageRows[0].id;
+  await client.query(
+    `insert into public.message_receipts (message_id, user_id, delivered_at)
+     values ($1, $2, now())`,
+    [messageId, BOB]
+  );
+
+  await asUser(BOB, async () => {
+    const { rows } = await client.query(
+      'select message_id, delivered_at from public.message_receipts where message_id = $1',
+      [messageId]
+    );
+    check('receipt owner CAN read own receipt row', rows.length === 1 && rows[0].delivered_at != null);
+  });
+  await asUser(ALICE, async () => {
+    const { rows } = await client.query(
+      'select message_id from public.message_receipts where message_id = $1',
+      [messageId]
+    );
+    check('message sender cannot directly read recipient receipt row', rows.length === 0, `got ${rows.length}`);
+  });
+  await asUser(CHARLIE, async () => {
+    const { rows } = await client.query(
+      'select message_id from public.message_receipts where message_id = $1',
+      [messageId]
+    );
+    check('stranger cannot read another user receipt row', rows.length === 0, `got ${rows.length}`);
+  });
+  await asUser(BOB, async () => {
+    try {
+      await client.query(
+        `insert into public.message_receipts (message_id, user_id, delivered_at)
+         values ($1, $2, now())`,
+        [messageId, BOB]
+      );
+      check('authenticated client cannot directly INSERT receipt rows', false, 'insert unexpectedly succeeded');
+    } catch (e) {
+      check('authenticated client cannot directly INSERT receipt rows', /row-level security|permission denied/i.test(e.message), e.message);
+    }
+  });
+
   // ---- K-Feed age gate ----
   const { rows: vidRows } = await client.query(
     `insert into public.public_videos (owner_id, storage_path, age_rating, moderation_status, visibility, published_at)
@@ -122,7 +180,6 @@ async function main() {
   );
   const videoId = vidRows[0].id;
   await asUser(CHARLIE, async () => {
-    // No age profile for Charlie -> defaults to 13, must not see an 18-rated video.
     const { rows } = await client.query('select id from public.public_videos where id = $1', [videoId]);
     check('viewer with no age profile (defaults to 13) cannot see 18-rated video', rows.length === 0, `got ${rows.length}`);
   });
@@ -140,7 +197,7 @@ async function main() {
     check('owner always sees their own video regardless of age gate', rows.length === 1, `got ${rows.length}`);
   });
 
-  // ---- K-MAP precision ----
+  // ---- K-MAP precision + block revocation ----
   const { rows: shareRows } = await client.query(
     `insert into public.location_shares (owner_id, recipient_user_id, precision, mode, expires_at)
      values ($1, $2, 'approximate', 'live', now() + interval '1 hour') returning id`,
@@ -167,6 +224,20 @@ async function main() {
   await asUser(CHARLIE, async () => {
     const { rows } = await client.query('select * from public.location_point_for_viewer($1)', [shareId]);
     check('unauthorized user gets nothing from location_point_for_viewer', rows.length === 0, `got ${rows.length}`);
+  });
+
+  await client.query(
+    `insert into public.blocks (blocker_id, blocked_id) values ($1, $2) on conflict do nothing`,
+    [ALICE, BOB]
+  );
+  const { rows: revokedRows } = await client.query(
+    `select revoked_at from public.location_shares where id = $1`,
+    [shareId]
+  );
+  check('blocking a live-location peer revokes the active K-MAP share', revokedRows[0]?.revoked_at != null, JSON.stringify(revokedRows));
+  await asUser(ALICE, async () => {
+    const { rows } = await client.query('select * from public.location_point_for_viewer($1)', [shareId]);
+    check('revoked K-MAP share returns no point after block', rows.length === 0, `got ${rows.length}`);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
