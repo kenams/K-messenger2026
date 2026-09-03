@@ -37,6 +37,21 @@ export const groupCreateSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, 'DUPLICATE_GROUP_MEMBER'),
 }).strict();
 
+export const groupMemberSchema = z.object({
+  conversationId: z.string().uuid(),
+  userId: z.string().uuid(),
+}).strict();
+
+export const groupRoleSchema = z.object({
+  conversationId: z.string().uuid(),
+  userId: z.string().uuid(),
+  role: z.enum(['member', 'admin']),
+}).strict();
+
+export const groupConversationSchema = z.object({
+  conversationId: z.string().uuid(),
+}).strict();
+
 export const contactTargetSchema = z.object({
   userId: z.string().uuid(),
 }).strict();
