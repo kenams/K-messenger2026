@@ -25,7 +25,7 @@ function AuthenticatedRoot({ userId }: { userId: string }) {
   if (profile.loading) return <Loading label="Chargement de ton profil K-ssenger…" />;
   if (!profile.profile) return <ProfileBootstrapScreen onDone={profile.refresh} />;
 
-  return <App />;
+  return <App profile={profile.profile} onProfileChanged={profile.refresh} />;
 }
 
 function Loading({ label }: { label: string }) {
