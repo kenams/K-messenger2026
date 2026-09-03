@@ -5,6 +5,7 @@ import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigure
 import type { Presence } from '../contacts/MsnContactsScreen';
 
 type ReceiptState = 'delivered' | 'read';
+type GroupRole = 'member' | 'admin' | 'owner';
 type ConversationMember = {
   userId: string;
   username: string;
@@ -12,13 +13,14 @@ type ConversationMember = {
   nickname: string | null;
   avatarUrl: string | null;
   presence: Presence;
+  role: GroupRole;
 };
 
 type ConversationSummary = {
   id: string;
   kind: 'direct' | 'group';
   title: string | null;
-  role: 'member' | 'admin' | 'owner';
+  role: GroupRole;
   createdAt: string;
   lastMessage: { id: string; senderUserId: string | null; createdAt: string | null } | null;
   members: ConversationMember[];
@@ -53,6 +55,7 @@ type ContactsResponse = {
 
 export function GroupsScreen() {
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [currentUserId, setCurrentUserId] = useState('');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [contacts, setContacts] = useState<ContactOption[]>([]);
   const [loading, setLoading] = useState(isRealtimeConfigured);
@@ -63,6 +66,7 @@ export function GroupsScreen() {
   const [selectedGroup, setSelectedGroup] = useState<ConversationSummary | null>(null);
   const [groupHistory, setGroupHistory] = useState<EncryptedMessage[]>([]);
   const [groupLoading, setGroupLoading] = useState(false);
+  const [mutating, setMutating] = useState(false);
 
   const loadData = async (client: Socket) => {
     const [conversationResponse, contactResponse] = await Promise.all([
@@ -71,13 +75,23 @@ export function GroupsScreen() {
     ]);
     if (!conversationResponse.ok) throw new Error(conversationResponse.error ?? 'CONVERSATIONS_FAILED');
     if (!contactResponse.ok) throw new Error(contactResponse.error ?? 'CONTACTS_FAILED');
-    setConversations(conversationResponse.conversations ?? []);
+    const nextConversations = conversationResponse.conversations ?? [];
+    setConversations(nextConversations);
     setContacts((contactResponse.contacts ?? []).map((row) => ({
       id: row.profiles.id,
       displayName: row.profiles.display_name,
       username: row.profiles.username,
       presence: row.profiles.presence,
     })));
+    return nextConversations;
+  };
+
+  const refreshSelectedGroup = async (client: Socket, groupId: string) => {
+    const response = await emitAck<ConversationsResponse>(client, 'conversations:list');
+    if (!response.ok) throw new Error(response.error ?? 'CONVERSATIONS_FAILED');
+    const next = response.conversations ?? [];
+    setConversations(next);
+    setSelectedGroup(next.find((item) => item.id === groupId && item.kind === 'group') ?? null);
   };
 
   useEffect(() => {
@@ -90,16 +104,25 @@ export function GroupsScreen() {
     let active = true;
     let cleanup: (() => void) | null = null;
 
-    void getRealtimeSocket().then(async (client) => {
+    void Promise.all([getRealtimeSocket(), getAuthenticatedUserId()]).then(async ([client, userId]) => {
       if (!active) return;
       setSocket(client);
+      setCurrentUserId(userId);
       const refresh = () => void loadData(client).catch(() => setNotice('Impossible de charger les groupes.'));
       client.on('connect', refresh);
       client.on('group:created', refresh);
+      client.on('group:invited', refresh);
+      client.on('group:removed', refresh);
+      client.on('group:left', refresh);
+      client.on('group:updated', refresh);
       client.on('message:new', refresh);
       cleanup = () => {
         client.off('connect', refresh);
         client.off('group:created', refresh);
+        client.off('group:invited', refresh);
+        client.off('group:removed', refresh);
+        client.off('group:left', refresh);
+        client.off('group:updated', refresh);
         client.off('message:new', refresh);
       };
       try {
@@ -125,15 +148,13 @@ export function GroupsScreen() {
 
   useEffect(() => {
     if (!socket || !selectedGroup) return;
-    let active = true;
-    let currentUserId = '';
-
+    const groupId = selectedGroup.id;
     const onMessage = (message: EncryptedMessage) => {
-      if (message.conversationId !== selectedGroup.id) return;
+      if (message.conversationId !== groupId) return;
       setGroupHistory((items) => items.some((item) => item.id === message.id) ? items : [...items, message]);
       if (currentUserId && message.senderUserId !== currentUserId) {
         void emitAck(socket, 'message:receipt', {
-          conversationId: selectedGroup.id,
+          conversationId: groupId,
           messageId: message.id,
           state: 'read',
         }).catch(() => undefined);
@@ -145,18 +166,17 @@ export function GroupsScreen() {
         message.id === receipt.messageId ? { ...message, receiptState: receipt.state } : message
       )));
     };
+    const onGroupUpdated = () => void refreshSelectedGroup(socket, groupId).catch(() => undefined);
 
-    void getAuthenticatedUserId().then((id) => {
-      if (active) currentUserId = id;
-    }).catch(() => undefined);
     socket.on('message:new', onMessage);
     socket.on('message:receipt', onReceipt);
+    socket.on('group:updated', onGroupUpdated);
     return () => {
-      active = false;
       socket.off('message:new', onMessage);
       socket.off('message:receipt', onReceipt);
+      socket.off('group:updated', onGroupUpdated);
     };
-  }, [socket, selectedGroup]);
+  }, [socket, selectedGroup?.id, currentUserId]);
 
   const groups = useMemo(() => conversations.filter((conversation) => conversation.kind === 'group'), [conversations]);
 
@@ -193,7 +213,6 @@ export function GroupsScreen() {
       if (!joined.ok) throw new Error(joined.error ?? 'GROUP_JOIN_FAILED');
       const response = await emitAck<HistoryResponse>(socket, 'conversation:history', { conversationId: group.id, limit: 50 });
       if (!response.ok) throw new Error(response.error ?? 'GROUP_HISTORY_FAILED');
-      const currentUserId = await getAuthenticatedUserId();
       const loaded = response.messages ?? [];
       setSelectedGroup(group);
       setGroupHistory(loaded);
@@ -213,10 +232,45 @@ export function GroupsScreen() {
     }
   };
 
+  const mutateGroup = async (event: string, payload: Record<string, unknown>, successMessage: string) => {
+    if (!socket || !selectedGroup || mutating) return;
+    setMutating(true);
+    try {
+      const response = await emitAck<{ ok: boolean; error?: string }>(socket, event, payload);
+      if (!response.ok) throw new Error(response.error ?? 'GROUP_MUTATION_FAILED');
+      await refreshSelectedGroup(socket, selectedGroup.id);
+      setNotice(successMessage);
+    } catch {
+      setNotice('Action refusée. Les droits, contacts ou blocages ne permettent pas cette modification.');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const leaveCurrentGroup = async () => {
+    if (!socket || !selectedGroup || mutating) return;
+    setMutating(true);
+    try {
+      const response = await emitAck<{ ok: boolean; error?: string }>(socket, 'group:leave', { conversationId: selectedGroup.id });
+      if (!response.ok) throw new Error(response.error ?? 'GROUP_LEAVE_FAILED');
+      setSelectedGroup(null);
+      setGroupHistory([]);
+      await loadData(socket);
+      setNotice('Tu as quitté le groupe.');
+    } catch {
+      setNotice('Impossible de quitter le groupe. Le propriétaire doit d’abord transférer son rôle.');
+    } finally {
+      setMutating(false);
+    }
+  };
+
   if (loading) return <View style={styles.center}><ActivityIndicator /><Text style={styles.empty}>Chargement des groupes…</Text></View>;
 
   if (selectedGroup) {
     const online = selectedGroup.members.filter((member) => member.presence === 'online' || member.presence === 'busy' || member.presence === 'away').length;
+    const existingIds = new Set(selectedGroup.members.map((member) => member.userId));
+    const inviteCandidates = contacts.filter((contact) => !existingIds.has(contact.id));
+    const canManage = selectedGroup.role === 'owner' || selectedGroup.role === 'admin';
     return (
       <ScrollView style={styles.page} contentContainerStyle={styles.content}>
         <TouchableOpacity onPress={() => { setSelectedGroup(null); setGroupHistory([]); }}><Text style={styles.back}>‹ Groupes</Text></TouchableOpacity>
@@ -227,16 +281,56 @@ export function GroupsScreen() {
             <Text style={styles.meta}>🟢 {online} actifs · {selectedGroup.members.length} membres · {selectedGroup.role}</Text>
           </View>
         </View>
+
+        {canManage && !!inviteCandidates.length && (
+          <View style={styles.memberPanel}>
+            <Text style={styles.creatorLabel}>INVITER UN CONTACT</Text>
+            <View style={styles.contactGrid}>
+              {inviteCandidates.map((contact) => (
+                <TouchableOpacity key={contact.id} disabled={mutating} style={styles.inviteChip} onPress={() => void mutateGroup('group:member-add', { conversationId: selectedGroup.id, userId: contact.id }, `${contact.displayName} a été invité.`)}>
+                  <Text style={styles.inviteText}>＋ {contact.displayName}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         <View style={styles.memberPanel}>
           <Text style={styles.creatorLabel}>MEMBRES</Text>
-          {selectedGroup.members.map((member) => (
-            <View key={member.userId} style={styles.memberRow}>
-              <Text>{member.presence === 'online' ? '🟢' : member.presence === 'busy' ? '🔴' : member.presence === 'away' ? '🟠' : '⚫'}</Text>
-              <View style={styles.flex}><Text style={styles.memberName}>{member.nickname || member.displayName}</Text><Text style={styles.memberHandle}>@{member.username}</Text></View>
-            </View>
-          ))}
+          {selectedGroup.members.map((member) => {
+            const isSelf = member.userId === currentUserId;
+            const canRemove = !isSelf && canManage && member.role !== 'owner' && (selectedGroup.role === 'owner' || member.role === 'member');
+            const canChangeRole = !isSelf && selectedGroup.role === 'owner' && member.role !== 'owner';
+            return (
+              <View key={member.userId} style={styles.memberRow}>
+                <Text>{member.presence === 'online' ? '🟢' : member.presence === 'busy' ? '🔴' : member.presence === 'away' ? '🟠' : '⚫'}</Text>
+                <View style={styles.flex}>
+                  <Text style={styles.memberName}>{member.nickname || member.displayName} {isSelf ? '(toi)' : ''}</Text>
+                  <Text style={styles.memberHandle}>@{member.username} · {member.role}</Text>
+                </View>
+                {canChangeRole && (
+                  <TouchableOpacity disabled={mutating} style={styles.smallAction} onPress={() => void mutateGroup('group:role-set', { conversationId: selectedGroup.id, userId: member.userId, role: member.role === 'admin' ? 'member' : 'admin' }, member.role === 'admin' ? 'Administrateur rétrogradé.' : 'Membre promu administrateur.')}>
+                    <Text style={styles.smallActionText}>{member.role === 'admin' ? 'Membre' : 'Admin'}</Text>
+                  </TouchableOpacity>
+                )}
+                {canRemove && (
+                  <TouchableOpacity disabled={mutating} style={styles.removeAction} onPress={() => void mutateGroup('group:member-remove', { conversationId: selectedGroup.id, userId: member.userId }, 'Membre retiré du groupe.')}>
+                    <Text style={styles.removeActionText}>Retirer</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          })}
         </View>
+
+        {selectedGroup.role !== 'owner' && (
+          <TouchableOpacity disabled={mutating} style={styles.leaveBtn} onPress={() => void leaveCurrentGroup()}>
+            <Text style={styles.leaveText}>Quitter ce groupe</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.securityBox}><Text style={styles.noteText}>🔒 Historique réel du salon. Le serveur ne renvoie que des enveloppes chiffrées ; aucun contenu plaintext n’est généré pour contourner l’E2EE.</Text></View>
+        {!!notice && <Text style={styles.notice}>{notice}</Text>}
         {groupLoading ? <ActivityIndicator /> : !groupHistory.length ? (
           <Text style={styles.empty}>Aucun message chiffré dans ce groupe pour le moment.</Text>
         ) : groupHistory.map((message) => (
@@ -297,7 +391,7 @@ export function GroupsScreen() {
       })}
 
       {!groups.length && !creating && <Text style={styles.empty}>Aucun groupe. Appuie sur ＋ pour créer ton premier salon.</Text>}
-      <View style={styles.note}><Text style={styles.noteTitle}>🔒 Sécurité</Text><Text style={styles.noteText}>La création est vérifiée côté serveur : uniquement tes contacts, avec contrôle des blocages. Les salons rejoignent un canal Socket.IO autorisé par appartenance.</Text></View>
+      <View style={styles.note}><Text style={styles.noteTitle}>🔒 Sécurité</Text><Text style={styles.noteText}>La création et la gestion des membres sont vérifiées côté serveur : contacts, blocages et rôles owner/admin sont contrôlés avant chaque mutation.</Text></View>
     </ScrollView>
   );
 }
@@ -308,5 +402,6 @@ const styles = StyleSheet.create({
   creator: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#d9e9f2', borderRadius: 18, padding: 14, marginBottom: 16 }, creatorTitle: { color: '#173448', fontWeight: '900', fontSize: 16 }, creatorLabel: { color: '#5d8298', fontSize: 11, fontWeight: '800', marginTop: 12, marginBottom: 7 }, input: { borderWidth: 1, borderColor: '#d6e8f2', backgroundColor: '#f8fcfe', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginTop: 10, color: '#173448' }, contactGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, contactChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#d6e8f2', backgroundColor: '#f8fcfe', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 8, maxWidth: '48%' }, contactChipSelected: { backgroundColor: '#2189c5', borderColor: '#2189c5' }, contactPresence: { fontSize: 10 }, contactText: { color: '#52768a', fontSize: 11, fontWeight: '800', maxWidth: 120 }, contactTextSelected: { color: '#fff' }, createBtn: { marginTop: 14, backgroundColor: '#2189c5', borderRadius: 14, padding: 11, alignItems: 'center' }, createBtnDisabled: { opacity: 0.45 }, createText: { color: '#fff', fontWeight: '900' },
   card: { flexDirection: 'row', alignItems: 'center', gap: 11, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dceaf2', borderRadius: 18, padding: 12, marginBottom: 9 }, avatar: { width: 52, height: 52, borderRadius: 17, backgroundColor: '#dff2ff', borderWidth: 2, borderColor: '#7dc7ed', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#2879a8', fontWeight: '900' }, name: { color: '#173448', fontSize: 15, fontWeight: '900', flexShrink: 1 }, role: { color: '#4d86aa', fontSize: 9, textTransform: 'uppercase', fontWeight: '900' }, meta: { color: '#5d8298', fontSize: 11, marginTop: 3 }, last: { color: '#7893a3', fontSize: 12, marginTop: 4 }, chevron: { color: '#91a8b6', fontSize: 28 }, empty: { padding: 18, textAlign: 'center', color: '#7893a3' },
   note: { marginTop: 8, padding: 14, borderRadius: 17, backgroundColor: '#e8f7ff', borderWidth: 1, borderColor: '#b8dcf0' }, noteTitle: { color: '#2f7199', fontWeight: '900' }, noteText: { color: '#5f8093', fontSize: 12, lineHeight: 18, marginTop: 5 },
-  back: { color: '#2189c5', fontWeight: '900', fontSize: 16, marginBottom: 12 }, groupHero: { flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dceaf2', borderRadius: 18, padding: 14 }, groupTitle: { color: '#173448', fontSize: 20, fontWeight: '900' }, memberPanel: { marginTop: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dceaf2', borderRadius: 18, padding: 12 }, memberRow: { flexDirection: 'row', gap: 9, alignItems: 'center', paddingVertical: 7, borderTopWidth: 1, borderTopColor: '#edf4f7' }, memberName: { color: '#173448', fontWeight: '800' }, memberHandle: { color: '#7893a3', fontSize: 10, marginTop: 2 }, securityBox: { marginVertical: 12, padding: 12, borderRadius: 14, backgroundColor: '#eaf3f7' }, envelope: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, padding: 12, marginBottom: 8 }, envelopeTitle: { color: '#173448', fontWeight: '800' }, receipt: { marginTop: 6, color: '#4d86aa', fontSize: 10, fontWeight: '800' },
+  back: { color: '#2189c5', fontWeight: '900', fontSize: 16, marginBottom: 12 }, groupHero: { flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dceaf2', borderRadius: 18, padding: 14 }, groupTitle: { color: '#173448', fontSize: 20, fontWeight: '900' }, memberPanel: { marginTop: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dceaf2', borderRadius: 18, padding: 12 }, memberRow: { flexDirection: 'row', gap: 7, alignItems: 'center', paddingVertical: 7, borderTopWidth: 1, borderTopColor: '#edf4f7' }, memberName: { color: '#173448', fontWeight: '800' }, memberHandle: { color: '#7893a3', fontSize: 10, marginTop: 2 }, securityBox: { marginVertical: 12, padding: 12, borderRadius: 14, backgroundColor: '#eaf3f7' }, envelope: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, padding: 12, marginBottom: 8 }, envelopeTitle: { color: '#173448', fontWeight: '800' }, receipt: { marginTop: 6, color: '#4d86aa', fontSize: 10, fontWeight: '800' },
+  inviteChip: { backgroundColor: '#e8f7ff', borderWidth: 1, borderColor: '#b8dcf0', borderRadius: 12, paddingHorizontal: 9, paddingVertical: 8 }, inviteText: { color: '#2879a8', fontWeight: '800', fontSize: 11 }, smallAction: { paddingHorizontal: 8, paddingVertical: 6, borderRadius: 9, backgroundColor: '#e8f7ff' }, smallActionText: { color: '#2879a8', fontWeight: '900', fontSize: 9 }, removeAction: { paddingHorizontal: 8, paddingVertical: 6, borderRadius: 9, backgroundColor: '#fff0ef' }, removeActionText: { color: '#b42318', fontWeight: '900', fontSize: 9 }, leaveBtn: { marginTop: 12, borderWidth: 1, borderColor: '#e6b7b2', backgroundColor: '#fff7f6', borderRadius: 14, padding: 11, alignItems: 'center' }, leaveText: { color: '#b42318', fontWeight: '900' },
 });
