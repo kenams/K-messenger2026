@@ -31,6 +31,7 @@ import {
   wizzLimiter,
 } from './rateLimit.js';
 import { logger } from './logger.js';
+import { PresenceRuntime } from './presenceRuntime.js';
 import {
   acceptContact,
   blockUser,
@@ -61,6 +62,24 @@ const io = new Server(httpServer, {
   transports: ['websocket', 'polling'],
 });
 
+const presenceRuntime = new PresenceRuntime();
+
+async function broadcastPresence(userId: string, status: 'online' | 'busy' | 'away' | 'invisible' | 'offline') {
+  const { visibleStatus, becameVisible } = presenceRuntime.noteStatus(userId, status);
+  const audience = await getContactAudience(userId);
+  for (const contactId of audience) {
+    io.to(`user:${contactId}`).emit('presence:changed', { userId, status: visibleStatus });
+  }
+
+  if (becameVisible && presenceRuntime.shouldEmitLoginEvent(userId)) {
+    for (const contactId of audience) {
+      io.to(`user:${contactId}`).emit('presence:login', { userId, status: visibleStatus });
+    }
+  }
+
+  io.to(`user:${userId}`).emit('presence:self', { userId, status });
+}
+
 io.use(async (socket, next) => {
   try {
     socket.data.userId = await authenticateSocket(socket);
@@ -74,7 +93,8 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   const userId = socket.data.userId as string;
   socket.join(`user:${userId}`);
-  logger.info('socket_connected', { userId, socketId: socket.id });
+  const { firstSocket } = presenceRuntime.connect(userId, socket.id);
+  logger.info('socket_connected', { userId, socketId: socket.id, firstSocket });
 
   socket.on('conversation:join', async (raw, ack) => {
     try {
@@ -252,10 +272,7 @@ io.on('connection', (socket) => {
       if (!presenceLimiter.consume(userId)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
       const { status } = presenceSchema.parse(raw);
       await setPresence(userId, status);
-      const visibleStatus = status === 'invisible' ? 'offline' : status;
-      const audience = await getContactAudience(userId);
-      for (const contactId of audience) io.to(`user:${contactId}`).emit('presence:changed', { userId, status: visibleStatus });
-      io.to(`user:${userId}`).emit('presence:self', { userId, status });
+      await broadcastPresence(userId, status);
       ack?.({ ok: true });
     } catch {
       ack?.({ ok: false, error: 'INVALID_PRESENCE' });
@@ -275,7 +292,26 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    logger.info('socket_disconnected', { userId, socketId: socket.id, reason });
+    const { lastSocket } = presenceRuntime.disconnect(userId, socket.id);
+    logger.info('socket_disconnected', { userId, socketId: socket.id, reason, lastSocket });
+
+    if (lastSocket) {
+      presenceRuntime.markOffline(userId);
+      void (async () => {
+        try {
+          await setPresence(userId, 'offline');
+          const audience = await getContactAudience(userId);
+          for (const contactId of audience) {
+            io.to(`user:${contactId}`).emit('presence:changed', { userId, status: 'offline' });
+          }
+        } catch (error) {
+          logger.warn('presence_disconnect_update_failed', {
+            userId,
+            error: error instanceof Error ? error.message : 'unknown',
+          });
+        }
+      })();
+    }
   });
 });
 
