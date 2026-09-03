@@ -12,6 +12,8 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      NODE_ENV: production
     steps:
       - name: Checkout Android release source
         uses: actions/checkout@v4
@@ -38,20 +40,20 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Verify Expo entry
+      - name: Verify mobile entry
         working-directory: apps/mobile
         run: |
-          node -e "console.log('Expo entry:', require.resolve('expo/AppEntry'))"
+          test -f index.js
+          test -f App.tsx
+          node -e "console.log('Mobile entry:', require.resolve('./index.js'))"
           node -e "console.log('React Native:', require.resolve('react-native/package.json'))"
 
       - name: Generate Android project
         working-directory: apps/mobile
         env:
           CI: '1'
+          NODE_ENV: production
         run: npx expo prebuild --platform android --clean
-
-      - name: Inspect generated Android config
-        run: nl -ba apps/mobile/android/app/build.gradle | sed -n '1,40p'
 
       - name: Build standalone release APK
         working-directory: apps/mobile/android
