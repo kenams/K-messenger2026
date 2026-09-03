@@ -105,6 +105,19 @@ The existing Supabase migration chain remains useful as the security/reference m
 7. E2EE: select/integrate a vetted native protocol implementation and prove it on Android/iOS; do not claim production E2EE before this.
 8. Produce signed/testable Android/iOS builds when signing/tooling is actually available.
 
+## Claude handoff checkpoint
+- Read this file first before changing anything.
+- Continue ONLY K-ssenger. Do not touch MyLife, Kah-Digital, DSE, or any unrelated repository/database/deployment.
+- Work from `fix/feed-kmap-contact-security` unless the user explicitly asks for another branch.
+- Keep commits small, descriptive, and pushed to GitHub frequently so another agent can resume safely.
+- Before each work session: pull/fetch current branch, inspect PR #2 and latest CI, then continue from the newest commit instead of replaying older work.
+- Keep PR #2 draft while critical DB/security/mobile integration gates remain unresolved.
+- Do not force-push.
+- Do not commit secrets, Neon credentials, JWTs, signing keys, service-role keys, `.env` files, or connection strings.
+- Dedicated backend is Neon project `K-ssenger` only. Never reuse another project's database.
+- Current handoff priority: migrate mobile + server away from Supabase-specific runtime assumptions to Neon Auth/Data API safely, then finish real multi-user chat/contact/presence/group flows.
+- Update this `PROJECT_STATE.md` at meaningful checkpoints so ChatGPT/Claude/Codex can hand off without losing context.
+
 ## Hard rules
 - K-ssenger resources only; do not reuse or modify databases/deployments belonging to other projects
 - no force push
