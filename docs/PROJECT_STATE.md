@@ -11,15 +11,16 @@
 - keep PR #2 draft until authenticated remote Neon validation, deployed realtime runtime and the critical V1 user flow are proven end to end
 
 ## Latest Verified GitHub State
-Verified on 2026-09-03:
-- latest functional head: `756a081f4a9f9d576b6896c7eb78cbd0e938cc0c`
-- CI #148 (`33807145021`): SUCCESS
-- workspace typecheck: SUCCESS
-- server tests: SUCCESS
-- core Alice/Bob/Charlie RLS suite: SUCCESS
-- K-Feed/Moments/K-MAP RLS integration suite: SUCCESS
-- Android Debug APK #19 completed successfully and uploaded artifact `k-ssenger-android-debug`
-- Android Debug APK #22 for the latest functional head is still building and must not be called successful until GitHub reports completion and uploads the artifact
+Verified on 2026-09-04:
+- latest functional head: `a339e2012750b796b0273431ca03a653b93c81e0`
+- previous verified CI #149 on `819a5b5f8bf3a7e2622447ad011214f0eee05190`: SUCCESS
+- workspace typecheck: SUCCESS at previous verified head; current reconnect-auth change is pending CI verification
+- server tests: SUCCESS at previous verified head
+- core Alice/Bob/Charlie RLS suite: SUCCESS at previous verified head
+- K-Feed/Moments/K-MAP RLS integration suite: SUCCESS at previous verified head
+- Android Debug APK #22 (`33807140961`) completed successfully for functional head `756a081f4a9f9d576b6896c7eb78cbd0e938cc0c`
+- artifact `k-ssenger-android-debug` uploaded successfully, about 38 MB
+- current head adds fresh Neon Auth token resolution for every Socket.IO connection/reconnection; do not call it CI-verified until the new workflow finishes
 
 ## Dedicated Remote K-ssenger Backend
 Only the dedicated free Neon project `K-ssenger` (`late-flower-65059830`) may be used.
@@ -63,11 +64,12 @@ Completed and CI-validated:
 - removed/leaving sockets are evicted from the group Socket.IO room; newly invited online sockets are joined only after database authorization succeeds
 
 ## Mobile Runtime
-Completed and CI-validated:
+Completed and CI-validated unless explicitly noted:
 - Neon Auth/Data API client is explicit through `backend.ts`
 - obsolete mobile Supabase compatibility shim removed
-- authenticated Socket.IO client uses the current Neon access token; endpoint is `EXPO_PUBLIC_KSSENGER_SOCKET_URL`
+- authenticated Socket.IO client endpoint is `EXPO_PUBLIC_KSSENGER_SOCKET_URL`
 - reconnect behavior enabled
+- current head now resolves a fresh Neon Auth access token through Socket.IO's auth callback for every initial connect/reconnect instead of reusing the token captured when the singleton socket was first created; pending CI verification
 - app lifecycle publishes online/away/offline presence
 - Contacts screen uses real server contacts instead of fake demo data
 - real contact list/search/request/accept flows are wired to Socket.IO
@@ -110,7 +112,7 @@ CI security checks include:
 - no K-ssenger realtime production deployment is verified yet; never reuse another project's deployment
 - mobile realtime fails closed when `EXPO_PUBLIC_KSSENGER_SOCKET_URL` is missing
 - Android debug APK CI is wired to the active branch and builds through Expo prebuild + Gradle
-- at least one current integration APK artifact has completed successfully; latest-head APK #22 remains pending verification
+- Android Debug APK #22 is verified successful and has an uploaded artifact
 - no verified iOS signing environment or Apple signing credentials are available here
 
 ## Account / Auth Safety
@@ -129,13 +131,13 @@ CI security checks include:
 ## Remaining V1 Priorities
 1. apply and verify K-Feed/Moments/K-MAP migrations on the dedicated remote Neon branch using an explicitly authorized migration step
 2. deploy the dedicated K-ssenger realtime server and configure its public mobile endpoint; never reuse another project's deployment
-3. perform real multi-user Neon Auth + remote runtime validation: account A/B -> contacts -> presence -> K-Pulse -> direct/group conversations -> read receipts -> group membership changes
+3. perform real multi-user Neon Auth + remote runtime validation: account A/B -> contacts -> presence -> K-Pulse -> direct/group conversations -> read receipts -> group membership changes, including a forced token-expiry/reconnect scenario
 4. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending on devices; do not claim E2EE before proof
 5. finish remaining group lifecycle items that require product/schema decisions such as mute/ban and ownership transfer
 6. replace K-Feed/Moments/K-MAP placeholder UI with their Neon-native tables/runtime and approved media storage
 7. add native media upload/storage and push notifications
 8. complete moderation/report/block UX and correctly verified Auth account deletion
-9. validate latest Android artifacts and later produce signed Android/iOS release builds when signing is available
+9. validate current-head Android artifacts and later produce signed Android/iOS release builds when signing is available
 
 ## Hard Rules
 - K-ssenger resources only
