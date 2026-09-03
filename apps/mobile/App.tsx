@@ -6,6 +6,7 @@ import { MomentsScreen } from './src/features/moments/MomentsScreen';
 import { MsnContactsScreen, type Contact } from './src/features/contacts/MsnContactsScreen';
 import { ChatsHubScreen } from './src/features/chats/ChatsHubScreen';
 import { DirectConversationScreen } from './src/features/chats/DirectConversationScreen';
+import { AccountDataScreen } from './src/features/profile/AccountDataScreen';
 import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
 import type { MyProfile } from './src/features/profile/useMyProfile';
 
@@ -20,6 +21,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const [tab, setTab] = useState<TabName>('contacts');
   const [selected, setSelected] = useState<Contact | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [accountData, setAccountData] = useState(false);
   const [userAge, setUserAge] = useState<number | null>(null);
   const [ageInput, setAgeInput] = useState('');
   const [ageError, setAgeError] = useState('');
@@ -46,7 +48,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
           <TextInput value={ageInput} onChangeText={setAgeInput} keyboardType="number-pad" placeholder="Ton âge" maxLength={3} style={styles.ageInput} onSubmitEditing={confirmAge} />
           {!!ageError && <Text style={styles.error}>{ageError}</Text>}
           <TouchableOpacity style={styles.primary} onPress={confirmAge}><Text style={styles.primaryText}>Entrer dans K-ssenger</Text></TouchableOpacity>
-          <Text style={styles.legal}>Âge déclaré · la base Neon applique aussi le filtrage serveur du K-Feed.</Text>
+          <Text style={styles.legal}>Âge déclaré · la base Neon applique aussi le filtrage serveur du K-Feed dès que le module social est migré à distance.</Text>
         </View>
       </SafeAreaView>
     );
@@ -54,6 +56,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
 
   if (selected) return <DirectConversationScreen contact={selected} onBack={() => setSelected(null)} />;
   if (editingProfile) return <ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={() => setEditingProfile(false)} />;
+  if (accountData) return <AccountDataScreen profile={profile} onBack={() => setAccountData(false)} />;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -64,7 +67,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
       {tab === 'feed' && <FeedScreen userAge={userAge} />}
       {tab === 'map' && <MapPreview />}
       {tab === 'moments' && <MomentsScreen />}
-      {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} />}
+      {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} />}
       <View style={styles.tabs}>
         <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
         <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
@@ -105,14 +108,14 @@ function MapPreview() {
   );
 }
 
-function MeScreen({ profile, userAge, onEdit }: { profile: MyProfile; userAge: number; onEdit: () => void }) {
+function MeScreen({ profile, userAge, onEdit, onAccountData }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void }) {
   return (
     <ScrollView contentContainerStyle={styles.profilePage}>
       <Avatar profile={profile} size="large" />
       <Text style={styles.profileName}>{profile.display_name}</Text><Text style={styles.profileHandle}>@{profile.username}</Text>
       <Text style={styles.profilePresence}>{profile.custom_status || 'Disponible'}</Text>
       {!!profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>}
-      <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="🎵" label="Musique"/><ProfileButton icon="👥" label="Groupes"/><ProfileButton icon="🔒" label="Sécurité"/></View>
+      <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes"/><ProfileButton icon="🔒" label="Sécurité"/></View>
       <Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text>
     </ScrollView>
   );
