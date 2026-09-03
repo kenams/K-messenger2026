@@ -11,7 +11,7 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout Android release source
         uses: actions/checkout@v4
@@ -22,13 +22,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Install dependencies
         run: npm install
@@ -38,13 +40,15 @@ jobs:
 
       - name: Generate Android project
         working-directory: apps/mobile
-        run: npx expo prebuild --platform android --non-interactive --clean
+        env:
+          CI: '1'
+        run: npx expo prebuild --platform android --clean
 
       - name: Build standalone release APK
         working-directory: apps/mobile/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Collect APK
         run: |
