@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { getSupabase } from '../../lib/supabase';
+import { getBackend } from '../../lib/backend';
 
 function normalizeUsername(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -20,7 +20,7 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
     setBusy(true);
     setError('');
     try {
-      const { error: rpcError } = await getSupabase().rpc('ensure_my_kssenger_profile', {
+      const { error: rpcError } = await getBackend().rpc('ensure_my_kssenger_profile', {
         p_username: normalizedUsername,
         p_display_name: displayName.trim().slice(0, 64),
       });
@@ -35,7 +35,7 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
   };
 
   const signOut = async () => {
-    await getSupabase().auth.signOut();
+    await getBackend().auth.signOut();
   };
 
   return (
