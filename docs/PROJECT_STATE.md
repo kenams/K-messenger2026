@@ -8,88 +8,94 @@
 - `bootstrap/platform` - implementation base
 - `fix/feed-kmap-contact-security` - active hardening/integration branch
 - PR #2 `Security hardening + messaging reliability` -> `bootstrap/platform` - OPEN, DRAFT, mergeable
-- keep PR #2 draft until authenticated remote Neon validation, deployed realtime runtime and the critical V1 user flow are proven end to end
+- keep PR #2 draft until the critical remote multi-user flow, E2EE/device path, media/push and release gates are proven
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- latest functional head: `a339e2012750b796b0273431ca03a653b93c81e0`
-- previous verified CI #149 on `819a5b5f8bf3a7e2622447ad011214f0eee05190`: SUCCESS
-- workspace typecheck: SUCCESS at previous verified head; current reconnect-auth change is pending CI verification
-- server tests: SUCCESS at previous verified head
-- core Alice/Bob/Charlie RLS suite: SUCCESS at previous verified head
-- K-Feed/Moments/K-MAP RLS integration suite: SUCCESS at previous verified head
-- Android Debug APK #22 (`33807140961`) completed successfully for functional head `756a081f4a9f9d576b6896c7eb78cbd0e938cc0c`
-- artifact `k-ssenger-android-debug` uploaded successfully, about 38 MB
-- current head adds fresh Neon Auth token resolution for every Socket.IO connection/reconnection; do not call it CI-verified until the new workflow finishes
+- latest CI-verified functional head before this documentation checkpoint: `006771dbb886e211c07c0e3f9b2e6d006c8b8983`
+- CI #162 (`33815219284`): SUCCESS
+- workspace/typecheck: SUCCESS
+- server tests: SUCCESS
+- core Alice/Bob/Charlie RLS integration suite: SUCCESS
+- K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
+- Android Debug APK #31 (`33815215943`) is building for functional head `006771dbb886e211c07c0e3f9b2e6d006c8b8983`; do not call it successful until the artifact upload is verified
+- earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
 Only the dedicated free Neon project `K-ssenger` (`late-flower-65059830`) may be used.
 
-Re-verified through the connected Neon project on 2026-09-03:
+Re-verified through the connected Neon project on 2026-09-04:
 - PostgreSQL 17
 - region `aws-eu-central-1`
 - database `kssenger`
-- project remains on the free plan
-- Neon Auth provider: Better Auth
-- email/password authentication enabled
-- branch-specific Auth/JWKS endpoints active
-- Neon Data API active for schema `public`
-- remote public schema still contains only the ten core V1 tables: `profiles`, `privacy_settings`, `contacts`, `contact_requests`, `blocks`, `conversations`, `conversation_members`, `devices`, `messages`, `message_receipts`
-- no K-Feed/Moments/K-MAP migration is claimed as remotely applied yet
-- core RLS was previously verified remotely
-- message persistence remains ciphertext-only and idempotent by `(sender_user_id, client_message_id)`
+- dedicated free project only
+- Neon Auth / Better Auth and Data API remain the intended auth/data surfaces
+- remote public schema currently contains exactly the ten core V1 tables: `profiles`, `privacy_settings`, `contacts`, `contact_requests`, `blocks`, `conversations`, `conversation_members`, `devices`, `messages`, `message_receipts`
+- all ten remote core tables have PostgreSQL RLS enabled
+- no K-Feed/Moments/K-MAP table is currently present in the remote public schema
+- message persistence remains ciphertext-envelope only and idempotent by `(sender_user_id, client_message_id)`
 
 Important remote migration status:
 - `neon/migrations/0002_social_content_location.sql`
 - `neon/migrations/0003_social_content_grants.sql`
 - `neon/migrations/0004_kmap_owner_revoke_policy.sql`
-are committed and CI-validated against isolated PostgreSQL 17, but are NOT claimed as applied to the remote Neon project yet.
-- do not claim remote K-Feed/Moments/K-MAP tables until those migrations are explicitly applied and re-verified against the dedicated K-ssenger branch
+are committed and CI-validated against isolated PostgreSQL 17, but are not yet applied to the dedicated remote Neon branch.
+- applying remote schema changes requires an explicit migration approval step; never bypass that safeguard
 
 ## Server Runtime
 Completed and CI-validated:
 - Socket.IO access token authentication uses Neon Auth JWT/JWKS validation through `jose`
-- identity is derived from verified JWT `sub`; client-supplied identity is not trusted
+- identity is derived from verified JWT `sub`; client-supplied identity is never trusted
 - server runtime has no `@supabase/supabase-js` dependency
 - PostgreSQL access uses `pg`, parameterized SQL and explicit transactions
 - contacts/request/accept/decline/cancel/remove/favorite/block paths are Neon/Postgres-backed
 - presence and K-Pulse authorization are real server paths
+- realtime presence audience now honors `privacy_settings.show_online`; users set to `nobody` are not broadcast to contacts
+- contacts/list and search mask invisible/private presence instead of leaking the stored state
+- contact list exposes nickname, custom status and now-playing metadata only through privacy-aware server shaping
+- `show_music='nobody'` suppresses now-playing title/artist from the contact list response
 - message history/persistence/receipts remain ciphertext-envelope only
 - direct conversation creation/reuse uses contact/block checks plus transaction advisory locking to prevent duplicate 1:1 conversations
-- authenticated `conversations:list` returns only conversations where the verified user is a member and exposes member role plus safe last-message metadata without plaintext/ciphertext bodies
-- group creation is transaction-backed and restricted to contacts with block checks
-- group member add/remove, role promotion/demotion and leave operations are transaction-backed
-- group member add requires owner/admin, target contact status and no block conflict with current members
-- admin cannot remove owner/admin; only owner can promote/demote; owner cannot silently leave without ownership transfer
-- removed/leaving sockets are evicted from the group Socket.IO room; newly invited online sockets are joined only after database authorization succeeds
+- authenticated `conversations:list` returns only conversations where the verified user is a member and exposes safe metadata without plaintext/ciphertext bodies
+- group creation/member add/remove/role promotion/demotion/leave are transaction-backed and authorization checked server-side
+- removed/leaving sockets are evicted from group rooms; newly invited online sockets join only after DB authorization succeeds
 
 ## Mobile Runtime
 Completed and CI-validated unless explicitly noted:
 - Neon Auth/Data API client is explicit through `backend.ts`
 - obsolete mobile Supabase compatibility shim removed
 - authenticated Socket.IO client endpoint is `EXPO_PUBLIC_KSSENGER_SOCKET_URL`
-- reconnect behavior enabled
-- current head now resolves a fresh Neon Auth access token through Socket.IO's auth callback for every initial connect/reconnect instead of reusing the token captured when the singleton socket was first created; pending CI verification
+- reconnect behavior resolves a fresh Neon Auth access token for every initial connection/reconnection
 - app lifecycle publishes online/away/offline presence
-- Contacts screen uses real server contacts instead of fake demo data
-- real contact list/search/request/accept flows are wired to Socket.IO
+- Contacts uses real server contacts/search/requests instead of fake demo data
 - incoming vs outgoing contact requests are distinguished
-- real presence updates/login events are consumed
-- K-Pulse sends/receives through the real server path
+- real presence updates and debounced login events are consumed
+- K-Pulse sends/receives through the real authorization/rate-limit path
+- contact groups/list names, nicknames, custom status and now-playing music are rendered from real backend data
+- profile editing now supports display name, username, custom status, bio, HTTPS avatar URL and now-playing title/artist
+- login-event notices honor the local authenticated user's `login_notifications` preference (`all_contacts`, `favorites`, `nobody`)
+- a real `Moi -> Vie privée` screen edits self-scoped Neon privacy settings for online visibility, music visibility, K-Pulse policy, login alerts and direct-chat read receipts
+- direct conversations honor `read_receipts=false` by emitting only `delivered` instead of `read` while open
 - selecting a contact opens/reuses a real direct conversation and loads encrypted-envelope history
-- direct conversations emit authenticated `read` receipts for remote messages when open and consume realtime receipt updates
 - Chats private list uses authenticated `conversations:list` rather than static demo chats
-- Groups screen lists real groups and creates groups from selected contacts
-- opening a group joins the authorized room, loads encrypted-envelope history, renders real members/presence and emits read receipts
-- owner/admin controls are wired to real server mutations: invite contact, remove member, promote/demote admin and leave group
-- plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated; no crypto workaround is permitted
-- live Neon profile is rendered in the app shell
-- username, display name, custom status, bio and HTTPS avatar URL editing are wired through Neon Data API/RLS
-- authenticated account export is exposed; messages remain encrypted envelopes in the export
+- Groups lists/creates/opens real groups and renders real members/presence/history
+- owner/admin group controls call real server mutations: invite contact, remove member, promote/demote admin and leave group
+- group read-receipt preference parity is not yet complete; current privacy UI explicitly describes the direct-chat behavior only
+- plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated and device-tested
+- authenticated account export is exposed; exported messages remain encrypted envelopes
+
+## Social Identity Direction
+K-ssenger should recreate the *feeling* that made classic social messengers alive without copying Microsoft branding/assets:
+- presence is a first-class social signal, not only transport state
+- contacts can show expressive display names, custom status and current music
+- login alerts can recreate the “someone just came online” moment with user-controlled privacy
+- K-Pulse is the outward K-ssenger attention mechanic; legacy `wizz` naming remains internal compatibility only
+- favorites can drive stronger social signals without exposing everyone equally
+- user privacy controls must remain stronger than the nostalgic behavior they enable
 
 ## Neon Social Modules Prepared
-New CI-validated Neon-native schema covers:
-- K-Feed video metadata, moderation state, reports and server-side age gating
+CI-validated Neon-native schema covers:
+- K-Feed vertical-video metadata, moderation state, reports and server-side age gating
 - Moments, views, reactions and reports with expiry/friend/close-friend/block-aware reads
 - K-MAP location shares and points
 - approximate K-MAP recipients cannot directly read raw exact coordinates
@@ -109,35 +115,34 @@ CI security checks include:
 - block triggers direct-share revocation
 
 ## Deployment / Release State
-- no K-ssenger realtime production deployment is verified yet; never reuse another project's deployment
+- dedicated public realtime endpoint is configured as `https://kssenger-server.onrender.com` and the mobile preview configuration points to the K-ssenger Render/Neon stack
+- the endpoint was reported healthy during the real-preview setup; this checkpoint does not claim that the latest privacy-aware server commit is already the deployed Render revision without a deployment-version proof
 - mobile realtime fails closed when `EXPO_PUBLIC_KSSENGER_SOCKET_URL` is missing
-- Android debug APK CI is wired to the active branch and builds through Expo prebuild + Gradle
-- Android Debug APK #22 is verified successful and has an uploaded artifact
+- Android debug APK CI builds through Expo prebuild + Gradle
+- Android Debug APK #31 is the current build for the latest CI-verified social-presence/privacy head and is pending artifact verification at this checkpoint
 - no verified iOS signing environment or Apple signing credentials are available here
 
 ## Account / Auth Safety
 - account export is implemented through the authenticated Data API/RLS surface
-- Better Auth supports authenticated user deletion only when deletion is enabled in the auth configuration and requires password/fresh-session/verification safeguards
-- the current managed Neon Auth config does not expose an enabled self-delete setting in the checked configuration; do not fake deletion by deleting only the profile row
-- secure full account deletion remains unfinished
+- Better Auth supports authenticated user deletion only when deletion is enabled in auth configuration and protected by password/fresh-session/verification safeguards
+- secure full account deletion remains unfinished; never fake deletion by deleting only the profile row
 
 ## Branding / Legal Safety
-- preserve the nostalgic messenger identity through presence, expressive profiles, login notifications and K-Pulse behavior while keeping K-ssenger independently branded
+- preserve nostalgic messenger behavior while keeping K-ssenger independently branded
 - do not imply Microsoft/MSN affiliation and do not ship Microsoft/MSN logos, copied assets or original sounds
 - public attention feature name: `K-Pulse`
-- legacy `wizz` naming may remain only as an internal compatibility/schema label until migrated safely
 - trademark clearance remains required before commercial launch
 
 ## Remaining V1 Priorities
-1. apply and verify K-Feed/Moments/K-MAP migrations on the dedicated remote Neon branch using an explicitly authorized migration step
-2. deploy the dedicated K-ssenger realtime server and configure its public mobile endpoint; never reuse another project's deployment
-3. perform real multi-user Neon Auth + remote runtime validation: account A/B -> contacts -> presence -> K-Pulse -> direct/group conversations -> read receipts -> group membership changes, including a forced token-expiry/reconnect scenario
-4. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending on devices; do not claim E2EE before proof
-5. finish remaining group lifecycle items that require product/schema decisions such as mute/ban and ownership transfer
-6. replace K-Feed/Moments/K-MAP placeholder UI with their Neon-native tables/runtime and approved media storage
-7. add native media upload/storage and push notifications
-8. complete moderation/report/block UX and correctly verified Auth account deletion
-9. validate current-head Android artifacts and later produce signed Android/iOS release builds when signing is available
+1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership changes -> forced reconnect/token refresh
+2. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending; do not claim production E2EE before device proof
+3. apply and verify K-Feed/Moments/K-MAP migrations on the dedicated remote Neon branch through the explicit migration-approval flow
+4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
+5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
+6. finish remaining group lifecycle/product items such as ownership transfer and mute/ban
+7. complete moderation/report/block UX and securely verified Auth account deletion
+8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
+9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
 
 ## Hard Rules
 - K-ssenger resources only
