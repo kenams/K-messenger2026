@@ -36,6 +36,7 @@ import {
 } from './rateLimit.js';
 import { logger } from './logger.js';
 import { PresenceRuntime } from './presenceRuntime.js';
+import { listConversations } from './conversationStore.js';
 import {
   acceptContact,
   blockUser,
@@ -163,6 +164,16 @@ io.on('connection', (socket) => {
       ack?.({ ok: true, ...history });
     } catch (error) {
       logger.warn('message_history_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('conversations:list', async (_raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:conversations`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      ack?.({ ok: true, conversations: await listConversations(userId) });
+    } catch (error) {
+      logger.warn('conversations_list_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
