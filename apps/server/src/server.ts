@@ -16,12 +16,14 @@ import {
   contactSearchSchema,
   contactTargetSchema,
   conversationJoinSchema,
+  groupCreateSchema,
   messageHistorySchema,
   messageSendSchema,
   presenceSchema,
   receiptSchema,
   wizzSchema,
 } from './validation.js';
+import { createGroup } from './groupStore.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -120,6 +122,27 @@ io.on('connection', (socket) => {
       ack?.({ ok: true, ...history });
     } catch (error) {
       logger.warn('message_history_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:create', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:create`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = groupCreateSchema.parse(raw);
+      const group = await createGroup(userId, request.title, request.memberIds);
+      socket.join(`conversation:${group.conversationId}`);
+      for (const memberId of [userId, ...group.memberIds]) {
+        io.to(`user:${memberId}`).emit('group:created', {
+          conversationId: group.conversationId,
+          title: group.title,
+          ownerId: userId,
+          memberIds: group.memberIds,
+        });
+      }
+      ack?.({ ok: true, conversationId: group.conversationId });
+    } catch (error) {
+      logger.warn('group_create_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
