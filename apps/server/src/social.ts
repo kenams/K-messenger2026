@@ -41,28 +41,19 @@ export async function requestContact(userId: string, recipientId: string) {
 }
 
 export async function acceptContact(userId: string, requestId: string) {
-  const { data: request, error } = await supabaseAdmin
-    .from('contact_requests')
-    .select('id,sender_id,recipient_id,status')
-    .eq('id', requestId)
-    .eq('recipient_id', userId)
-    .eq('status', 'pending')
-    .single();
-  if (error || !request) throw new Error('REQUEST_NOT_FOUND');
-  await requireNotBlocked(request.sender_id, request.recipient_id);
-
-  const { error: contactError } = await supabaseAdmin.from('contacts').upsert([
-    { owner_id: request.sender_id, contact_id: request.recipient_id },
-    { owner_id: request.recipient_id, contact_id: request.sender_id },
-  ]);
-  if (contactError) throw contactError;
-
-  const { error: updateError } = await supabaseAdmin
-    .from('contact_requests')
-    .update({ status: 'accepted' })
-    .eq('id', requestId);
-  if (updateError) throw updateError;
-  return request;
+  // Atomic: see supabase/migrations/0010_contact_accept_rpc.sql. Avoids the
+  // previous two-call race (contacts upserted but request left pending, or
+  // vice versa, on a mid-flight error).
+  const { data, error } = await supabaseAdmin.rpc('accept_contact_request', {
+    p_recipient_id: userId,
+    p_request_id: requestId,
+  });
+  if (error) {
+    if (error.message.includes('REQUEST_NOT_FOUND')) throw new Error('REQUEST_NOT_FOUND');
+    if (error.message.includes('BLOCKED')) throw new Error('BLOCKED');
+    throw error;
+  }
+  return data;
 }
 
 export async function blockUser(userId: string, blockedId: string) {
