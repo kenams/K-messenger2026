@@ -38,8 +38,12 @@ jobs:
         with:
           node-version: 22
       - run: npm install
-      - name: Run Alice/Bob/Charlie Neon RLS integration suite
+      - name: Run Alice/Bob/Charlie Neon core RLS integration suite
         env:
           DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
           KSSENGER_RLS_RESET: "1"
         run: node scripts/neon-rls-integration-test.mjs
+      - name: Run K-Feed Moments and K-MAP RLS integration suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+        run: node scripts/neon-social-rls-integration-test.mjs
