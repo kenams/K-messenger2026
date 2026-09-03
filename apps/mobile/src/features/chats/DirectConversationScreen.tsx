@@ -3,6 +3,7 @@ import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, Touchabl
 import { StatusBar } from 'expo-status-bar';
 import type { Socket } from 'socket.io-client';
 import type { Contact } from '../contacts/MsnContactsScreen';
+import { getBackend } from '../../lib/backend';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket } from '../../lib/realtime';
 
 type ReceiptState = 'delivered' | 'read';
@@ -38,6 +39,14 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       if (!active) return;
       clientRef = client;
       setSocket(client);
+
+      const { data: privacy } = await getBackend()
+        .from('privacy_settings')
+        .select('read_receipts')
+        .eq('user_id', currentUserId)
+        .maybeSingle();
+      const receiptState: ReceiptState = (privacy as { read_receipts?: boolean } | null)?.read_receipts === false ? 'delivered' : 'read';
+
       const direct = await emitAck<DirectResponse>(client, 'conversation:direct', { userId: contact.id });
       if (!direct.ok || !direct.conversationId) throw new Error(direct.error ?? 'DIRECT_CONVERSATION_FAILED');
       const id = direct.conversationId;
@@ -57,7 +66,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
           .map((message) => emitAck(client, 'message:receipt', {
             conversationId: id,
             messageId: message.id,
-            state: 'read',
+            state: receiptState,
           })),
       );
 
@@ -68,7 +77,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
           void emitAck(client, 'message:receipt', {
             conversationId: id,
             messageId: message.id,
-            state: 'read',
+            state: receiptState,
           }).catch(() => undefined);
         }
       };
@@ -80,7 +89,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       };
       client.on('message:new', messageHandler);
       client.on('message:receipt', receiptHandler);
-      if (active) setNotice('Conversation sécurisée ouverte. Accusés de lecture actifs.');
+      if (active) setNotice(receiptState === 'read' ? 'Conversation sécurisée ouverte. Accusés de lecture actifs.' : 'Conversation sécurisée ouverte. Accusés de lecture désactivés.');
     }).catch(() => {
       if (active) setNotice('Impossible d’ouvrir cette conversation pour le moment.');
     }).finally(() => {
