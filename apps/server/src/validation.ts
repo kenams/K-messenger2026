@@ -45,7 +45,7 @@ export const groupMemberSchema = z.object({
 export const groupRoleSchema = z.object({
   conversationId: z.string().uuid(),
   userId: z.string().uuid(),
-  role: z.enum(['member', 'admin']),
+  role: z.enum(['member', 'admin', 'owner']),
 }).strict();
 
 export const groupConversationSchema = z.object({
