@@ -37,7 +37,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <View style={styles.loginToast}>
         <Text style={styles.loginIcon}>🟢</Text>
-        <View style={styles.flex}><Text style={styles.loginTitle}>Sarah vient de se connecter</Text><Text style={styles.loginSub}>Il y a quelques secondes · ⚡ Wizz</Text></View>
+        <View style={styles.flex}><Text style={styles.loginTitle}>Sarah vient de se connecter</Text><Text style={styles.loginSub}>Il y a quelques secondes · ⚡ K-Pulse</Text></View>
       </View>
 
       <View style={styles.toolbar}>

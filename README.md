@@ -1,52 +1,49 @@
 # K-ssenger
 
-K-ssenger est une messagerie sociale moderne inspirée de l'esprit MSN Messenger, pensée pour 2026/2027.
+K-ssenger is an independent social messenger for presence-first private conversations, groups, Moments and opt-in location sharing.
 
 ## Vision
 
-**MSN = âme · WhatsApp = fiabilité · Snapchat = fun · Telegram = puissance**
+The product centers on human presence: seeing who is available, starting a real conversation quickly, sharing context, meeting up voluntarily and keeping social identity expressive without copying another brand.
 
-Le produit est centré sur la présence humaine : voir qui est en ligne, discuter, partager, se retrouver, utiliser le Wizz et retrouver une vraie personnalité sociale.
+## Product Pillars
 
-## Piliers produit
-
-- Contacts et présence façon MSN
-- Chat privé et groupes avec E2EE
-- Wizz / Nudge comme interaction signature
-- K-MAP : carte sociale et partage de position volontaire
-- Moments : contenu éphémère
-- Communautés : groupes et channels
-- Profil personnalisable : pseudo, avatar, statut, musique
+- Contacts and rich presence
+- Private chat and groups with a vetted E2EE protocol before any production E2EE claim
+- K-Pulse as the signature attention interaction
+- K-MAP for voluntary social location sharing
+- Moments for ephemeral content
+- Communities, groups and channels
+- Customizable profile: handle, avatar, status and music
 
 ## K-MAP
 
-K-MAP est une carte sociale opt-in intégrée à K-ssenger :
+K-MAP is an opt-in social map integrated into K-ssenger:
 
-- position ponctuelle
-- position live limitée dans le temps
-- mode `Je viens vers toi`
-- ETA et itinéraire
-- `On se capte ?`
+- one-time location share
+- time-limited live location
+- "Je viens vers toi" mode
+- ETA and route
+- "On se capte ?"
 - Meet Mode
-- groupes / road trips
+- groups / road trips
 - Ghost Mode
-- précision exacte ou approximative selon le contact
+- exact or approximate precision depending on contact-level privacy
 
-La localisation est **OFF par défaut**. Aucun tracking caché ni partage permanent.
+Location is OFF by default. There is no hidden tracking and no permanent sharing.
 
-## Sécurité
+## Security
 
-- HTTPS/WSS en production
-- authentification et autorisation côté serveur
-- messages privés en E2EE
-- aucune clé privée côté serveur
-- aucun contenu plaintext dans les logs, push ou base serveur
-- stockage sécurisé des clés sur iOS/Android
-- blocage et révocation d'appareils
-- contrôle fin de la confidentialité
+- HTTPS/WSS in production
+- server-side authentication and authorization
+- no private-message plaintext in server logs, push payloads or database rows
+- no server-side private E2EE key
+- secure key storage on iOS/Android
+- block and device revocation
+- granular privacy controls
 
-## Statut
+## Status
 
-Ce dépôt sert de base de référence propre pour consolider le travail mobile, serveur, produit et UX réalisé sur K-ssenger.
+This repository is the reference workspace for consolidating K-ssenger mobile, server, product and UX work.
 
-Le code local développé par Agent-Kah devra être importé ici sans réécriture destructive.
+See `docs/PROJECT_STATE.md` for the current verified implementation state.

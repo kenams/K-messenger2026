@@ -21,7 +21,7 @@ export function Root() {
 function AuthenticatedRoot({ userId }: { userId: string }) {
   const profile = useMyProfile(userId);
 
-  if (profile.loading) return <Loading label="Chargement de ton profil MSN…" />;
+  if (profile.loading) return <Loading label="Chargement de ton profil K-ssenger…" />;
   if (!profile.profile) return <ProfileBootstrapScreen onDone={profile.refresh} />;
 
   return <App />;
