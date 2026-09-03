@@ -21,15 +21,23 @@ export async function getAuthenticatedUserId(): Promise<string> {
   return (await getSessionIdentity()).userId;
 }
 
+function buildRealtimeAuth() {
+  return (callback: (auth: { accessToken?: string }) => void) => {
+    void getSessionIdentity()
+      .then(({ accessToken }) => callback({ accessToken }))
+      .catch(() => callback({}));
+  };
+}
+
 export async function getRealtimeSocket(): Promise<Socket> {
   if (!isRealtimeConfigured) throw new Error('REALTIME_NOT_CONFIGURED');
-  const { accessToken } = await getSessionIdentity();
+  await getSessionIdentity();
 
   if (!socket) {
     socket = io(socketUrl, {
       autoConnect: false,
       transports: ['websocket', 'polling'],
-      auth: { accessToken },
+      auth: buildRealtimeAuth(),
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 700,
@@ -37,7 +45,7 @@ export async function getRealtimeSocket(): Promise<Socket> {
       timeout: 10_000,
     });
   } else {
-    socket.auth = { accessToken };
+    socket.auth = buildRealtimeAuth();
   }
 
   if (!socket.connected) socket.connect();
