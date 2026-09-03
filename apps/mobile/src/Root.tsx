@@ -1,28 +1,42 @@
 import React from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import App from '../App';
 import { AuthScreen } from './features/auth/AuthScreen';
 import { useAuthSession } from './features/auth/useAuthSession';
+import { ProfileBootstrapScreen } from './features/profile/ProfileBootstrapScreen';
+import { useMyProfile } from './features/profile/useMyProfile';
 
 export function Root() {
   const auth = useAuthSession();
 
   if (!auth.configured) return <AuthScreen />;
 
-  if (auth.loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.loadingText}>Connexion à K-ssenger…</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
+  if (auth.loading) return <Loading label="Connexion à K-ssenger…" />;
   if (!auth.session) return <AuthScreen />;
 
+  return <AuthenticatedRoot userId={auth.session.user.id} />;
+}
+
+function AuthenticatedRoot({ userId }: { userId: string }) {
+  const profile = useMyProfile(userId);
+
+  if (profile.loading) return <Loading label="Chargement de ton profil MSN…" />;
+  if (!profile.profile) return <ProfileBootstrapScreen onDone={profile.refresh} />;
+
   return <App />;
+}
+
+function Loading({ label }: { label: string }) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style="dark" />
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" />
+        <Text style={styles.loadingText}>{label}</Text>
+      </View>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
