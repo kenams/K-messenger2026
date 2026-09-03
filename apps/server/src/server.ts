@@ -16,7 +16,10 @@ import {
   contactSearchSchema,
   contactTargetSchema,
   conversationJoinSchema,
+  groupConversationSchema,
   groupCreateSchema,
+  groupMemberSchema,
+  groupRoleSchema,
   messageHistorySchema,
   messageSendSchema,
   presenceSchema,
@@ -24,7 +27,13 @@ import {
   wizzSchema,
 } from './validation.js';
 import { createOrGetDirectConversation } from './directConversationStore.js';
-import { createGroup } from './groupStore.js';
+import {
+  addGroupMember,
+  createGroup,
+  leaveGroup,
+  removeGroupMember,
+  setGroupMemberRole,
+} from './groupStore.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -195,6 +204,64 @@ io.on('connection', (socket) => {
       ack?.({ ok: true, conversationId: group.conversationId });
     } catch (error) {
       logger.warn('group_create_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:member-add', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:member-add`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = groupMemberSchema.parse(raw);
+      const result = await addGroupMember(userId, request.conversationId, request.userId);
+      io.in(`user:${request.userId}`).socketsJoin(`conversation:${request.conversationId}`);
+      io.to(`user:${request.userId}`).emit('group:invited', { ...result, actorId: userId });
+      io.to(`conversation:${request.conversationId}`).emit('group:updated', { ...result, action: 'member-added', actorId: userId });
+      ack?.({ ok: true, ...result });
+    } catch (error) {
+      logger.warn('group_member_add_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:member-remove', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:member-remove`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = groupMemberSchema.parse(raw);
+      const result = await removeGroupMember(userId, request.conversationId, request.userId);
+      io.in(`user:${request.userId}`).socketsLeave(`conversation:${request.conversationId}`);
+      io.to(`user:${request.userId}`).emit('group:removed', { ...result, actorId: userId });
+      io.to(`conversation:${request.conversationId}`).emit('group:updated', { ...result, action: 'member-removed', actorId: userId });
+      ack?.({ ok: true, ...result });
+    } catch (error) {
+      logger.warn('group_member_remove_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:role-set', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:role-set`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = groupRoleSchema.parse(raw);
+      const result = await setGroupMemberRole(userId, request.conversationId, request.userId, request.role);
+      io.to(`conversation:${request.conversationId}`).emit('group:updated', { ...result, action: 'role-changed', actorId: userId });
+      ack?.({ ok: true, ...result });
+    } catch (error) {
+      logger.warn('group_role_set_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:leave', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:leave`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = groupConversationSchema.parse(raw);
+      const result = await leaveGroup(userId, request.conversationId);
+      io.in(`user:${userId}`).socketsLeave(`conversation:${request.conversationId}`);
+      io.to(`conversation:${request.conversationId}`).emit('group:updated', { ...result, action: 'member-left', actorId: userId });
+      io.to(`user:${userId}`).emit('group:left', result);
+      ack?.({ ok: true, ...result });
+    } catch (error) {
+      logger.warn('group_leave_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
