@@ -11,25 +11,38 @@
 - `import/mobile-agent-kah`, `import/server-agent-kah` — imported Agent-Kah crypto POC/history; not blindly merged
 
 ## Latest verified CI
-- GitHub Actions CI run #74 on commit `0161554980a25e571415de3a040195c5dae82e30` completed SUCCESS
+- GitHub Actions CI run #86 on commit `dd205f149daf133fe6baeb9a95fdbd7a9025e710` completed SUCCESS
 - install: success
 - TypeScript workspace typecheck: success
 - server tests: success
 - isolated local Supabase RLS integration job: success
-- mobile-auth commits are newer than #74; fresh CI must pass before they are treated as verified
 
-## Migrations — actually run locally (2026-09-03)
-`supabase start` + `supabase db reset` on isolated K-ssenger ports applies the migration chain end to end. Fixed issues found by real execution include duplicate numbering, a missing membership helper, recursive `conversation_members` RLS causing PostgreSQL `42P17`, and later numbering drift.
+## Dedicated remote K-ssenger backend
+A dedicated free Neon project named `K-ssenger` now exists and is the only remote database/backend allowed for this project.
 
-`scripts/rls-integration-test.mjs` runs real Alice/Bob/Charlie authorization scenarios against local Postgres. Coverage includes profile privacy, presence masking, service-role RPC protection, K-Feed age gating, K-MAP precision isolation, receipt privacy/direct-write lockdown and block-triggered K-MAP revocation.
+Provisioned and verified:
+- PostgreSQL 17, Europe
+- Neon Auth with email/password sign-up enabled
+- Neon Data API bound to Neon Auth
+- JWT-aware database helpers `auth.user_id()` and `auth.session()` are present
+- Data API roles `authenticated` / `anonymous` exist
+- first live V1 tables now exist remotely: `profiles`, `privacy_settings`, `contacts`
+- RLS is enabled on all three live tables
+- `profiles` currently has self insert/update plus self-or-contact read policy
+- `privacy_settings` is self-only
+- `contacts` is owner-read-only from the client; mutation remains backend-controlled
+- authenticated grants are restricted accordingly
 
-Still not done: no dedicated remote K-ssenger database/backend is connected yet. Local validation is real, but remote staging validation is still required before production claims.
+The full intended Neon V1 schema is now versioned in `neon/migrations/0001_v1_core.sql`. It is deliberately separate from historical Supabase migrations while the backend is migrated safely. The complete migration has NOT yet been applied remotely in one shot: bulk execution was blocked by the tool safety layer, so the migration is being applied and verified incrementally rather than bypassing safeguards.
+
+## Historical Supabase validation
+The existing Supabase migration chain remains useful as the security/reference model and still passes the isolated local Alice/Bob/Charlie RLS integration suite. It must not be connected to or reuse any unrelated Supabase project.
 
 ## Security/hardening completed on active branch
 - K-Feed server-side age gate added
 - K-MAP approximate recipients no longer receive raw exact coordinates
 - K-MAP active shares revoked on block; Ghost Mode schema/revocation added
-- Contact acceptance is atomic and service_role-only
+- Contact acceptance is atomic and service_role-only in the historical server path
 - Profile reads restricted; invisible presence is masked as offline for non-owner viewers
 - Direct 1:1 conversation join/send checks block state
 - Direct authenticated contact-request UPDATE path removed
@@ -73,29 +86,24 @@ Still not done: no dedicated remote K-ssenger database/backend is connected yet.
 - group creation rejects users blocked in either direction
 - Socket.IO `group:create` + `group:created` flow added
 - owner is inserted as `owner`, invitees as `member`, and default group settings are created atomically
-- CI #74 verifies the current group path compiles/tests with the rest of the branch
 
 ## Mobile wiring — current progress
 - existing MSN-style visual shell is preserved; no cosmetic rewrite
-- dedicated Supabase client added using only `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- no service-role/server secret is embedded in mobile code
-- real persisted Supabase session hook added with auth-state subscription
-- MSN-style login/signup screen added using `signInWithPassword` / `signUp`
-- missing remote K-ssenger configuration is shown explicitly instead of silently reusing another project's backend
-- Expo entrypoint now boots through an authenticated root; the MSN shell is only mounted after a real session exists
-- these newest mobile-auth commits are waiting for fresh CI verification
+- current mobile auth/session implementation still uses the Supabase client API and must be migrated to Neon Auth before remote use
+- persisted session root exists
+- MSN-style login/signup screen exists
+- real profile bootstrap / sign-out flow exists on the current branch
+- the app refuses to silently reuse another project's backend
 
-## Remaining release blockers / priorities
-1. Verify the new mobile auth/session entrypoint in CI, then wire real profile bootstrap and sign-out.
-2. Connect a dedicated remote K-ssenger database/backend only; re-run migrations and RLS integration there.
-3. Wire mobile contacts/presence/Wizz/chat/group calls to the authenticated backend and replace remaining local demo data progressively.
-4. Complete profile/avatar/status editing, group admin/member lifecycle, K-Feed upload/moderation, K-MAP UX and Moments progressively.
-5. Finish offline queue/retry semantics on the mobile client around the existing idempotent encrypted transport.
-6. E2EE: select/integrate a vetted native protocol implementation and prove it on Android/iOS; do not claim production E2EE before this.
-7. Produce signed/testable Android/iOS builds when build credentials/tooling are actually available.
-
-## Database/backend blocker
-No dedicated remote K-ssenger database is connected yet. Do not reuse, pause, modify or repurpose databases belonging to other projects. Local Supabase exists only as an isolated K-ssenger validation environment.
+## Remaining V1 blockers / priorities
+1. Finish applying the versioned Neon V1 schema incrementally and verify Neon RLS with real authenticated requests.
+2. Replace Supabase-specific mobile auth/data client assumptions with Neon Auth + Neon Data API.
+3. Move backend contact/chat/group/presence persistence from Supabase admin calls to the dedicated Neon database while preserving authorization guarantees.
+4. Wire mobile contacts/presence/Wizz/chat/groups to the authenticated remote backend and remove remaining local demo data.
+5. Complete profile/avatar/status editing, group admin/member lifecycle, K-Feed upload/moderation, K-MAP UX and Moments.
+6. Finish offline queue/retry semantics around the idempotent encrypted transport.
+7. E2EE: select/integrate a vetted native protocol implementation and prove it on Android/iOS; do not claim production E2EE before this.
+8. Produce signed/testable Android/iOS builds when signing/tooling is actually available.
 
 ## Hard rules
 - K-ssenger resources only; do not reuse or modify databases/deployments belonging to other projects
