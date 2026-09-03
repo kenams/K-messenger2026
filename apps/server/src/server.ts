@@ -16,12 +16,13 @@ import {
   contactSearchSchema,
   contactTargetSchema,
   conversationJoinSchema,
+  messageHistorySchema,
   messageSendSchema,
   presenceSchema,
   receiptSchema,
   wizzSchema,
 } from './validation.js';
-import { persistEncryptedMessage } from './messageStore.js';
+import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
   joinLimiter,
@@ -106,6 +107,20 @@ io.on('connection', (socket) => {
       ack?.({ ok: true });
     } catch {
       ack?.({ ok: false, error: 'FORBIDDEN' });
+    }
+  });
+
+  socket.on('conversation:history', async (raw, ack) => {
+    try {
+      if (!joinLimiter.consume(`${userId}:history`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = messageHistorySchema.parse(raw);
+      await requireConversationMember(userId, request.conversationId);
+      await requireConversationNotBlocked(userId, request.conversationId);
+      const history = await listEncryptedMessages(request);
+      ack?.({ ok: true, ...history });
+    } catch (error) {
+      logger.warn('message_history_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
     }
   });
 
