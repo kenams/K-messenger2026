@@ -45,3 +45,12 @@ comment on function public.accept_contact_request(uuid, uuid) is
 'Atomic contact acceptance: block re-check + reciprocal contacts insert +
 request status update in one transaction. Called by the server with the
 already-authenticated recipient id, not by clients directly.';
+
+-- SECURITY DEFINER functions are PUBLIC-callable by default. This one takes
+-- p_recipient_id as a caller-supplied parameter instead of deriving it from
+-- auth.uid() internally (the Node server already verified the JWT and knows
+-- the real userId) — so a direct PostgREST call with nothing but an
+-- authenticated/anon key could pass ANY p_recipient_id and accept a contact
+-- request on someone else's behalf. Lock execution to service_role only.
+revoke execute on function public.accept_contact_request(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.accept_contact_request(uuid, uuid) to service_role;

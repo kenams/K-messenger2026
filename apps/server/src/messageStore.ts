@@ -4,6 +4,13 @@ import { messageSendSchema } from './validation.js';
 
 type Envelope = z.infer<typeof messageSendSchema>;
 
+// SECURITY NOTE (scanner flag "input-trust"): envelope.conversationId /
+// senderDeviceId are persisted without re-checking membership/ownership
+// here. Reviewed as a false positive for the current call path — the only
+// caller, message:send in server.ts, already runs requireConversationMember()
+// and requireActiveDevice() before calling this. If a second call site is
+// ever added, it MUST perform the same checks first; this function does not
+// re-verify on its own.
 export async function persistEncryptedMessage(userId: string, envelope: Envelope) {
   const { data: existing, error: existingError } = await supabaseAdmin
     .from('messages')
