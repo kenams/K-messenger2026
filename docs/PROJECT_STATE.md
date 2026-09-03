@@ -3,42 +3,76 @@
 ## Repository
 `kenams/K-messenger2026`
 
-## Branches
-- `main` — docs only
-- `bootstrap/platform` — real implementation (server, mobile, web beta), verified: typecheck clean, 6/6 server tests green
-- `import/mobile-agent-kah`, `import/server-agent-kah` — Agent-Kah's prior local-only work (crypto primitives POC), imported, NOT yet merged/integrated
-- `fix/feed-kmap-contact-security` (HEAD) — 3 real security gaps found+fixed, NOT yet merged to bootstrap/platform, PR not opened
+## Active integration
+- `main` — documentation baseline only
+- `bootstrap/platform` — implementation base (server, mobile shell, web beta)
+- `fix/feed-kmap-contact-security` — active hardening/integration branch
+- PR #2 `Security hardening + messaging reliability` -> `bootstrap/platform` — OPEN, DRAFT, mergeable; keep draft until DB migrations are validated
+- `import/mobile-agent-kah`, `import/server-agent-kah` — imported Agent-Kah crypto POC/history; not blindly merged
 
-## DONE ON bootstrap/platform (verified, not just claimed)
-- Node/TS/Socket.IO server: Supabase JWT auth, conversation membership authz, device ownership/revocation check, ciphertext-only DTO validation, rate limiting, log redaction, helmet/CORS/body-size hardening
-- Core schema + RLS, K-MAP schema, K-Feed schema
-- web beta (auth/contacts/realtime chat/Wizz) deployed on Vercel
+## Latest verified CI
+- GitHub Actions CI run #61 on commit `aad9780f41fd9df16404de94baf1ace545afff29` completed SUCCESS
+- install: success
+- TypeScript typecheck: success
+- server tests: success
 
-## DONE THIS SESSION (fix/feed-kmap-contact-security, commit be6b282)
-- K-Feed: age_rating was NOT enforced server-side on read (client-filter-only bug) → fixed via `viewer_max_age_rating()` + rewritten SELECT policy (0008)
-- K-MAP: `location_points` exposed exact lat/lon to any authorized recipient regardless of share.precision='approximate' → fixed via owner-only direct SELECT + `location_point_for_viewer()` RPC that coarsens to ~1.1km when approximate (0009)
-- Contacts: `acceptContact` was 2 non-atomic service-role calls → now 1 RPC `accept_contact_request` (0010), social.ts updated
-- apps/server: typecheck clean, 6/6 tests still green
-- Migrations 0008/0009/0010 written+reviewed, NOT applied to any live Postgres (no DB access from this environment)
+## Security/hardening completed on active branch
+- K-Feed server-side age gate added
+- K-MAP approximate recipients no longer receive raw exact coordinates
+- K-MAP active shares revoked on block; Ghost Mode schema/revocation added
+- Contact acceptance is atomic and service_role-only
+- Profile reads restricted; invisible presence is masked as offline for non-owner viewers
+- Direct 1:1 conversation join/send checks block state
+- Direct authenticated contact-request UPDATE path removed
+- Pending contact requests are cleaned up when either participant blocks the other
 
-## KNOWN GAP, NOT FIXED YET (noted in 0009 RPC comment)
-Active location_shares are not auto-revoked when either party blocks the other or toggles Ghost Mode. Needs a trigger on blocks insert + a ghost-mode flag check. Scoped out to keep the precision-leak fix small.
+## Contact lifecycle implemented server-side
+- list contacts
+- list pending sent/received requests
+- username search
+- request contact with self/block/existing/pending checks
+- accept
+- decline
+- cancel outgoing request
+- remove contact mutually
+- set/unset favorite per owner
+- block removes mutual contact and cancels pending requests
+- realtime Socket.IO events added for these actions
+- migration `0015_contact_lifecycle.sql` adds secure pending-pair/index constraints
 
-## CURRENT PRIORITY (per master spec order)
-AUTH -> AUTHORIZATION -> RLS -> CONTACTS -> PRESENCE -> E2EE -> CHAT -> OFFLINE -> WIZZ -> PUSH -> MEDIA -> K-MAP -> GROUPS -> CALLS -> MOMENTS -> COMMUNITIES -> RELEASE
+## Presence hardening now implemented
+- per-user multi-socket connection tracking
+- disconnect only marks a user offline when their last socket disconnects
+- invisible is always fanned out to contacts as offline
+- explicit presence updates are broadcast only to contact audience plus self state
+- MSN-style `presence:login` event is emitted only on offline -> visible transition
+- login event has a 30-second debounce to avoid reconnect storms
+- unit coverage added for multi-socket disconnect semantics, invisible masking and login debounce
 
-Auth/authorization/RLS/contacts foundation is largely real and tested on `bootstrap/platform`. Next real gaps to close (not yet done):
-- Apply migrations 0008-0010 against an actual Supabase project + RLS integration tests (Alice/Bob/Charlie IDOR suite) — needs live DB, not available in this environment
-- location_shares auto-revoke on block/ghost-mode
-- E2EE session protocol still unselected/unproven on device (see import branches + K-ssenger-mobile local docs/CRYPTO_DECISION.md: libolm rejected, vodozemac/libsignal-native-bridge feasibility spike still pending, no compiled Android/iOS POC exists anywhere)
-- Merge/integrate import/mobile-agent-kah and import/server-agent-kah into bootstrap/platform deliberately (not done — imported only)
+## Messaging reliability progress
+- ciphertext-only message persistence remains idempotent by client message id
+- delivered/read receipt path added without plaintext payloads
+- receipt TypeScript failure fixed with type-safe upsert branches
+- CI #61 verifies the current server compiles and tests pass
 
-## DO NOT
-- force push over main or bootstrap/platform
-- discard commit history
-- copy private keys/secrets/.env into the repo
-- claim production E2EE until native implementation + device tests pass
-- implement a custom Double Ratchet casually
+## Remaining release blockers / priorities
+1. Apply migrations to a dedicated K-ssenger database/backend only; run live Alice/Bob/Charlie RLS/IDOR tests.
+2. Expand Alice/Bob/Charlie authorization coverage around contact lifecycle, blocks, receipts, K-MAP and feed visibility.
+3. Finish offline message delivery/replay semantics without plaintext.
+4. Wire the MSN-style mobile shell to real auth/contacts/presence/Wizz/chat backend.
+5. Complete groups, profile/avatar/status flows, Moments, K-Feed upload/moderation and K-MAP UX progressively.
+6. E2EE: select/integrate a vetted native protocol implementation and prove it on Android/iOS; do not claim production E2EE before this.
+7. Produce signed/testable Android/iOS builds when build credentials/tooling are available.
 
-## BUILD_BLOCKER
-No Android Studio / Xcode / EAS access in this environment → no compiled mobile build possible here. Real device/EAS build needs Kenams' machine or EAS cloud (Expo account).
+## Database/backend blocker
+No dedicated live K-ssenger database has been verified in this execution context. Do not reuse or modify databases belonging to other projects. Supabase-style migrations in this repository therefore remain unapplied/unvalidated against production-like infrastructure.
+
+## Hard rules
+- K-ssenger resources only; do not reuse or modify databases/deployments belonging to other projects.
+- no force push
+- no secrets in the public repository
+- no custom Double Ratchet casually
+- no production/E2EE/zero-bug claim without evidence
+
+## Build blocker
+No verified Android Studio/Xcode/EAS signing environment is available in this execution environment. A real installable mobile artifact requires available Expo/EAS or native signing credentials.
