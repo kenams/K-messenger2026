@@ -21,10 +21,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      BETA_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-beta
-      API_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-api
-      ORIGIN: https://vlofsaivgydbzghptlfj.supabase.co
+      BETA_URL: ${{ vars.KSSENGER_WEB_BETA_URL }}
+      API_URL: ${{ vars.KSSENGER_WEB_API_URL }}
+      ORIGIN: ${{ vars.KSSENGER_WEB_ORIGIN }}
     steps:
+      - name: Require explicit K-ssenger beta endpoints
+        run: |
+          set -euo pipefail
+          test -n "$BETA_URL"
+          test -n "$API_URL"
+          test -n "$ORIGIN"
+
       - name: Check public beta assets
         run: |
           set -euo pipefail
@@ -36,7 +43,7 @@ jobs:
           grep -q 'kss-api' app.js
           curl --fail --silent --show-error "$API_URL/health" | jq -e '.ok == true' >/dev/null
 
-      - name: Two-user auth contacts chat Wizz block flow
+      - name: Two-user auth contacts chat K-Pulse block flow
         run: |
           set -euo pipefail
           suffix="${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}"
@@ -74,7 +81,7 @@ jobs:
           curl --fail -sS -b b.cookie "$api/messages?peer=$aid" | jq -e --arg m "$message" '.messages | any(.body==$m and .kind=="text")' >/dev/null
 
           curl --fail -sS -b a.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
-            -d "$(jq -nc --arg peer "$bid" '{peer:$peer,body:"WIZZ",kind:"wizz"}')" "$api/send" >/dev/null
+            -d "$(jq -nc --arg peer "$bid" '{peer:$peer,body:"K-PULSE",kind:"wizz"}')" "$api/send" >/dev/null
           curl --fail -sS -b b.cookie "$api/messages?peer=$aid" | jq -e '.messages | any(.kind=="wizz")' >/dev/null
 
           curl --fail -sS -b b.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
