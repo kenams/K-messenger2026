@@ -23,6 +23,8 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
   const [username, setUsername] = useState(profile.username);
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [customStatus, setCustomStatus] = useState(profile.custom_status ?? '');
+  const [nowPlayingTitle, setNowPlayingTitle] = useState(profile.now_playing_title ?? '');
+  const [nowPlayingArtist, setNowPlayingArtist] = useState(profile.now_playing_artist ?? '');
   const [bio, setBio] = useState(profile.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url ?? '');
   const [busy, setBusy] = useState(false);
@@ -44,6 +46,8 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
           username: normalizedUsername,
           display_name: displayName.trim().slice(0, 64),
           custom_status: customStatus.trim().slice(0, 140) || null,
+          now_playing_title: nowPlayingTitle.trim().slice(0, 120) || null,
+          now_playing_artist: nowPlayingArtist.trim().slice(0, 120) || null,
           bio: bio.trim().slice(0, 500) || null,
           avatar_url: avatar,
           updated_at: new Date().toISOString(),
@@ -78,6 +82,11 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         <Text style={styles.label}>STATUT</Text>
         <TextInput value={customStatus} onChangeText={setCustomStatus} maxLength={140} placeholder="Quoi de neuf ?" style={styles.input} />
 
+        <Text style={styles.label}>MUSIQUE EN COURS</Text>
+        <TextInput value={nowPlayingTitle} onChangeText={setNowPlayingTitle} maxLength={120} placeholder="Titre du morceau" style={styles.input} />
+        <TextInput value={nowPlayingArtist} onChangeText={setNowPlayingArtist} maxLength={120} placeholder="Artiste" style={[styles.input, styles.stackedInput]} />
+        <Text style={styles.hint}>♫ Affiché à tes contacts selon tes réglages de confidentialité.</Text>
+
         <Text style={styles.label}>BIO</Text>
         <TextInput value={bio} onChangeText={setBio} maxLength={500} multiline placeholder="Quelques mots sur toi" style={[styles.input, styles.multiline]} />
 
@@ -96,6 +105,6 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#edf7fc' }, header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, back: { fontSize: 39, color: '#2189c5' }, brand: { color: '#3784b5', fontSize: 9, letterSpacing: 2, fontWeight: '900' }, title: { color: '#173448', fontSize: 18, fontWeight: '900' },
-  content: { padding: 18, paddingBottom: 40 }, label: { marginTop: 16, marginBottom: 6, color: '#52768a', fontSize: 10, letterSpacing: 1.2, fontWeight: '900' }, input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 15, paddingHorizontal: 14, paddingVertical: 12, color: '#173448' }, multiline: { minHeight: 100, textAlignVertical: 'top' }, hint: { color: '#8197a4', fontSize: 10, lineHeight: 14, marginTop: 5 }, error: { color: '#b42318' }, notice: { marginTop: 16, color: '#326e94', fontWeight: '700' },
+  content: { padding: 18, paddingBottom: 40 }, label: { marginTop: 16, marginBottom: 6, color: '#52768a', fontSize: 10, letterSpacing: 1.2, fontWeight: '900' }, input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 15, paddingHorizontal: 14, paddingVertical: 12, color: '#173448' }, stackedInput: { marginTop: 8 }, multiline: { minHeight: 100, textAlignVertical: 'top' }, hint: { color: '#8197a4', fontSize: 10, lineHeight: 14, marginTop: 5 }, error: { color: '#b42318' }, notice: { marginTop: 16, color: '#326e94', fontWeight: '700' },
   primary: { minHeight: 48, marginTop: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 16 }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { opacity: 0.45 },
 });
