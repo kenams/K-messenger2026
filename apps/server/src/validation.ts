@@ -33,6 +33,15 @@ export const contactRequestSchema = z.object({
   requestId: z.string().uuid(),
 }).strict();
 
+export const contactFavoriteSchema = z.object({
+  userId: z.string().uuid(),
+  favorite: z.boolean(),
+}).strict();
+
+export const contactSearchSchema = z.object({
+  query: z.string().trim().min(2).max(32),
+}).strict();
+
 export const wizzSchema = z.object({
   recipientId: z.string().uuid(),
   variant: z.enum(['classic', 'love', 'fire', 'troll']).default('classic'),
