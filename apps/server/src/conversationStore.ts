@@ -30,7 +30,8 @@ export async function listConversations(userId: string) {
                   'displayName', p.display_name,
                   'nickname', p.nickname,
                   'avatarUrl', p.avatar_url,
-                  'presence', case when p.presence = 'invisible' then 'offline' else p.presence end
+                  'presence', case when p.presence = 'invisible' then 'offline' else p.presence end,
+                  'role', all_members.role
                 )
                 order by p.display_name asc
               ) filter (where p.id is not null),
