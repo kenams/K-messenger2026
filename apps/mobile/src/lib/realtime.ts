@@ -7,18 +7,23 @@ export const isRealtimeConfigured = socketUrl.startsWith('https://') || socketUr
 
 let socket: Socket | null = null;
 
-async function getAccessToken(): Promise<string> {
+async function getSessionIdentity(): Promise<{ accessToken: string; userId: string }> {
   const { data, error } = await getBackend().auth.getSession();
   if (error) throw error;
-  const session = data.session as ({ access_token?: string } | null);
-  const token = session?.access_token;
-  if (!token) throw new Error('NO_ACCESS_TOKEN');
-  return token;
+  const session = data.session as ({ access_token?: string; user?: { id?: string } } | null);
+  const accessToken = session?.access_token;
+  const userId = session?.user?.id;
+  if (!accessToken || !userId) throw new Error('NO_AUTHENTICATED_SESSION');
+  return { accessToken, userId };
+}
+
+export async function getAuthenticatedUserId(): Promise<string> {
+  return (await getSessionIdentity()).userId;
 }
 
 export async function getRealtimeSocket(): Promise<Socket> {
   if (!isRealtimeConfigured) throw new Error('REALTIME_NOT_CONFIGURED');
-  const accessToken = await getAccessToken();
+  const { accessToken } = await getSessionIdentity();
 
   if (!socket) {
     socket = io(socketUrl, {
