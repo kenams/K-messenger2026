@@ -1,5 +1,22 @@
 -- MSN 2027 identity: nicknames, now-playing, contact lists and safe group metadata.
 
+-- Fix: this migration's later policies call public.is_conversation_member(uuid),
+-- which was never defined anywhere in the migration set (would fail to apply /
+-- 42883 undefined function). Same membership check already used inline in
+-- 0001_core.sql, extracted here as a reusable function.
+create or replace function public.is_conversation_member(p_conversation_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.conversation_members cm
+    where cm.conversation_id = p_conversation_id and cm.user_id = auth.uid()
+  );
+$$;
+
 alter table public.profiles
   add column if not exists nickname text,
   add column if not exists now_playing_title text,
