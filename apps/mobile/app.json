@@ -6,8 +6,21 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.kahdigital.kssenger" },
-    "android": { "package": "com.kahdigital.kssenger" },
-    "web": { "bundler": "metro" }
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kahdigital.kssenger"
+    },
+    "android": {
+      "package": "com.kahdigital.kssenger"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "990e00eb-6114-45ef-acf5-5d49087aef50"
+      }
+    },
+    "owner": "kenams"
   }
 }
