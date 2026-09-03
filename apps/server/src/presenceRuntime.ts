@@ -5,6 +5,7 @@ const LOGIN_EVENT_DEBOUNCE_MS = 30_000;
 export class PresenceRuntime {
   private readonly socketsByUser = new Map<string, Set<string>>();
   private readonly lastLoginEventAt = new Map<string, number>();
+  private readonly visibleStatusByUser = new Map<string, Exclude<PresenceStatus, 'invisible'>>();
 
   connect(userId: string, socketId: string): { firstSocket: boolean } {
     const sockets = this.socketsByUser.get(userId) ?? new Set<string>();
@@ -29,6 +30,17 @@ export class PresenceRuntime {
 
   hasConnections(userId: string): boolean {
     return (this.socketsByUser.get(userId)?.size ?? 0) > 0;
+  }
+
+  noteStatus(userId: string, status: PresenceStatus): { visibleStatus: Exclude<PresenceStatus, 'invisible'>; becameVisible: boolean } {
+    const visibleStatus = visiblePresence(status);
+    const previous = this.visibleStatusByUser.get(userId) ?? 'offline';
+    this.visibleStatusByUser.set(userId, visibleStatus);
+    return { visibleStatus, becameVisible: previous === 'offline' && visibleStatus !== 'offline' };
+  }
+
+  markOffline(userId: string): void {
+    this.visibleStatusByUser.set(userId, 'offline');
   }
 
   shouldEmitLoginEvent(userId: string, now = Date.now()): boolean {
