@@ -13,38 +13,61 @@ export async function listContacts(userId: string) {
   const { rows } = await query<{
     contact_id: string;
     favorite: boolean;
+    list_name: string;
     id: string;
     username: string;
     display_name: string;
+    nickname: string | null;
     avatar_url: string | null;
     custom_status: string | null;
     presence: string;
+    now_playing_title: string | null;
+    now_playing_artist: string | null;
   }>(
     `select c.contact_id,
             c.favorite,
+            c.list_name,
             p.id,
             p.username,
             p.display_name,
+            p.nickname,
             p.avatar_url,
             p.custom_status,
-            case when p.presence = 'invisible' then 'offline' else p.presence end as presence
+            case
+              when p.presence = 'invisible' then 'offline'
+              when coalesce(ps.show_online, 'contacts') = 'nobody' then 'offline'
+              else p.presence
+            end as presence,
+            case
+              when coalesce(ps.show_music, 'contacts') = 'nobody' then null
+              else p.now_playing_title
+            end as now_playing_title,
+            case
+              when coalesce(ps.show_music, 'contacts') = 'nobody' then null
+              else p.now_playing_artist
+            end as now_playing_artist
        from public.contacts c
        join public.profiles p on p.id = c.contact_id
+       left join public.privacy_settings ps on ps.user_id = p.id
       where c.owner_id = $1
-      order by c.favorite desc, p.display_name asc`,
+      order by c.favorite desc, c.list_name asc, p.display_name asc`,
     [userId],
   );
 
   return rows.map((row) => ({
     contact_id: row.contact_id,
     favorite: row.favorite,
+    list_name: row.list_name,
     profiles: {
       id: row.id,
       username: row.username,
       display_name: row.display_name,
+      nickname: row.nickname,
       avatar_url: row.avatar_url,
       custom_status: row.custom_status,
       presence: row.presence,
+      now_playing_title: row.now_playing_title,
+      now_playing_artist: row.now_playing_artist,
     },
   }));
 }
@@ -78,8 +101,20 @@ export async function searchProfiles(userId: string, searchQuery: string) {
             p.display_name,
             p.avatar_url,
             p.custom_status,
-            case when p.presence = 'invisible' then 'offline' else p.presence end as presence
+            case
+              when p.presence = 'invisible' then 'offline'
+              when coalesce(ps.show_online, 'contacts') = 'everyone' then p.presence
+              when coalesce(ps.show_online, 'contacts') = 'contacts'
+                and exists (
+                  select 1
+                    from public.contacts c
+                   where c.owner_id = $1
+                     and c.contact_id = p.id
+                ) then p.presence
+              else 'offline'
+            end as presence
        from public.profiles p
+       left join public.privacy_settings ps on ps.user_id = p.id
       where p.id <> $1
         and (p.username ilike $2 or p.display_name ilike $2)
         and not exists (
