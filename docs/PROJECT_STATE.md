@@ -9,9 +9,10 @@
 
 ## Latest verified GitHub state
 Verified 2026-09-04:
-- CI #202 on `a63e3720b12b458289e02ebacf4c02fef6133195`: SUCCESS.
+- CI #204 on `748205e46cdc02b955e71f61632209561f591729`: SUCCESS.
 - Typecheck/server tests/core RLS/K-Feed-Moments-K-MAP isolated RLS suites were green on that head.
-- New functional commit `01fa9b8747bd2023b39d737ae2a2a8f35a4b0896` adds a dedicated guarded `group:bans-list` Socket.IO registration module. CI for this new head is not yet release-validated.
+- New functional commit `2d35b9cdb707b58027dce0a3ced844b99928dfce` adds regression coverage for the guarded `group:bans-list` Socket.IO contract: rate-limit short-circuit, forged actor rejection and malformed conversation UUID rejection.
+- CI for the new functional head is not yet release-validated.
 - No force-push was used.
 
 ## Dedicated Neon backend
@@ -46,9 +47,10 @@ Implemented/validated on prior green heads:
 - `group:mute`, `group:ban` and `group:unban` handlers are registered.
 
 Current functional addition:
-- `groupModerationSocket.ts` now defines `registerGroupBanListHandler()` for `group:bans-list`.
+- `groupModerationSocket.ts` defines `registerGroupBanListHandler()` for `group:bans-list`.
 - The handler uses only the authenticated socket `userId`, parses the strict UUID-only `groupConversationSchema`, rate-limits through an injected limiter callback, then calls transaction-protected `listGroupBans()`.
 - Forged actor/role fields remain rejected by the strict request schema; rejected/malformed requests fail closed.
+- New regression tests lock the handler's fail-closed behavior for rate limiting, forged actor fields and malformed conversation IDs.
 - `server.ts` still needs to call this registration helper before `group:bans-list` becomes available at runtime.
 
 ## Mobile runtime
