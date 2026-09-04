@@ -37,6 +37,7 @@ import {
   setGroupMemberRole,
 } from './groupStore.js';
 import { banGroupMember, setGroupMute, unbanGroupMember } from './groupModerationStore.js';
+import { registerGroupBanListHandler } from './groupModerationSocket.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -132,6 +133,12 @@ io.on('connection', (socket) => {
   socket.join(`user:${userId}`);
   const { firstSocket } = presenceRuntime.connect(userId, socket.id);
   logger.info('socket_connected', { userId, socketId: socket.id, firstSocket });
+
+  registerGroupBanListHandler({
+    socket,
+    userId,
+    consumeRateLimit: () => socialLimiter.consume(`${userId}:group:bans-list`),
+  });
 
   socket.on('conversation:direct', async (raw, ack) => {
     try {
