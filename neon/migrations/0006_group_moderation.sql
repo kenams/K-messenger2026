@@ -1,6 +1,7 @@
 -- K-ssenger group moderation state.
--- Backend-controlled only: authenticated clients may read moderation state for
--- groups they belong to, but cannot directly mute/ban or bypass group roles.
+-- Backend-controlled only: authenticated Data API clients must not read or mutate
+-- the ban registry directly. Owner/admin authorization is enforced by the realtime
+-- server before the privileged database store accesses these rows.
 
 alter table public.conversation_members
   add column if not exists muted_until timestamptz;
@@ -19,8 +20,5 @@ create index if not exists group_bans_user_idx on public.group_bans(user_id);
 
 alter table public.group_bans enable row level security;
 
-create policy group_bans_member_read on public.group_bans for select to authenticated
-using (public.is_conversation_member(conversation_id, auth.user_id()::uuid));
-
-revoke insert, update, delete on public.group_bans from authenticated;
-grant select on public.group_bans to authenticated;
+drop policy if exists group_bans_member_read on public.group_bans;
+revoke select, insert, update, delete on public.group_bans from authenticated;
