@@ -10,7 +10,7 @@ export type GroupBanSummary = {
   avatarUrl: string | null;
   bannedBy: string;
   reason: string | null;
-  bannedAt: Date;
+  bannedAt: string;
 };
 
 async function requireModerator(client: PoolClient, actorId: string, conversationId: string) {
@@ -82,7 +82,7 @@ export async function listGroupBans(actorId: string, conversationId: string): Pr
       avatarUrl: row.avatar_url,
       bannedBy: row.banned_by,
       reason: row.reason,
-      bannedAt: row.created_at,
+      bannedAt: row.created_at.toISOString(),
     }));
   });
 }
