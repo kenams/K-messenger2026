@@ -3,6 +3,13 @@ name: Remote Social Smoke
 on:
   push:
     branches: [fix/feed-kmap-contact-security]
+    paths:
+      - 'apps/server/**'
+      - 'neon/migrations/**'
+      - 'scripts/remote-social-smoke*.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/remote-social-smoke.yml'
 
 jobs:
   social-smoke:
