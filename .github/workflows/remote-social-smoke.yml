@@ -13,7 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - name: Wake realtime service
         run: curl --fail --silent --show-error --max-time 30 https://kssenger-server.onrender.com/health
       - name: Run real Neon social smoke
