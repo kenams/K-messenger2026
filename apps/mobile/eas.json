@@ -16,7 +16,12 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_NEON_AUTH_URL": "https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth",
+        "EXPO_PUBLIC_NEON_DATA_API_URL": "https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1",
+        "EXPO_PUBLIC_KSSENGER_SOCKET_URL": "https://kssenger-server.onrender.com"
+      }
     }
   },
   "submit": {
