@@ -5,7 +5,9 @@ import {
   buildUnbanPayload,
   buildUnmutePayload,
   normalizeGroupBanListResponse,
+  normalizeGroupModerationEvent,
   type GroupBanSummary,
+  type GroupModerationEvent,
 } from './groupModeration';
 
 type MutationAck = {
@@ -55,4 +57,32 @@ export async function unbanGroupMemberRealtime(conversationId: string, userId: s
   const socket = await getRealtimeSocket();
   const raw = await emitAck<unknown>(socket, 'group:unban', buildUnbanPayload(conversationId, userId));
   requireSuccessfulAck(raw);
+}
+
+export async function subscribeToGroupModerationRealtime(
+  onEvent: (event: GroupModerationEvent) => void,
+): Promise<() => void> {
+  const socket = await getRealtimeSocket();
+
+  const handleModeration = (raw: unknown) => {
+    const event = normalizeGroupModerationEvent(raw);
+    if (event) onEvent(event);
+  };
+
+  const handleBanned = (raw: unknown) => {
+    const event = normalizeGroupModerationEvent(
+      raw && typeof raw === 'object'
+        ? { ...(raw as Record<string, unknown>), action: 'banned' }
+        : raw,
+    );
+    if (event) onEvent(event);
+  };
+
+  socket.on('group:moderation', handleModeration);
+  socket.on('group:banned', handleBanned);
+
+  return () => {
+    socket.off('group:moderation', handleModeration);
+    socket.off('group:banned', handleBanned);
+  };
 }
