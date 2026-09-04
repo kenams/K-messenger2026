@@ -38,6 +38,11 @@ async function asRole(role, userId, fn) {
 
 async function main() {
   await client.connect();
+
+  // Neon Data API defines `anon`; the local PostgreSQL fixture does not. Create
+  // the no-login role before applying the migration so CI also proves the
+  // explicit REVOKE path rather than merely exercising the conditional branch.
+  await client.query(`do $$ begin if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; end $$;`);
   await client.query(await fs.readFile('neon/migrations/0009_push_subscriptions.sql', 'utf8'));
 
   const token = 'ExponentPushToken[kssenger-ci-alice]';
