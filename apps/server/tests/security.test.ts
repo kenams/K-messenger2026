@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   groupBanSchema,
+  groupConversationSchema,
   groupMuteSchema,
   messageSendSchema,
   presenceSchema,
@@ -34,6 +35,13 @@ describe('network contracts', () => {
     expect(receiptSchema.safeParse({ ...base, state: 'delivered' }).success).toBe(true);
     expect(receiptSchema.safeParse({ ...base, state: 'read' }).success).toBe(true);
     expect(receiptSchema.safeParse({ ...base, state: 'seen-by-server' }).success).toBe(false);
+  });
+
+  it('strictly validates group-scoped read requests', () => {
+    const conversationId = '550e8400-e29b-41d4-a716-446655440019';
+    expect(groupConversationSchema.safeParse({ conversationId }).success).toBe(true);
+    expect(groupConversationSchema.safeParse({ conversationId, actorId: 'attacker' }).success).toBe(false);
+    expect(groupConversationSchema.safeParse({ conversationId: 'not-a-uuid' }).success).toBe(false);
   });
 
   it('strictly validates group mute payloads', () => {
