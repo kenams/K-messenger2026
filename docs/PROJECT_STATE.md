@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #184 (`33843184672`) on head `10981a650659ac4b9d34cd3c0eaeab35aa1cf1a3`: SUCCESS
+- CI #186 on head `47bee5a295dcb19f9fe8a33ea47d1460859b60e0`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict mute/ban payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks and authenticated Socket.IO moderation handlers are CI-validated through #184
-- current functional head adds mobile-safe moderation capability/payload helpers in `apps/mobile/src/features/groups/groupModeration.ts`; verify its new CI before treating that helper as release-validated
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict mute/ban payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks and authenticated Socket.IO moderation handlers are CI-validated through #186
+- functional head `186bde91eaf75b53be0c850f04433eb9c5702bf3` completes mobile moderation helper coverage with safe unban payload construction plus defensive moderation-event normalization; CI #187 is queued and must pass before this helper update is treated as release-validated
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -91,7 +91,7 @@ Completed and CI-validated unless explicitly noted:
 - Chats private list uses authenticated `conversations:list`
 - Groups lists/creates/opens real groups and renders real members/presence/history
 - owner/admin group controls call real server mutations: invite contact, remove member, promote/demote admin, transfer ownership and leave group
-- mobile moderation capability helpers now mirror backend role boundaries and produce bounded one-hour mute/unmute/ban payloads without accepting actor identity from the client; UI wiring remains next
+- mobile moderation helpers mirror backend role boundaries, construct bounded one-hour mute/unmute/ban/unban payloads without accepting actor identity from the client, and defensively normalize incoming moderation events before UI consumption
 - group moderation controls for mute/ban/unban are not yet exposed in `GroupsScreen`; server wiring is CI-validated
 - group read-receipt preference parity is not yet complete
 - plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated and device-tested
@@ -143,7 +143,7 @@ CI-validated Neon-native schema covers:
 3. apply and verify K-Feed/Moments/K-MAP plus group-integrity/moderation migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. wire the new moderation capability helpers into mobile Groups for mute/unmute/ban and consume `group:moderation` / `group:banned` events; add a safe banned-user listing path before exposing unban UX
+6. wire the moderation helpers into mobile Groups for mute/unmute/ban and consume `group:moderation` / `group:banned`; add a moderator-only banned-user listing path before exposing unban UX
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
