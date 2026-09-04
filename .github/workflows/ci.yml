@@ -51,3 +51,7 @@ jobs:
         env:
           DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
         run: node scripts/neon-social-rls-integration-test.mjs
+      - name: Run push subscription RLS isolation suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+        run: node scripts/neon-push-rls-integration-test.mjs
