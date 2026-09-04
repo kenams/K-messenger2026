@@ -10,6 +10,13 @@ export type GroupModerationCapabilities = {
   canBan: boolean;
 };
 
+export type GroupModerationEvent = {
+  conversationId: string;
+  userId: string;
+  action: 'muted' | 'unmuted' | 'banned';
+  mutedUntil?: string | null;
+};
+
 export function getGroupModerationCapabilities(
   actorUserId: string,
   actorRole: GroupRole,
@@ -51,5 +58,23 @@ export function buildBanPayload(conversationId: string, userId: string, reason?:
     conversationId,
     userId,
     ...(normalizedReason ? { reason: normalizedReason.slice(0, 240) } : {}),
+  };
+}
+
+export function buildUnbanPayload(conversationId: string, userId: string) {
+  return { conversationId, userId };
+}
+
+export function normalizeGroupModerationEvent(raw: unknown): GroupModerationEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.conversationId !== 'string' || typeof value.userId !== 'string') return null;
+  if (value.action !== 'muted' && value.action !== 'unmuted' && value.action !== 'banned') return null;
+  if (value.mutedUntil !== undefined && value.mutedUntil !== null && typeof value.mutedUntil !== 'string') return null;
+  return {
+    conversationId: value.conversationId,
+    userId: value.userId,
+    action: value.action,
+    mutedUntil: value.mutedUntil as string | null | undefined,
   };
 }
