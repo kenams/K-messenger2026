@@ -45,4 +45,14 @@ create policy push_subscriptions_self_delete
   using (user_id = auth.user_id()::uuid);
 
 grant select, insert, update, delete on public.push_subscriptions to authenticated;
-revoke all on public.push_subscriptions from anon;
+
+-- Neon Data API deployments define `anon`, while local PostgreSQL CI fixtures
+-- may not. Keep the production hardening without making the migration depend on
+-- a provider-specific role existing in every test database.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on public.push_subscriptions from anon;
+  end if;
+end
+$$;
