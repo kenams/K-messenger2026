@@ -44,6 +44,10 @@ export function AuthScreen() {
         if (authError) setError('Création du compte impossible. Essaie un autre pseudo ou réessaie dans un instant.');
         else if (!data.session) setNotice('Compte créé. Confirme ton e-mail pour te connecter.');
       }
+    } catch {
+      setError(mode === 'login'
+        ? 'K-ssenger ne peut pas joindre le service de connexion pour le moment.'
+        : 'K-ssenger ne peut pas créer le compte pour le moment. Réessaie quand la connexion est rétablie.');
     } finally {
       setBusy(false);
     }
@@ -81,13 +85,13 @@ export function AuthScreen() {
         </>}
 
         <TextInput autoCapitalize="none" autoCorrect={false} keyboardType="email-address" placeholder="E-mail" value={email} onChangeText={setEmail} style={styles.input} />
-        <TextInput autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="Mot de passe (8 caractères minimum)" value={password} onChangeText={setPassword} style={styles.input} onSubmitEditing={submit} />
+        <TextInput autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="Mot de passe (8 caractères minimum)" value={password} onChangeText={setPassword} style={styles.input} onSubmitEditing={() => void submit()} />
 
         {mode === 'signup' && normalizedUsername.length > 0 && normalizedUsername.length < 3 && <Text style={styles.hint}>Le pseudo doit contenir au moins 3 caractères.</Text>}
         {!!error && <Text style={styles.error}>{error}</Text>}
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
 
-        <TouchableOpacity style={[styles.primary, !canSubmit && styles.disabled]} disabled={!canSubmit} onPress={submit}>
+        <TouchableOpacity style={[styles.primary, !canSubmit && styles.disabled]} disabled={!canSubmit} onPress={() => void submit()}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{mode === 'login' ? 'Connexion' : 'Créer mon compte'}</Text>}
         </TouchableOpacity>
 
