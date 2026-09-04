@@ -105,7 +105,11 @@ export async function setGroupMute(
       [conversationId, targetId, mutedUntil],
     );
     if ((result.rowCount ?? 0) !== 1) throw new Error('GROUP_MUTE_CONFLICT');
-    return { conversationId, userId: targetId, mutedUntil: result.rows[0]?.muted_until ?? null };
+    return {
+      conversationId,
+      userId: targetId,
+      mutedUntil: result.rows[0]?.muted_until?.toISOString() ?? null,
+    };
   });
 }
 
