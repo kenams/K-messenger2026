@@ -15,8 +15,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Reject high-severity runtime dependency advisories
-        run: npm audit --omit=dev --audit-level=high
+      - name: Gate high-severity runtime dependency advisories
+        run: node scripts/runtime-audit-gate.mjs
       - run: npm run typecheck
       - run: npm run test:server
 
