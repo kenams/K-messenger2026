@@ -57,6 +57,7 @@ import {
   canWizz,
   declineContact,
   getContactAudience,
+  listBlockedUsers,
   listContactRequests,
   listContacts,
   removeContact,
@@ -64,6 +65,7 @@ import {
   searchProfiles,
   setFavorite,
   setPresence,
+  unblockUser,
 } from './social.js';
 
 const app = express();
@@ -403,6 +405,19 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('contacts:blocked', async (_raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:blocked-list`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      ack?.({ ok: true, blocked: await listBlockedUsers(userId) });
+    } catch (error) {
+      logger.warn('contacts_blocked_list_rejected', {
+        userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
   socket.on('contacts:search', async (raw, ack) => {
     try {
       if (!socialLimiter.consume(`${userId}:search`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
@@ -491,8 +506,25 @@ io.on('connection', (socket) => {
       const { userId: blockedId } = contactTargetSchema.parse(raw);
       await blockUser(userId, blockedId);
       io.to(`user:${blockedId}`).emit('contact:removed', { userId });
+      io.to(`user:${userId}`).emit('contact:blocked', { userId: blockedId });
       ack?.({ ok: true });
     } catch {
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('contact:unblock', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:unblock`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const { userId: blockedId } = contactTargetSchema.parse(raw);
+      await unblockUser(userId, blockedId);
+      io.to(`user:${userId}`).emit('contact:unblocked', { userId: blockedId });
+      ack?.({ ok: true });
+    } catch (error) {
+      logger.warn('contact_unblock_rejected', {
+        userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
