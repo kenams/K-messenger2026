@@ -16,9 +16,11 @@ import {
   contactSearchSchema,
   contactTargetSchema,
   conversationJoinSchema,
+  groupBanSchema,
   groupConversationSchema,
   groupCreateSchema,
   groupMemberSchema,
+  groupMuteSchema,
   groupRoleSchema,
   messageHistorySchema,
   messageSendSchema,
@@ -34,6 +36,7 @@ import {
   removeGroupMember,
   setGroupMemberRole,
 } from './groupStore.js';
+import { banGroupMember, setGroupMute, unbanGroupMember } from './groupModerationStore.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -247,6 +250,69 @@ io.on('connection', (socket) => {
       ack?.({ ok: true, ...result });
     } catch (error) {
       logger.warn('group_role_set_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:mute', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:mute`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = groupMuteSchema.parse(raw);
+      const result = await setGroupMute(
+        userId,
+        request.conversationId,
+        request.userId,
+        request.mutedUntil ? new Date(request.mutedUntil) : null,
+      );
+      io.to(`conversation:${request.conversationId}`).emit('group:updated', {
+        ...result,
+        action: request.mutedUntil ? 'member-muted' : 'member-unmuted',
+        actorId: userId,
+      });
+      io.to(`user:${request.userId}`).emit('group:moderation', {
+        ...result,
+        action: request.mutedUntil ? 'muted' : 'unmuted',
+        actorId: userId,
+      });
+      ack?.({ ok: true, ...result });
+    } catch (error) {
+      logger.warn('group_mute_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:ban', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:ban`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = groupBanSchema.parse(raw);
+      const result = await banGroupMember(userId, request.conversationId, request.userId, request.reason ?? null);
+      io.in(`user:${request.userId}`).socketsLeave(`conversation:${request.conversationId}`);
+      io.to(`user:${request.userId}`).emit('group:banned', { ...result, actorId: userId });
+      io.to(`conversation:${request.conversationId}`).emit('group:updated', {
+        ...result,
+        action: 'member-banned',
+        actorId: userId,
+      });
+      ack?.({ ok: true, ...result });
+    } catch (error) {
+      logger.warn('group_ban_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:unban', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:unban`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = groupMemberSchema.parse(raw);
+      const result = await unbanGroupMember(userId, request.conversationId, request.userId);
+      io.to(`conversation:${request.conversationId}`).emit('group:updated', {
+        ...result,
+        action: 'member-unbanned',
+        actorId: userId,
+      });
+      ack?.({ ok: true, ...result });
+    } catch (error) {
+      logger.warn('group_unban_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
