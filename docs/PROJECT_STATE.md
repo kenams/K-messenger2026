@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #178 (`33832128105`) on head `43c0ccd1fe65c67322569e43339eafa9f671ada5`: SUCCESS
+- CI #180 (`33835726705`) on head `44caa7c46041a78f21922d9f2c9451d8fc896e1b`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict mute/ban payload validation, and the active-ban reinvite guard are CI-validated through #178
-- current functional head `4e9be01fd7602456875f91ddc4249498e35c1b8b` additionally enforces group mute at the message persistence boundary; its own CI pass is pending
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict mute/ban payload validation, the active-ban reinvite guard, and persistence-level group mute enforcement are CI-validated through #180
+- current functional head `8c49fc59828a59d639cc6c4e74512f3f07e5250f` additionally enforces receipt conversation membership inside the persistence function itself; its own CI pass is pending
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -57,6 +57,7 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - contact list exposes nickname, custom status and now-playing metadata only through privacy-aware server shaping
 - `show_music='nobody'` suppresses now-playing title/artist from the contact list response
 - message history/persistence/receipts remain ciphertext-envelope only
+- receipt persistence now independently requires the verified user to still be a member of the message conversation both when loading the message and immediately before the receipt upsert; this reduces authorization-race and future-call-site bypass risk
 - direct conversation creation/reuse uses contact/block checks plus transaction advisory locking to prevent duplicate 1:1 conversations
 - authenticated `conversations:list` returns only conversations where the verified user is a member and exposes safe metadata without plaintext/ciphertext bodies
 - group creation/member add/remove/role promotion/demotion/leave are transaction-backed and authorization checked server-side
@@ -67,7 +68,7 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - migration 0006 adds `muted_until` plus backend-controlled `group_bans`; authenticated clients have no direct mutation grant
 - strict `groupMuteSchema` / `groupBanSchema` contracts reject forged extra moderation fields, validate ISO mute expiry and bound ban reasons to 240 characters
 - `addGroupMember` rejects any target still present in `group_bans`, preventing an admin/owner from bypassing an active ban by inviting that user again; unban must occur first
-- `persistEncryptedMessage()` now calls `requireGroupCanSend()` before insertion, providing defense-in-depth mute enforcement at the persistence boundary; because `message:send` persists only through this function, a muted group member cannot successfully persist a message once migration 0006 is present
+- `persistEncryptedMessage()` calls `requireGroupCanSend()` before insertion, providing defense-in-depth mute enforcement at the persistence boundary; because `message:send` persists only through this function, a muted group member cannot successfully persist a message once migration 0006 is present
 - mute/ban/unban Socket.IO events still must be registered before group moderation is operational end-to-end
 
 ## Mobile Runtime
