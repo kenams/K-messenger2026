@@ -12,13 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- latest fully CI-verified functional head remains `006771dbb886e211c07c0e3f9b2e6d006c8b8983`
-- CI #162 (`33815219284`): SUCCESS
+- CI #168 (`33816339120`) on documentation head `638a8435a09822901e386b91356c4abc47439de5`: SUCCESS
+- the underlying group ownership-transfer functional change `6f0b7d929e75b481e3ba8c652f24a86d52346f02` is therefore CI-validated
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
-- current functional head `6f0b7d929e75b481e3ba8c652f24a86d52346f02` hardens group ownership transfer; CI #167 (`33816279969`) is running and must not be called successful until completion
+- current functional head now includes DB-level single-owner enforcement in fresh core installs plus incremental migration `0005_group_single_owner.sql` for already-provisioned databases
+- CI for the new DB-integrity head must complete before this new index is called validated
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -27,19 +28,18 @@ Only the dedicated free Neon project `K-ssenger` (`late-flower-65059830`) may be
 Re-verified through the connected Neon project on 2026-09-04:
 - PostgreSQL 17
 - region `aws-eu-central-1`
-- database `kssenger`
 - dedicated free project only
 - Neon Auth / Better Auth and Data API remain the intended auth/data surfaces
-- remote public schema currently contains exactly the ten core V1 tables: `profiles`, `privacy_settings`, `contacts`, `contact_requests`, `blocks`, `conversations`, `conversation_members`, `devices`, `messages`, `message_receipts`
-- all ten remote core tables have PostgreSQL RLS enabled
-- no K-Feed/Moments/K-MAP table is currently present in the remote public schema
+- no other Neon project was touched during this run
+- remote public schema remains on the previously verified ten core V1 tables until an approved migration step is performed
 - message persistence remains ciphertext-envelope only and idempotent by `(sender_user_id, client_message_id)`
 
 Important remote migration status:
 - `neon/migrations/0002_social_content_location.sql`
 - `neon/migrations/0003_social_content_grants.sql`
 - `neon/migrations/0004_kmap_owner_revoke_policy.sql`
-are committed and CI-validated against isolated PostgreSQL 17, but are not yet applied to the dedicated remote Neon branch.
+- `neon/migrations/0005_group_single_owner.sql`
+are committed for the dedicated Neon design; 0002-0004 remain isolated-CI validated and not remotely applied, while 0005 is newly added and awaits CI plus explicit remote migration approval.
 - applying remote schema changes requires an explicit migration approval step; never bypass that safeguard
 
 ## Server Runtime
@@ -58,7 +58,8 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - direct conversation creation/reuse uses contact/block checks plus transaction advisory locking to prevent duplicate 1:1 conversations
 - authenticated `conversations:list` returns only conversations where the verified user is a member and exposes safe metadata without plaintext/ciphertext bodies
 - group creation/member add/remove/role promotion/demotion/leave are transaction-backed and authorization checked server-side
-- group ownership transfer is now transaction-backed with explicit row-count conflict checks: the current owner is demoted before the selected member is promoted, avoiding a transient duplicate-owner conflict once single-owner DB enforcement is added; CI validation for this current-head change is pending
+- group ownership transfer is transaction-backed with explicit row-count conflict checks: the current owner is demoted before the selected member is promoted
+- the Neon core schema now also defines a partial unique index allowing at most one `owner` membership per conversation; incremental migration 0005 carries the same guard for existing databases
 - removed/leaving sockets are evicted from group rooms; newly invited online sockets join only after DB authorization succeeds
 
 ## Mobile Runtime
@@ -86,7 +87,7 @@ Completed and CI-validated unless explicitly noted:
 - authenticated account export is exposed; exported messages remain encrypted envelopes
 
 ## Social Identity Direction
-K-ssenger should recreate the *feeling* that made classic social messengers alive without copying Microsoft branding/assets:
+K-ssenger should recreate the feeling that made classic social messengers alive without copying Microsoft branding/assets:
 - presence is a first-class social signal, not only transport state
 - contacts can show expressive display names, custom status and current music
 - login alerts can recreate the “someone just came online” moment with user-controlled privacy
@@ -120,7 +121,7 @@ CI security checks include:
 - the endpoint was reported healthy during the real-preview setup; this checkpoint does not claim that the latest privacy-aware server commit is already the deployed Render revision without a deployment-version proof
 - mobile realtime fails closed when `EXPO_PUBLIC_KSSENGER_SOCKET_URL` is missing
 - Android debug APK CI builds through Expo prebuild + Gradle
-- earlier Android APK artifacts are verified; verify the current functional head separately before treating it as the release candidate
+- earlier Android APK artifacts are verified; verify each newer functional head separately before treating it as the release candidate
 - no verified iOS signing environment or Apple signing credentials are available here
 
 ## Account / Auth Safety
@@ -137,10 +138,10 @@ CI security checks include:
 ## Remaining V1 Priorities
 1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership changes -> ownership transfer -> forced reconnect/token refresh
 2. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending; do not claim production E2EE before device proof
-3. apply and verify K-Feed/Moments/K-MAP migrations on the dedicated remote Neon branch through the explicit migration-approval flow
+3. apply and verify K-Feed/Moments/K-MAP plus group-integrity migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. finish remaining group lifecycle/product items such as mute/ban and add DB-level single-owner enforcement after migration validation
+6. finish remaining group lifecycle/product items such as mute/ban
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
