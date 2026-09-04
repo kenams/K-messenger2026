@@ -9,11 +9,11 @@
 
 ## Latest verified GitHub state
 Verified 2026-09-04:
-- CI #206 on `8531a1117aab5fed5414be94e25e62c5787c04a8`: FAILURE only in `test:server`; typecheck and both RLS integration jobs remained green.
-- Root cause was isolated: `group-moderation-socket.test.ts` imported the database-backed moderation store transitively, so module initialization parsed production-only `DATABASE_URL`, `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL` and `CORS_ORIGIN` before the contract tests ran.
-- Functional fix `e63bb70b6847322082982f4807b98596f1e3b561` makes the database-backed ban-list store load lazily only after rate-limit and strict request validation. Runtime authorization is unchanged; production still reaches transaction-authorized `listGroupBans()`.
-- Regression commit `0a2aefe1d938895ab0f2a609349425490f307458` adds an injected-store success-path proof that only the authenticated socket user id and validated conversation UUID reach the store, while forged actor data and malformed IDs never do.
-- CI #208 on `0a2aefe1d938895ab0f2a609349425490f307458` is queued and is not yet release-validated.
+- CI #209 on `3ed0049fa3466a1bc1f7a539c3f93b0e8041978f`: SUCCESS.
+- This confirms the lazy database-store loading fix and authenticated-identity regression coverage for the moderator ban-list contract.
+- Functional commit `41ec04e28b661258a1a4445c485ab19758b4599f` wires `registerGroupBanListHandler()` into the actual Socket.IO runtime.
+- `group:bans-list` is now registered per authenticated connection and uses the existing `socialLimiter` with a user-scoped `group:bans-list` key before the strict request contract reaches the transaction-authorized store.
+- No workflow run was visible yet for `41ec04e28b661258a1a4445c485ab19758b4599f` at the last check, so this newest runtime wiring is not yet release-validated.
 - No force-push was used.
 
 ## Dedicated Neon backend
@@ -48,12 +48,13 @@ Implemented/validated on prior green heads:
 - `group:mute`, `group:ban` and `group:unban` handlers are registered.
 
 Current functional addition:
-- `groupModerationSocket.ts` defines `registerGroupBanListHandler()` for `group:bans-list`.
-- The handler uses only the authenticated socket `userId`, parses the strict UUID-only `groupConversationSchema`, rate-limits through an injected limiter callback, then calls transaction-protected `listGroupBans()`.
-- The production store is now lazy-loaded only after rate-limit and schema validation, preventing contract-test secret coupling without bypassing any runtime authorization.
-- Forged actor/role fields remain rejected by the strict request schema; rejected/malformed requests fail closed.
-- Regression tests now cover rate-limit short-circuit, forged actor rejection, malformed conversation UUID rejection, and authenticated identity propagation on the valid path.
-- `server.ts` still needs to call this registration helper before `group:bans-list` becomes available at runtime.
+- `groupModerationSocket.ts` defines the fail-closed `group:bans-list` handler.
+- `server.ts` now imports and registers that handler for every authenticated Socket.IO connection.
+- Identity still comes only from `socket.data.userId`, which is populated after Neon Auth JWT verification; client actor/role fields are not accepted.
+- Runtime rate limiting uses `socialLimiter.consume(`${userId}:group:bans-list`)` before the handler reaches the store.
+- The request remains a strict conversation UUID only and the store performs a fresh transactional owner/admin authorization check.
+- Production DB loading remains lazy until rate-limit and schema validation have passed.
+- CI validation of this newest `server.ts` wiring is still pending.
 
 ## Mobile runtime
 Implemented/validated on prior green heads:
@@ -63,12 +64,12 @@ Implemented/validated on prior green heads:
 - contacts lifecycle, dynamic presence/login alerts, K-Pulse.
 - direct/group encrypted-envelope history and receipt UX.
 - group creation/open/list/member role actions.
-- moderation helpers and `groupModerationRealtime.ts` for fail-closed mute/unmute/ban/unban requests plus typed future `group:bans-list` consumption.
+- moderation helpers and `groupModerationRealtime.ts` for fail-closed mute/unmute/ban/unban requests and typed `group:bans-list` consumption.
 - centralized normalization/subscription for `group:moderation` and `group:banned` events.
 
 Still pending:
 - wire moderator controls into `GroupsScreen`.
-- expose and consume `group:bans-list` end-to-end for unban UX.
+- consume the now-registered `group:bans-list` runtime path in `GroupsScreen` for unban UX.
 - group read-receipt privacy parity.
 - real plaintext sending stays disabled until a vetted native E2EE/device-key protocol is integrated and proven on devices.
 
