@@ -14,8 +14,11 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - name: Wake realtime service
+        run: curl --fail --silent --show-error --max-time 30 https://kssenger-server.onrender.com/health
       - name: Run real Neon social smoke
         env:
           KSSENGER_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
           KSSENGER_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
+          KSSENGER_SOCKET_URL: https://kssenger-server.onrender.com
         run: node scripts/remote-social-smoke-runner.mjs
