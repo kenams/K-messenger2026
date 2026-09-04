@@ -79,6 +79,9 @@ create table if not exists public.conversation_members (
   joined_at timestamptz not null default now(),
   primary key (conversation_id, user_id)
 );
+create unique index if not exists conversation_members_single_owner_idx
+  on public.conversation_members (conversation_id)
+  where role = 'owner';
 
 create table if not exists public.devices (
   id uuid primary key default gen_random_uuid(),
