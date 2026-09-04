@@ -48,6 +48,18 @@ export const groupRoleSchema = z.object({
   role: z.enum(['member', 'admin', 'owner']),
 }).strict();
 
+export const groupMuteSchema = z.object({
+  conversationId: z.string().uuid(),
+  userId: z.string().uuid(),
+  mutedUntil: z.string().datetime().nullable(),
+}).strict();
+
+export const groupBanSchema = z.object({
+  conversationId: z.string().uuid(),
+  userId: z.string().uuid(),
+  reason: z.string().trim().min(1).max(240).nullable().optional(),
+}).strict();
+
 export const groupConversationSchema = z.object({
   conversationId: z.string().uuid(),
 }).strict();
