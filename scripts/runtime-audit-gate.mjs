@@ -5,11 +5,11 @@ import { spawnSync } from 'node:child_process';
 // Remove entries as soon as the supported Expo line provides patched transitive
 // dependencies. Any other high/critical advisory fails the build.
 const ALLOWED_BUILD_TOOL_ADVISORIES = new Map([
-  ['GHSA-w3rx-r6r6-pgpr', 'image-size ICNS parser; no patched npm version currently published; Metro build-time asset inspection only'],
-  ['GHSA-5p2g-fcmc-qvqq', 'image-size JXL/HEIF parser; Expo/Metro build-time asset inspection only'],
-  ['GHSA-6g55-p6wh-862q', 'PostCSS source-map disclosure in Expo Metro build toolchain'],
-  ['GHSA-fxqj-rqcc-2cmp', 'PostCSS source-map disclosure incomplete-fix advisory in Expo Metro build toolchain'],
-  ['GHSA-r28c-9q8g-f849', 'PostCSS source-map path traversal in Expo Metro build toolchain'],
+  ['GHSA-W3RX-R6R6-PGPR', 'image-size ICNS parser; no patched npm version currently published; Metro build-time asset inspection only'],
+  ['GHSA-5P2G-FCMC-QVQQ', 'image-size JXL/HEIF parser; Expo/Metro build-time asset inspection only'],
+  ['GHSA-6G55-P6WH-862Q', 'PostCSS source-map disclosure in Expo Metro build toolchain'],
+  ['GHSA-FXQJ-RQCC-2CMP', 'PostCSS source-map disclosure incomplete-fix advisory in Expo Metro build toolchain'],
+  ['GHSA-R28C-9Q8G-F849', 'PostCSS source-map path traversal in Expo Metro build toolchain'],
 ]);
 
 const result = spawnSync('npm', ['audit', '--omit=dev', '--json'], {
