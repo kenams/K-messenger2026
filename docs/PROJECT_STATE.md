@@ -4,53 +4,42 @@
 - Repository: `kenams/K-messenger2026`
 - Active branch: `fix/feed-kmap-contact-security`
 - Base: `bootstrap/platform`
-- PR #2 `Security hardening + messaging reliability`: OPEN, DRAFT.
+- PR #2 `Security hardening + messaging reliability`: OPEN, DRAFT, mergeable.
 - Keep PR #2 draft until database, security, multi-device, media/push and release gates are proven.
 
 ## Latest verified GitHub state
 Verified 2026-09-04:
-- CI #222 on `8f1d9c53d95f359022884bc59661d3713dc63d99`: SUCCESS.
-- No concurrent push replaced the active branch before this run.
-- `35d47c69465ed1aadcc69c98e06651e73040d7bd` hardens `0006_group_moderation.sql`: authenticated Data API clients no longer receive direct SELECT/INSERT/UPDATE/DELETE privileges on `group_bans`; owner/admin ban-list access remains server-authorized through the authenticated realtime endpoint.
-- `e7bec2930ac7392386e072b747c2d27bccef94c2` adds corrective migration `0007_group_bans_server_only.sql` so databases that evaluated an earlier `0006` draft are hardened too.
-- CI #224 on `e7bec2930ac7392386e072b747c2d27bccef94c2` is in progress and is not yet release-validated.
+- PR #2 head after this run: `4268a8702b20f43edc6a6f4ca9148528927b1281` (`feat(account): complete privacy-safe Neon data export`).
+- Previous head `cb5e8c1b9ce0dd2e4c2f1e0f492ccd3e14536719` passed GitHub Actions CI run #239.
+- New head CI had not started when last checked; do not treat it as release-validated until CI is green.
 - No force-push was used.
+- Account export v2 now excludes other users' public profile-directory rows and includes the authenticated user's Neon/RLS-authorized K-Feed, Moments and owned K-MAP data. Server-side encrypted message envelopes remain encrypted in the export.
 
 ## Agent-Kah branch review
-- `import/mobile-agent-kah` head remains `d97152456f7bf668a13f29d19d2c742538c5cafa` from 2026-09-02.
-- `import/server-agent-kah` head remains `ac25216a2f572e53973b14c12b75a34ec2441732` from 2026-09-02.
-- Neither branch is newer than the active V1 branch. Do not merge the old server branch wholesale because it used Supabase persistence assumptions and placeholder handshake auth that were replaced by Neon/Postgres + verified Neon Auth JWT identity.
+- `import/mobile-agent-kah` and `import/server-agent-kah` remain historical import sources only.
+- Do not merge the old server implementation wholesale: Supabase persistence assumptions and placeholder handshake auth have been replaced by Neon/Postgres plus verified Neon Auth JWT identity.
 
 ## Dedicated Neon backend
-Only project `K-ssenger` (`late-flower-65059830`) is allowed.
+Only project `K-ssenger` (`late-flower-65059830`) / database `kssenger` is allowed.
 
 Re-verified 2026-09-04:
-- PostgreSQL 17
-- region `aws-eu-central-1`
-- plan `free_v3`
-- default branch `main`: `br-falling-sea-b1k36u32`
-- main was not modified during this run
-- no other Neon project was touched
+- default branch `main`: `br-falling-sea-b1k36u32`, READY.
+- public K-ssenger tables currently present on main include core messaging plus `public_videos`, `video_reports`, `moments`, `moment_views`, `moment_reactions`, `moment_reports`, `location_shares`, `location_points`, `group_bans` and `user_age_profile`.
+- every inspected public table has RLS enabled.
+- single-owner group index is present.
+- `conversation_members.muted_until` is present.
+- authenticated Data API SELECT privilege on `group_bans` is revoked.
+- K-Feed, Moments and K-MAP policy sets are present on main.
+- no schema write was performed against Neon main in this run.
+- no other Neon project was touched.
 
-### Prepared moderation migration
-The earlier temp migration branch `br-gentle-union-b1dttksj` contains the older draft and must not be promoted.
+### Neon branch hygiene
+Existing non-default K-ssenger test/migration branches observed this run:
+- `v1-social-interaction-rls-test` (`br-spring-firefly-b11ajgzc`)
+- `v1-social-functions-test` (`br-twilight-morning-b1nv3vgc`)
+- older migration branch `br-gentle-union-b1dttksj`
 
-A new hardened migration was prepared on temporary branch `br-lively-bonus-b16vbnze` from `main` and verified read-only:
-- partial unique single-owner index: present
-- `conversation_members.muted_until`: present
-- `group_bans`: present
-- `group_bans` RLS: enabled
-- authenticated Data API SELECT on `group_bans`: revoked
-- authenticated Data API INSERT on `group_bans`: revoked
-- obsolete `group_bans_member_read` policy: absent
-
-This hardened migration is NOT applied to main. Promotion or cleanup through Neon migration completion requires explicit interactive approval and is not performed autonomously.
-
-Still pending remotely:
-- `0002_social_content_location.sql`
-- `0003_social_content_grants.sql`
-- `0004_kmap_owner_revoke_policy.sql`
-- hardened `0005_group_single_owner.sql` + `0006_group_moderation.sql` + defense-in-depth `0007_group_bans_server_only.sql`
+Do not delete or promote migration/test branches autonomously. Neon destructive cleanup and prepared migration completion require explicit interactive approval.
 
 ## Server runtime
 Implemented on green or current-CI heads:
@@ -61,7 +50,7 @@ Implemented on green or current-CI heads:
 - group create/invite/remove/role/leave/ownership transfer plus mute/ban/unban and moderator-only ban list.
 - group mute enforced before message persistence and active-ban reinvite blocked.
 - read-receipt privacy enforced server-side.
-- ban registry direct Data API exposure removed from pending migration path.
+- ban registry direct Data API exposure removed.
 
 ## Mobile runtime
 Implemented on green or current-CI heads:
@@ -71,13 +60,13 @@ Implemented on green or current-CI heads:
 - direct/group encrypted-envelope history and receipt UX.
 - group member roles and moderation UI including ban list/unban.
 - reconnect obtains a fresh Neon Auth token.
-- account export through authenticated Data API/RLS.
+- privacy-safe account export v2 through authenticated Neon Data API/RLS.
 - K-Feed uses Neon/RLS-visible metadata and reporting; demo rows removed.
 - Moments uses real 24h Neon rows for text moments, visibility/delete/report; demo rows removed.
 - K-MAP uses authorized share rows, recipient-safe coordinates, revoke and Ghost Mode; static preview removed.
 
 ## Product V1 gates still required before claiming premium V1
-1. Explicit application and verification of pending K-ssenger Neon migrations on main.
+1. New PR head must pass CI and remote integration validation.
 2. Real two-account/two-device remote flow covering auth -> contacts -> presence/login alert -> K-Pulse -> direct/group -> receipts -> moderation/ownership -> forced reconnect/token refresh.
 3. Vetted native E2EE/device-key protocol with device proof before enabling private/group plaintext composition.
 4. Approved native media storage/upload + in-app video playback for K-Feed and photo/video Moments.
