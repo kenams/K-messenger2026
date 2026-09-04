@@ -34,6 +34,8 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     let clientRef: Socket | null = null;
     let messageHandler: ((message: EncryptedMessage) => void) | null = null;
     let receiptHandler: ((receipt: { messageId?: string; state?: ReceiptState }) => void) | null = null;
+    let connectHandler: (() => void) | null = null;
+    let disconnectHandler: ((reason: string) => void) | null = null;
 
     void Promise.all([getRealtimeSocket(), getAuthenticatedUserId()]).then(async ([client, currentUserId]) => {
       if (!active) return;
@@ -52,23 +54,27 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       const id = direct.conversationId;
       setConversationId(id);
 
-      const joined = await emitAck<{ ok: boolean }>(client, 'conversation:join', { conversationId: id });
-      if (!joined.ok) throw new Error('DIRECT_JOIN_FAILED');
+      const syncConversation = async () => {
+        const joined = await emitAck<{ ok: boolean }>(client, 'conversation:join', { conversationId: id });
+        if (!joined.ok) throw new Error('DIRECT_JOIN_FAILED');
 
-      const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
-      if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
-      const loaded = response.messages ?? [];
-      if (active) setHistory(loaded);
+        const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
+        if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
+        const loaded = response.messages ?? [];
+        if (active) setHistory(loaded);
 
-      await Promise.allSettled(
-        loaded
-          .filter((message) => message.senderUserId !== currentUserId)
-          .map((message) => emitAck(client, 'message:receipt', {
-            conversationId: id,
-            messageId: message.id,
-            state: receiptState,
-          })),
-      );
+        await Promise.allSettled(
+          loaded
+            .filter((message) => message.senderUserId !== currentUserId)
+            .map((message) => emitAck(client, 'message:receipt', {
+              conversationId: id,
+              messageId: message.id,
+              state: receiptState,
+            })),
+        );
+      };
+
+      await syncConversation();
 
       messageHandler = (message) => {
         if (message.conversationId !== id) return;
@@ -87,8 +93,25 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
           message.id === receipt.messageId ? { ...message, receiptState: receipt.state } : message
         )));
       };
+      connectHandler = () => {
+        if (!active) return;
+        setNotice('Connexion rétablie · resynchronisation…');
+        void syncConversation()
+          .then(() => {
+            if (active) setNotice(receiptState === 'read' ? 'Reconnecté · conversation resynchronisée. Accusés de lecture actifs.' : 'Reconnecté · conversation resynchronisée. Accusés de lecture désactivés.');
+          })
+          .catch(() => {
+            if (active) setNotice('Connexion rétablie, mais la resynchronisation doit être retentée.');
+          });
+      };
+      disconnectHandler = () => {
+        if (active) setNotice('Hors ligne · K-ssenger reconnectera et resynchronisera cette conversation automatiquement.');
+      };
+
       client.on('message:new', messageHandler);
       client.on('message:receipt', receiptHandler);
+      client.on('connect', connectHandler);
+      client.on('disconnect', disconnectHandler);
       if (active) setNotice(receiptState === 'read' ? 'Conversation sécurisée ouverte. Accusés de lecture actifs.' : 'Conversation sécurisée ouverte. Accusés de lecture désactivés.');
     }).catch(() => {
       if (active) setNotice('Impossible d’ouvrir cette conversation pour le moment.');
@@ -100,6 +123,8 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       active = false;
       if (clientRef && messageHandler) clientRef.off('message:new', messageHandler);
       if (clientRef && receiptHandler) clientRef.off('message:receipt', receiptHandler);
+      if (clientRef && connectHandler) clientRef.off('connect', connectHandler);
+      if (clientRef && disconnectHandler) clientRef.off('disconnect', disconnectHandler);
     };
   }, [contact.id]);
 
