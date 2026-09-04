@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #176 (`33828371258`) on head `21c580cd0a2d601b8738f6ecfd4cf95edf02949c`: SUCCESS
+- CI #178 (`33832128105`) on head `43c0ccd1fe65c67322569e43339eafa9f671ada5`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, and strict mute/ban payload validation are CI-validated through #176
-- current functional head `cff692ce36393c9a42cdc72bc82c3dbba60ad47d` additionally prevents a still-banned user from being re-added to the same group; its own CI pass is pending
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict mute/ban payload validation, and the active-ban reinvite guard are CI-validated through #178
+- current functional head `4e9be01fd7602456875f91ddc4249498e35c1b8b` additionally enforces group mute at the message persistence boundary; its own CI pass is pending
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -28,8 +28,7 @@ Only the dedicated free Neon project `K-ssenger` (`late-flower-65059830`) may be
 Re-verified through the connected Neon project on 2026-09-04:
 - PostgreSQL 17
 - region `aws-eu-central-1`
-- branch `main` (`br-falling-sea-b1k36u32`)
-- dedicated free project only
+- dedicated free project (`free_v3`)
 - Neon Auth / Better Auth and Data API remain the intended auth/data surfaces
 - no other Neon project was touched during this run
 - remote public schema remains intentionally unchanged by this run
@@ -43,6 +42,7 @@ Important remote migration status:
 - `neon/migrations/0006_group_moderation.sql`
 are committed for the dedicated Neon design. 0002-0004 remain isolated-CI validated and not remotely applied; 0005-0006 are CI-validated in repository CI. None of these incremental migrations may be applied to the remote branch without the explicit migration-approval flow.
 - applying remote schema changes requires an explicit migration approval step; never bypass that safeguard
+- because runtime mute enforcement now reads `conversation_members.muted_until`, do not deploy this functional head to the remote runtime before `0006_group_moderation.sql` is approved/applied and verified there
 
 ## Server Runtime
 Completed and CI-validated unless explicitly marked pending on the current head:
@@ -66,8 +66,9 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - `groupModerationStore.ts` provides role-checked mute, ban and unban primitives; admins cannot moderate owners/admins and self-moderation is rejected
 - migration 0006 adds `muted_until` plus backend-controlled `group_bans`; authenticated clients have no direct mutation grant
 - strict `groupMuteSchema` / `groupBanSchema` contracts reject forged extra moderation fields, validate ISO mute expiry and bound ban reasons to 240 characters
-- `addGroupMember` now rejects any target still present in `group_bans`, preventing an admin/owner from accidentally bypassing an active ban by inviting that user again; unban must occur first
-- mute enforcement still must be wired into `message:send`, and mute/ban/unban Socket.IO events must be registered before group moderation is operational end-to-end
+- `addGroupMember` rejects any target still present in `group_bans`, preventing an admin/owner from bypassing an active ban by inviting that user again; unban must occur first
+- `persistEncryptedMessage()` now calls `requireGroupCanSend()` before insertion, providing defense-in-depth mute enforcement at the persistence boundary; because `message:send` persists only through this function, a muted group member cannot successfully persist a message once migration 0006 is present
+- mute/ban/unban Socket.IO events still must be registered before group moderation is operational end-to-end
 
 ## Mobile Runtime
 Completed and CI-validated unless explicitly noted:
@@ -125,7 +126,8 @@ CI security checks include:
 
 ## Deployment / Release State
 - dedicated public realtime endpoint is configured as `https://kssenger-server.onrender.com` and the mobile preview configuration points to the K-ssenger Render/Neon stack
-- the endpoint was reported healthy during the real-preview setup; this checkpoint does not claim that the latest privacy-aware server commit is already the deployed Render revision without a deployment-version proof
+- the endpoint was reported healthy during the real-preview setup; this checkpoint does not claim that the latest server commit is already the deployed Render revision without deployment-version proof
+- do not deploy the current mute-enforcement head to the remote runtime before migration 0006 is approved/applied, because the code now reads the new moderation column
 - mobile realtime fails closed when `EXPO_PUBLIC_KSSENGER_SOCKET_URL` is missing
 - Android debug APK CI builds through Expo prebuild + Gradle
 - earlier Android APK artifacts are verified; verify each newer functional head separately before treating it as the release candidate
@@ -148,7 +150,7 @@ CI security checks include:
 3. apply and verify K-Feed/Moments/K-MAP plus group-integrity/moderation migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. wire group mute/ban/unban into Socket.IO, enforce mute on `message:send`, then expose moderator controls in mobile Groups
+6. register group mute/ban/unban Socket.IO events, then expose moderator controls in mobile Groups; mute persistence enforcement is implemented but depends on approved remote migration 0006
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
