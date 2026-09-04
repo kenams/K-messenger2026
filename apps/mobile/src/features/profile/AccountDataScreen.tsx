@@ -9,20 +9,20 @@ type ExportRow = Record<string, unknown>;
 async function readTable(table: string, select = '*'): Promise<ExportRow[]> {
   const { data, error } = await getBackend().from(table).select(select);
   if (error) throw new Error(`EXPORT_${table.toUpperCase()}_FAILED`);
-  return (data ?? []) as ExportRow[];
+  return ((data ?? []) as unknown) as ExportRow[];
 }
 
 async function readOwnedTable(table: string, ownerColumn: string, userId: string, select = '*'): Promise<ExportRow[]> {
   const { data, error } = await getBackend().from(table).select(select).eq(ownerColumn, userId);
   if (error) throw new Error(`EXPORT_${table.toUpperCase()}_FAILED`);
-  return (data ?? []) as ExportRow[];
+  return ((data ?? []) as unknown) as ExportRow[];
 }
 
 async function readRowsForIds(table: string, column: string, ids: string[], select = '*'): Promise<ExportRow[]> {
   if (ids.length === 0) return [];
   const { data, error } = await getBackend().from(table).select(select).in(column, ids);
   if (error) throw new Error(`EXPORT_${table.toUpperCase()}_FAILED`);
-  return (data ?? []) as ExportRow[];
+  return ((data ?? []) as unknown) as ExportRow[];
 }
 
 export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onBack: () => void }) {
