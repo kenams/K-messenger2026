@@ -4,23 +4,25 @@ import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import type { MyProfile } from './useMyProfile';
 
-async function readTable(table: string, select = '*') {
+type ExportRow = Record<string, unknown>;
+
+async function readTable(table: string, select = '*'): Promise<ExportRow[]> {
   const { data, error } = await getBackend().from(table).select(select);
   if (error) throw new Error(`EXPORT_${table.toUpperCase()}_FAILED`);
-  return data ?? [];
+  return (data ?? []) as ExportRow[];
 }
 
-async function readOwnedTable(table: string, ownerColumn: string, userId: string, select = '*') {
+async function readOwnedTable(table: string, ownerColumn: string, userId: string, select = '*'): Promise<ExportRow[]> {
   const { data, error } = await getBackend().from(table).select(select).eq(ownerColumn, userId);
   if (error) throw new Error(`EXPORT_${table.toUpperCase()}_FAILED`);
-  return data ?? [];
+  return (data ?? []) as ExportRow[];
 }
 
-async function readRowsForIds(table: string, column: string, ids: string[], select = '*') {
+async function readRowsForIds(table: string, column: string, ids: string[], select = '*'): Promise<ExportRow[]> {
   if (ids.length === 0) return [];
   const { data, error } = await getBackend().from(table).select(select).in(column, ids);
   if (error) throw new Error(`EXPORT_${table.toUpperCase()}_FAILED`);
-  return data ?? [];
+  return (data ?? []) as ExportRow[];
 }
 
 export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onBack: () => void }) {
@@ -53,8 +55,8 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
       ]);
 
       const ownedShareIds = locationShares
-        .map((share: { id?: string }) => share.id)
-        .filter((id: string | undefined): id is string => Boolean(id));
+        .map((share) => share.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
       const locationPoints = await readRowsForIds('location_points', 'share_id', ownedShareIds);
 
       const payload = {
