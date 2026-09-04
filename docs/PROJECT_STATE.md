@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #180 (`33835726705`) on head `44caa7c46041a78f21922d9f2c9451d8fc896e1b`: SUCCESS
+- CI #182 (`33839475952`) on head `33d256e248f9fd71bbd19b3f08ac8bdc4205a557`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict mute/ban payload validation, the active-ban reinvite guard, and persistence-level group mute enforcement are CI-validated through #180
-- current functional head `8c49fc59828a59d639cc6c4e74512f3f07e5250f` additionally enforces receipt conversation membership inside the persistence function itself; its own CI pass is pending
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict mute/ban payload validation, the active-ban reinvite guard, persistence-level group mute enforcement and persistence-level receipt membership checks are CI-validated through #182
+- current functional head `4f90f8b052f64332c0d1e7537a48ea5f07a384d5` wires authenticated Socket.IO mute/ban/unban handlers to those guarded primitives; CI #183 (`33843137670`) is queued and must pass before this wiring is treated as verified
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -57,7 +57,7 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - contact list exposes nickname, custom status and now-playing metadata only through privacy-aware server shaping
 - `show_music='nobody'` suppresses now-playing title/artist from the contact list response
 - message history/persistence/receipts remain ciphertext-envelope only
-- receipt persistence now independently requires the verified user to still be a member of the message conversation both when loading the message and immediately before the receipt upsert; this reduces authorization-race and future-call-site bypass risk
+- receipt persistence independently requires the verified user to still be a member of the message conversation both when loading the message and immediately before the receipt upsert; this reduces authorization-race and future-call-site bypass risk
 - direct conversation creation/reuse uses contact/block checks plus transaction advisory locking to prevent duplicate 1:1 conversations
 - authenticated `conversations:list` returns only conversations where the verified user is a member and exposes safe metadata without plaintext/ciphertext bodies
 - group creation/member add/remove/role promotion/demotion/leave are transaction-backed and authorization checked server-side
@@ -69,7 +69,7 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - strict `groupMuteSchema` / `groupBanSchema` contracts reject forged extra moderation fields, validate ISO mute expiry and bound ban reasons to 240 characters
 - `addGroupMember` rejects any target still present in `group_bans`, preventing an admin/owner from bypassing an active ban by inviting that user again; unban must occur first
 - `persistEncryptedMessage()` calls `requireGroupCanSend()` before insertion, providing defense-in-depth mute enforcement at the persistence boundary; because `message:send` persists only through this function, a muted group member cannot successfully persist a message once migration 0006 is present
-- mute/ban/unban Socket.IO events still must be registered before group moderation is operational end-to-end
+- current head registers `group:mute`, `group:ban` and `group:unban`: payloads are schema-validated, store authorization remains authoritative, banned online sockets are evicted from the conversation room after the transaction succeeds, and affected clients/group members receive bounded moderation/update events; this wiring is pending CI #183
 
 ## Mobile Runtime
 Completed and CI-validated unless explicitly noted:
@@ -91,6 +91,7 @@ Completed and CI-validated unless explicitly noted:
 - Chats private list uses authenticated `conversations:list` rather than static demo chats
 - Groups lists/creates/opens real groups and renders real members/presence/history
 - owner/admin group controls call real server mutations: invite contact, remove member, promote/demote admin, transfer ownership and leave group
+- group moderation controls for mute/ban/unban are not yet exposed in mobile UI; server wiring exists on the current head pending CI
 - group read-receipt preference parity is not yet complete; current privacy UI explicitly describes the direct-chat behavior only
 - plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated and device-tested
 - authenticated account export is exposed; exported messages remain encrypted envelopes
@@ -128,7 +129,7 @@ CI security checks include:
 ## Deployment / Release State
 - dedicated public realtime endpoint is configured as `https://kssenger-server.onrender.com` and the mobile preview configuration points to the K-ssenger Render/Neon stack
 - the endpoint was reported healthy during the real-preview setup; this checkpoint does not claim that the latest server commit is already the deployed Render revision without deployment-version proof
-- do not deploy the current mute-enforcement head to the remote runtime before migration 0006 is approved/applied, because the code now reads the new moderation column
+- do not deploy the current mute-enforcement/moderation head to the remote runtime before migration 0006 is approved/applied, because the code now reads the new moderation column
 - mobile realtime fails closed when `EXPO_PUBLIC_KSSENGER_SOCKET_URL` is missing
 - Android debug APK CI builds through Expo prebuild + Gradle
 - earlier Android APK artifacts are verified; verify each newer functional head separately before treating it as the release candidate
@@ -146,12 +147,12 @@ CI security checks include:
 - trademark clearance remains required before commercial launch
 
 ## Remaining V1 Priorities
-1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership changes -> ownership transfer -> forced reconnect/token refresh
+1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership/moderation changes -> ownership transfer -> forced reconnect/token refresh
 2. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending; do not claim production E2EE before device proof
 3. apply and verify K-Feed/Moments/K-MAP plus group-integrity/moderation migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. register group mute/ban/unban Socket.IO events, then expose moderator controls in mobile Groups; mute persistence enforcement is implemented but depends on approved remote migration 0006
+6. expose moderator mute/ban/unban controls in mobile Groups and consume `group:moderation` / `group:banned` events; server handlers are implemented on current head but remain pending CI #183
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
