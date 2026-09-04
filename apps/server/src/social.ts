@@ -322,6 +322,40 @@ export async function blockUser(userId: string, blockedId: string) {
   });
 }
 
+export async function listBlockedUsers(userId: string) {
+  const { rows } = await query<{
+    id: string;
+    username: string;
+    display_name: string;
+    avatar_url: string | null;
+    blocked_at: string;
+  }>(
+    `select p.id,
+            p.username,
+            p.display_name,
+            p.avatar_url,
+            b.created_at as blocked_at
+       from public.blocks b
+       join public.profiles p on p.id = b.blocked_id
+      where b.blocker_id = $1
+      order by b.created_at desc`,
+    [userId],
+  );
+  return rows;
+}
+
+export async function unblockUser(userId: string, blockedId: string) {
+  if (userId === blockedId) throw new Error('SELF_BLOCK');
+
+  const { rowCount } = await query(
+    `delete from public.blocks
+      where blocker_id = $1
+        and blocked_id = $2`,
+    [userId, blockedId],
+  );
+  if ((rowCount ?? 0) === 0) throw new Error('BLOCK_NOT_FOUND');
+}
+
 export async function canWizz(senderId: string, recipientId: string) {
   await requireNotBlocked(senderId, recipientId);
 
