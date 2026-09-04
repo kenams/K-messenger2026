@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #190 on head `eb5f52b86f0851021621a55aa0d8887fdae00cfe`: SUCCESS
+- CI #192 on head `c4cea18a75ac2b155bf116cfd11fd6a6772b8316`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers and the bounded moderator-only group-ban listing primitive are CI-validated through #190
-- functional head `480585a9900c4871c1c3406be62af030e27ba6d3` adds a regression test proving group-scoped moderator read requests reject forged actor identity and malformed conversation IDs; CI for this head is pending and must pass before release validation
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers, bounded moderator-only group-ban listing primitive and strict group-scoped moderation read payload coverage are CI-validated through #192
+- functional head `dd48db7adc67edd9f2979f1135bca11c1b7066b9` adds defensive mobile normalization for moderator-only banned-user list responses, including a hard 200-entry cap and rejection of malformed profile/date fields; CI for this head is pending and must pass before release validation
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -87,6 +87,7 @@ Completed and CI-validated unless explicitly noted:
 - Groups lists/creates/opens real groups and renders real members/presence/history
 - owner/admin group controls call real server mutations for invite/remove/promote/demote/ownership transfer/leave
 - mobile moderation helpers mirror backend role boundaries, build bounded mute/unmute/ban/unban payloads and defensively normalize incoming moderation events
+- moderator-only banned-user list responses now have a typed mobile contract and fail-closed normalization: malformed entries, invalid dates and responses above the backend 200-entry bound are rejected before UI consumption
 - group moderation controls are not yet exposed in `GroupsScreen`; moderator-only banned-user Socket.IO listing must be wired before unban UX
 - group read-receipt preference parity is not yet complete
 - plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated and device-tested
