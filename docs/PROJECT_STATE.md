@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #188 on head `64b4e2100bc8f7ea7fa33ac85e0b5455d6847c20`: SUCCESS
+- CI #190 on head `eb5f52b86f0851021621a55aa0d8887fdae00cfe`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks and authenticated Socket.IO moderation handlers are CI-validated through #188
-- functional head `5560a51377d7e74161221a65f5e5a35031ac7c01` adds a bounded moderator-only group-ban listing primitive; CI for this head is pending and must pass before release validation
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers and the bounded moderator-only group-ban listing primitive are CI-validated through #190
+- functional head `480585a9900c4871c1c3406be62af030e27ba6d3` adds a regression test proving group-scoped moderator read requests reject forged actor identity and malformed conversation IDs; CI for this head is pending and must pass before release validation
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -65,10 +65,11 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - `groupModerationStore.ts` provides role-checked mute, ban and unban primitives; admins cannot moderate owners/admins and self-moderation is rejected
 - migration 0006 adds `muted_until` plus backend-controlled `group_bans`; authenticated clients have no direct mutation grant
 - strict mute/ban contracts reject forged extra moderation fields, validate ISO mute expiry and bound ban reasons to 240 characters
+- group-scoped moderation read requests use the strict UUID-only `groupConversationSchema`; regression coverage rejects forged actor fields before Socket.IO exposure is added
 - `addGroupMember` rejects any target still present in `group_bans`; unban must occur first
 - `persistEncryptedMessage()` enforces group mute status before insertion
 - `group:mute`, `group:ban` and `group:unban` are registered and CI-validated
-- `listGroupBans()` now provides a bounded (max 200), profile-shaped ban list only after a transaction-scoped owner/admin check; Socket.IO exposure is still pending on the current head
+- `listGroupBans()` provides a bounded (max 200), profile-shaped ban list only after a transaction-scoped owner/admin check; Socket.IO exposure is still pending on the current head
 
 ## Mobile Runtime
 Completed and CI-validated unless explicitly noted:
