@@ -12,13 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #171 (`33820769498`) on head `44e6b11152aba9952f162acf8d9f2bae14998afd`: SUCCESS
+- CI #174 (`33824808735`) on head `d93b15e2db4bc7928685d91665738b7c8cb42e3c`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- current head additionally contains migration `0006_group_moderation.sql` and guarded backend group mute/ban primitives; these newest changes still require their own CI pass and server event wiring before they are considered operational
+- migration `0006_group_moderation.sql` and guarded backend mute/ban primitives are now CI-validated on the previous head
+- current functional head `53ca333360e39333457093d87d0fe24690af8db5` adds strict network payload contracts and tests for group mute/ban; its own CI pass is pending
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -30,7 +31,7 @@ Re-verified through the connected Neon project on 2026-09-04:
 - dedicated free project only
 - Neon Auth / Better Auth and Data API remain the intended auth/data surfaces
 - no other Neon project was touched during this run
-- remote public schema remains on the previously verified ten core V1 tables until an approved migration step is performed
+- remote public schema still contains exactly the ten core V1 tables and all ten have RLS enabled
 - message persistence remains ciphertext-envelope only and idempotent by `(sender_user_id, client_message_id)`
 
 Important remote migration status:
@@ -39,7 +40,7 @@ Important remote migration status:
 - `neon/migrations/0004_kmap_owner_revoke_policy.sql`
 - `neon/migrations/0005_group_single_owner.sql`
 - `neon/migrations/0006_group_moderation.sql`
-are committed for the dedicated Neon design. 0002-0004 remain isolated-CI validated and not remotely applied; 0005 is CI-validated; 0006 is newly added and awaits CI. None of these incremental migrations may be applied to the remote branch without the explicit migration-approval flow.
+are committed for the dedicated Neon design. 0002-0004 remain isolated-CI validated and not remotely applied; 0005-0006 are CI-validated in repository CI. None of these incremental migrations may be applied to the remote branch without the explicit migration-approval flow.
 - applying remote schema changes requires an explicit migration approval step; never bypass that safeguard
 
 ## Server Runtime
@@ -61,9 +62,10 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - group ownership transfer is transaction-backed with explicit row-count conflict checks: the current owner is demoted before the selected member is promoted
 - the Neon core schema defines a partial unique index allowing at most one `owner` membership per conversation; incremental migration 0005 carries the same guard for existing databases
 - removed/leaving sockets are evicted from group rooms; newly invited online sockets join only after DB authorization succeeds
-- pending current-head work: `groupModerationStore.ts` adds role-checked mute, ban and unban primitives; admins cannot moderate owners/admins and self-moderation is rejected
-- pending current-head work: migration 0006 adds `muted_until` plus backend-controlled `group_bans`; authenticated clients have no direct mutation grant
-- mute enforcement must be wired into `message:send` and mute/ban/unban Socket.IO events before this feature is called operational
+- `groupModerationStore.ts` provides role-checked mute, ban and unban primitives; admins cannot moderate owners/admins and self-moderation is rejected
+- migration 0006 adds `muted_until` plus backend-controlled `group_bans`; authenticated clients have no direct mutation grant
+- current head adds strict `groupMuteSchema` / `groupBanSchema` contracts, rejects forged extra moderation fields, validates ISO mute expiry and bounds ban reasons to 240 characters
+- mute enforcement still must be wired into `message:send`, and mute/ban/unban Socket.IO events must be registered before group moderation is operational end-to-end
 
 ## Mobile Runtime
 Completed and CI-validated unless explicitly noted:
@@ -144,7 +146,7 @@ CI security checks include:
 3. apply and verify K-Feed/Moments/K-MAP plus group-integrity/moderation migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. finish group moderation runtime wiring and UI for mute/ban/unban
+6. wire group mute/ban/unban into Socket.IO, enforce mute on `message:send`, then expose moderator controls in mobile Groups
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
