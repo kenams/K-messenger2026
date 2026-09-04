@@ -41,7 +41,7 @@ Repository migrations currently run from `0001_v1_core.sql` through `0009_push_s
 - Account export through authenticated Data API/RLS without decrypting encrypted messages server-side.
 - K-Feed, Moments and K-MAP have real database/RLS-backed application surfaces on the active branch; media storage/upload remains an explicit release gate.
 - Push subscription schema/RLS exists; native push token registration/delivery is not yet release-complete.
-- Blocked-user lifecycle store now supports privacy-preserving owner-scoped blocked-user listing and explicit unblock operations using the dedicated K-ssenger Postgres backend. Socket/mobile exposure still needs to be completed before this is counted as finished moderation UX.
+- Blocked-user lifecycle is now exposed through authenticated, rate-limited realtime operations: owner-scoped `contacts:blocked` listing and explicit `contact:unblock`. Unblocking only removes the caller-owned block row and never recreates contacts automatically. Mobile management UI remains to be completed before this is counted as finished moderation UX.
 
 ## Security invariants
 
@@ -55,9 +55,9 @@ Repository migrations currently run from `0001_v1_core.sql` through `0009_push_s
 
 ## Validation status
 
-- PR head `8a4770c8944b562837d224e9d75a8904895447ce`: CI run #265 succeeded.
-- New moderation-store commit `b8e93f862f52943a39e2fe228708c616e0dbb78f` adds blocked-user listing/unblock primitives; CI had not started yet at the time of this verification, so PR #2 remains draft.
-- Neon project `late-flower-65059830` was re-verified on 2026-09-05 as the dedicated K-ssenger project on PostgreSQL 17 in `aws-eu-central-1`.
+- PR head `7b3951bab3e99934328b422aaade5667613418ff`: CI run #267 succeeded.
+- Realtime blocked-user management commit `54aec173dae7b085defba9f49a4d554d10544f6c` adds authenticated/rate-limited blocked listing and unblock handlers. CI for the latest documentation head must be green before this PR leaves draft.
+- Neon project `late-flower-65059830` was re-verified on 2026-09-05 as the dedicated K-ssenger project; live `kssenger` contains the expected V1 schema families including Neon Auth, contacts/safety, chat, groups, K-Feed, Moments, K-MAP and push subscriptions.
 
 ## Critical V1 release gates
 
@@ -66,7 +66,7 @@ Repository migrations currently run from `0001_v1_core.sql` through `0009_push_s
 3. Vetted native E2EE/device-key protocol with device proof before enabling private/group plaintext composition.
 4. Approved K-ssenger media storage/upload path for avatars, chat media, K-Feed and Moments; no reuse of another project's storage.
 5. Native push token registration and delivery validation.
-6. Complete report/block/moderation UX, including socket/mobile unblock management, plus secure Neon Auth account deletion flow.
+6. Complete report/block/moderation UX, including mobile blocked-user management, plus secure Neon Auth account deletion flow.
 7. Final accessibility/error/retry polish and release-mode smoke tests.
 8. Installable Android/iOS release builds; signed distribution only when signing credentials/tooling are available.
 
