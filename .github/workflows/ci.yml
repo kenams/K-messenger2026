@@ -13,7 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - run: npm run typecheck
       - run: npm run test:server
 
@@ -37,7 +38,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+      - run: npm ci
       - name: Run Alice/Bob/Charlie Neon core RLS integration suite
         env:
           DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
