@@ -1,0 +1,21 @@
+name: Remote Social Smoke
+
+on:
+  push:
+    branches: [fix/feed-kmap-contact-security]
+
+jobs:
+  social-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Run real Neon social smoke
+        env:
+          KSSENGER_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
+          KSSENGER_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
+        run: node scripts/remote-social-smoke-runner.mjs
