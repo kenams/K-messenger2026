@@ -12,14 +12,13 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #168 (`33816339120`) on documentation head `638a8435a09822901e386b91356c4abc47439de5`: SUCCESS
-- the underlying group ownership-transfer functional change `6f0b7d929e75b481e3ba8c652f24a86d52346f02` is therefore CI-validated
+- CI #171 (`33820769498`) on head `44e6b11152aba9952f162acf8d9f2bae14998afd`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
-- current functional head now includes DB-level single-owner enforcement in fresh core installs plus incremental migration `0005_group_single_owner.sql` for already-provisioned databases
-- CI for the new DB-integrity head must complete before this new index is called validated
+- DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
+- current head additionally contains migration `0006_group_moderation.sql` and guarded backend group mute/ban primitives; these newest changes still require their own CI pass and server event wiring before they are considered operational
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -39,7 +38,8 @@ Important remote migration status:
 - `neon/migrations/0003_social_content_grants.sql`
 - `neon/migrations/0004_kmap_owner_revoke_policy.sql`
 - `neon/migrations/0005_group_single_owner.sql`
-are committed for the dedicated Neon design; 0002-0004 remain isolated-CI validated and not remotely applied, while 0005 is newly added and awaits CI plus explicit remote migration approval.
+- `neon/migrations/0006_group_moderation.sql`
+are committed for the dedicated Neon design. 0002-0004 remain isolated-CI validated and not remotely applied; 0005 is CI-validated; 0006 is newly added and awaits CI. None of these incremental migrations may be applied to the remote branch without the explicit migration-approval flow.
 - applying remote schema changes requires an explicit migration approval step; never bypass that safeguard
 
 ## Server Runtime
@@ -59,8 +59,11 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - authenticated `conversations:list` returns only conversations where the verified user is a member and exposes safe metadata without plaintext/ciphertext bodies
 - group creation/member add/remove/role promotion/demotion/leave are transaction-backed and authorization checked server-side
 - group ownership transfer is transaction-backed with explicit row-count conflict checks: the current owner is demoted before the selected member is promoted
-- the Neon core schema now also defines a partial unique index allowing at most one `owner` membership per conversation; incremental migration 0005 carries the same guard for existing databases
+- the Neon core schema defines a partial unique index allowing at most one `owner` membership per conversation; incremental migration 0005 carries the same guard for existing databases
 - removed/leaving sockets are evicted from group rooms; newly invited online sockets join only after DB authorization succeeds
+- pending current-head work: `groupModerationStore.ts` adds role-checked mute, ban and unban primitives; admins cannot moderate owners/admins and self-moderation is rejected
+- pending current-head work: migration 0006 adds `muted_until` plus backend-controlled `group_bans`; authenticated clients have no direct mutation grant
+- mute enforcement must be wired into `message:send` and mute/ban/unban Socket.IO events before this feature is called operational
 
 ## Mobile Runtime
 Completed and CI-validated unless explicitly noted:
@@ -138,10 +141,10 @@ CI security checks include:
 ## Remaining V1 Priorities
 1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership changes -> ownership transfer -> forced reconnect/token refresh
 2. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending; do not claim production E2EE before device proof
-3. apply and verify K-Feed/Moments/K-MAP plus group-integrity migrations on the dedicated remote Neon branch through the explicit migration-approval flow
+3. apply and verify K-Feed/Moments/K-MAP plus group-integrity/moderation migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. finish remaining group lifecycle/product items such as mute/ban
+6. finish group moderation runtime wiring and UI for mute/ban/unban
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
