@@ -1,15 +1,24 @@
 import type { Socket } from 'socket.io';
-import { listGroupBans } from './groupModerationStore.js';
 import { logger } from './logger.js';
 import { groupConversationSchema } from './validation.js';
 
 type Ack = ((response: unknown) => void) | undefined;
+type ListGroupBans = (userId: string, conversationId: string) => Promise<unknown>;
 
 type RegisterGroupBanListOptions = {
   socket: Socket;
   userId: string;
   consumeRateLimit: () => boolean;
+  listBans?: ListGroupBans;
 };
+
+async function listBansFromStore(userId: string, conversationId: string) {
+  // Load the database-backed store only after the authenticated/rate-limited
+  // request contract has passed validation. This keeps contract tests isolated
+  // from production secrets without changing runtime authorization semantics.
+  const { listGroupBans } = await import('./groupModerationStore.js');
+  return listGroupBans(userId, conversationId);
+}
 
 /**
  * Registers the moderator-only ban-list read path.
@@ -23,12 +32,13 @@ export function registerGroupBanListHandler({
   socket,
   userId,
   consumeRateLimit,
+  listBans = listBansFromStore,
 }: RegisterGroupBanListOptions) {
   socket.on('group:bans-list', async (raw: unknown, ack: Ack) => {
     try {
       if (!consumeRateLimit()) return ack?.({ ok: false, error: 'RATE_LIMITED' });
       const { conversationId } = groupConversationSchema.parse(raw);
-      const bans = await listGroupBans(userId, conversationId);
+      const bans = await listBans(userId, conversationId);
       ack?.({ ok: true, bans });
     } catch (error) {
       logger.warn('group_bans_list_rejected', {
