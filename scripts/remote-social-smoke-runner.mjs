@@ -44,4 +44,4 @@ globalThis.fetch = async (input, init = {}) => {
   return response;
 };
 
-await import('./remote-social-smoke.mjs');
+await import('./remote-social-smoke-v2.mjs');
