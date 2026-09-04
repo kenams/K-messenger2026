@@ -9,10 +9,11 @@
 
 ## Latest verified GitHub state
 Verified 2026-09-04:
-- CI #204 on `748205e46cdc02b955e71f61632209561f591729`: SUCCESS.
-- Typecheck/server tests/core RLS/K-Feed-Moments-K-MAP isolated RLS suites were green on that head.
-- New functional commit `2d35b9cdb707b58027dce0a3ced844b99928dfce` adds regression coverage for the guarded `group:bans-list` Socket.IO contract: rate-limit short-circuit, forged actor rejection and malformed conversation UUID rejection.
-- CI for the new functional head is not yet release-validated.
+- CI #206 on `8531a1117aab5fed5414be94e25e62c5787c04a8`: FAILURE only in `test:server`; typecheck and both RLS integration jobs remained green.
+- Root cause was isolated: `group-moderation-socket.test.ts` imported the database-backed moderation store transitively, so module initialization parsed production-only `DATABASE_URL`, `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL` and `CORS_ORIGIN` before the contract tests ran.
+- Functional fix `e63bb70b6847322082982f4807b98596f1e3b561` makes the database-backed ban-list store load lazily only after rate-limit and strict request validation. Runtime authorization is unchanged; production still reaches transaction-authorized `listGroupBans()`.
+- Regression commit `0a2aefe1d938895ab0f2a609349425490f307458` adds an injected-store success-path proof that only the authenticated socket user id and validated conversation UUID reach the store, while forged actor data and malformed IDs never do.
+- CI #208 on `0a2aefe1d938895ab0f2a609349425490f307458` is queued and is not yet release-validated.
 - No force-push was used.
 
 ## Dedicated Neon backend
@@ -49,8 +50,9 @@ Implemented/validated on prior green heads:
 Current functional addition:
 - `groupModerationSocket.ts` defines `registerGroupBanListHandler()` for `group:bans-list`.
 - The handler uses only the authenticated socket `userId`, parses the strict UUID-only `groupConversationSchema`, rate-limits through an injected limiter callback, then calls transaction-protected `listGroupBans()`.
+- The production store is now lazy-loaded only after rate-limit and schema validation, preventing contract-test secret coupling without bypassing any runtime authorization.
 - Forged actor/role fields remain rejected by the strict request schema; rejected/malformed requests fail closed.
-- New regression tests lock the handler's fail-closed behavior for rate limiting, forged actor fields and malformed conversation IDs.
+- Regression tests now cover rate-limit short-circuit, forged actor rejection, malformed conversation UUID rejection, and authenticated identity propagation on the valid path.
 - `server.ts` still needs to call this registration helper before `group:bans-list` becomes available at runtime.
 
 ## Mobile runtime
