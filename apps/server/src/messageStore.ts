@@ -1,18 +1,18 @@
 import type { z } from 'zod';
 import { query } from './db.js';
+import { requireGroupCanSend } from './groupModerationStore.js';
 import { messageHistorySchema, messageSendSchema } from './validation.js';
 
 type Envelope = z.infer<typeof messageSendSchema>;
 type HistoryRequest = z.infer<typeof messageHistorySchema>;
 
-// SECURITY NOTE (scanner flag "input-trust"): envelope.conversationId /
-// senderDeviceId are persisted without re-checking membership/ownership
-// here. Reviewed as a false positive for the current call path — the only
-// caller, message:send in server.ts, already runs requireConversationMember()
-// and requireActiveDevice() before calling this. If a second call site is
-// ever added, it MUST perform the same checks first; this function does not
-// re-verify on its own.
+// SECURITY NOTE: membership/device/block authorization still belongs to the
+// authenticated Socket.IO call path, but group mute enforcement is repeated
+// here at the persistence boundary so no future server-side caller can bypass
+// a moderator mute simply by calling persistEncryptedMessage() directly.
 export async function persistEncryptedMessage(userId: string, envelope: Envelope) {
+  await requireGroupCanSend(userId, envelope.conversationId);
+
   const { rows } = await query<{ id: string; created_at: string; duplicate: boolean }>(
     `with inserted as (
        insert into public.messages (
