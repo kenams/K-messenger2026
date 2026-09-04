@@ -12,14 +12,15 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #194 on head `f913b4d0f1d478f77f5377cc489ff661b3285371`: SUCCESS
+- CI #196 on head `d066785bce68397f019250926fb7dbdd8ecd7a3b`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers, bounded moderator-only group-ban listing primitive and strict group-scoped moderation read payload coverage are CI-validated through #194
-- functional head `e050768ef467f5c17d48ef595f10b245e7c701fa` normalizes moderator ban-list timestamps to explicit ISO strings at the server boundary so the mobile fail-closed parser receives a deterministic wire contract; CI for this head is pending and must pass before release validation
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers, bounded moderator-only group-ban listing primitive and strict group-scoped moderation read payload coverage are CI-validated through #196
+- mobile now has a guarded realtime moderation client for mute/unmute/ban/unban plus the future moderator-only ban-list event; malformed or rejected acknowledgements fail closed instead of being treated as success
+- current functional head includes commit `828cf727551f737060f86afd5ff53b9bcbb18add`; CI for this new head must pass before release validation
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -30,8 +31,6 @@ Re-verified through the connected Neon project on 2026-09-04:
 - region `aws-eu-central-1`
 - dedicated free project (`free_v3`)
 - database `kssenger`
-- remote public schema contains exactly 10 ordinary tables and all 10 have RLS enabled
-- Neon Auth / Better Auth and Data API remain the intended auth/data surfaces
 - no other Neon project was touched during this run
 - remote public schema remains intentionally unchanged by this run
 - message persistence remains ciphertext-envelope only and idempotent by `(sender_user_id, client_message_id)`
@@ -88,7 +87,8 @@ Completed and CI-validated unless explicitly noted:
 - Groups lists/creates/opens real groups and renders real members/presence/history
 - owner/admin group controls call real server mutations for invite/remove/promote/demote/ownership transfer/leave
 - mobile moderation helpers mirror backend role boundaries, build bounded mute/unmute/ban/unban payloads and defensively normalize incoming moderation events
-- moderator-only banned-user list responses now have a typed mobile contract and fail-closed normalization: malformed entries, invalid dates and responses above the backend 200-entry bound are rejected before UI consumption
+- moderator-only banned-user list responses have a typed mobile contract and fail-closed normalization: malformed entries, invalid dates and responses above the backend 200-entry bound are rejected before UI consumption
+- `groupModerationRealtime.ts` now centralizes authenticated realtime mute/unmute/ban/unban requests, ack validation and the future `group:bans-list` call so `GroupsScreen` does not duplicate low-level socket handling
 - group moderation controls are not yet exposed in `GroupsScreen`; moderator-only banned-user Socket.IO listing must be wired before unban UX
 - group read-receipt preference parity is not yet complete
 - plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated and device-tested
@@ -138,7 +138,7 @@ CI-validated Neon-native schema covers:
 3. apply and verify K-Feed/Moments/K-MAP plus group-integrity/moderation migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. wire moderator-only ban listing into Socket.IO, then expose Groups mute/unmute/ban/unban controls and consume moderation events
+6. wire moderator-only ban listing into Socket.IO, then expose Groups mute/unmute/ban/unban controls through the new guarded mobile moderation client and consume moderation events
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
