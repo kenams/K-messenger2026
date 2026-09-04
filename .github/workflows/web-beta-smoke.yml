@@ -1,0 +1,86 @@
+name: Web Beta Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [bootstrap/platform]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/web-beta-smoke.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/web-beta-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      BETA_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kssenger-beta
+      API_URL: https://vlofsaivgydbzghptlfj.supabase.co/functions/v1/kss-api
+      ORIGIN: https://vlofsaivgydbzghptlfj.supabase.co
+    steps:
+      - name: Check public beta assets
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 "$BETA_URL" -o index.html
+          grep -q 'K-SSENGER' index.html
+          curl --fail --silent --show-error --location --retry 3 -D headers.txt "$BETA_URL/app.js" -o app.js
+          grep -qi '^content-type: text/javascript' headers.txt
+          grep -q '/api/send' app.js
+          grep -q 'kss-api' app.js
+          curl --fail --silent --show-error "$API_URL/health" | jq -e '.ok == true' >/dev/null
+
+      - name: Two-user auth contacts chat Wizz block flow
+        run: |
+          set -euo pipefail
+          suffix="${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}"
+          user_a="qa${suffix}a"
+          user_b="qa${suffix}b"
+          email_a="${user_a}@kssenger.test"
+          email_b="${user_b}@kssenger.test"
+          pass="Kssenger-QA-${suffix}!"
+          message="hello-${suffix}"
+          api="$API_URL"
+          cleanup() {
+            curl -sS -o /dev/null -X DELETE -H "Origin: $ORIGIN" -b b.cookie "$api/account" || true
+            curl -sS -o /dev/null -X DELETE -H "Origin: $ORIGIN" -b a.cookie "$api/account" || true
+          }
+          trap cleanup EXIT
+
+          curl --fail -sS -c a.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
+            -d "$(jq -nc --arg e "$email_a" --arg p "$pass" --arg u "$user_a" '{email:$e,password:$p,username:$u,nickname:"Alpha QA"}')" "$api/signup" >/dev/null
+          curl --fail -sS -c b.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
+            -d "$(jq -nc --arg e "$email_b" --arg p "$pass" --arg u "$user_b" '{email:$e,password:$p,username:$u,nickname:"Beta QA"}')" "$api/signup" >/dev/null
+
+          aid="$(curl --fail -sS -b a.cookie "$api/me" | jq -r '.user.id')"
+          bid="$(curl --fail -sS -b b.cookie "$api/me" | jq -r '.user.id')"
+          test -n "$aid" && test -n "$bid" && test "$aid" != "$bid"
+
+          curl --fail -sS -b a.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
+            -d "$(jq -nc --arg u "$user_b" '{username:$u}')" "$api/request" >/dev/null
+          rid="$(curl --fail -sS -b b.cookie "$api/requests" | jq -r --arg aid "$aid" '.requests[] | select(.sender_id==$aid) | .id' | head -1)"
+          test -n "$rid"
+          curl --fail -sS -b b.cookie -H "Origin: $ORIGIN" -X POST "$api/request/$rid/accept" >/dev/null
+          curl --fail -sS -b a.cookie "$api/contacts" | jq -e --arg bid "$bid" '.contacts | any(.id==$bid)' >/dev/null
+
+          curl --fail -sS -b a.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
+            -d "$(jq -nc --arg peer "$bid" --arg body "$message" '{peer:$peer,body:$body,kind:"text"}')" "$api/send" >/dev/null
+          curl --fail -sS -b b.cookie "$api/messages?peer=$aid" | jq -e --arg m "$message" '.messages | any(.body==$m and .kind=="text")' >/dev/null
+
+          curl --fail -sS -b a.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
+            -d "$(jq -nc --arg peer "$bid" '{peer:$peer,body:"WIZZ",kind:"wizz"}')" "$api/send" >/dev/null
+          curl --fail -sS -b b.cookie "$api/messages?peer=$aid" | jq -e '.messages | any(.kind=="wizz")' >/dev/null
+
+          curl --fail -sS -b b.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
+            -d "$(jq -nc --arg peer "$aid" '{peer:$peer}')" "$api/block" >/dev/null
+          code="$(curl -sS -o blocked.json -w '%{http_code}' -b a.cookie -H 'content-type: application/json' -H "Origin: $ORIGIN" \
+            -d "$(jq -nc --arg peer "$bid" '{peer:$peer,body:"must fail",kind:"text"}')" "$api/send")"
+          test "$code" = "403"
+
+          echo 'K-ssenger two-user beta flow verified end-to-end.'
