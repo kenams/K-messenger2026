@@ -14,6 +14,17 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - name: Wake and verify public realtime service
+        run: |
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error --max-time 15 https://kssenger-server.onrender.com/health | grep -q '"ok":true'; then
+              echo "K-ssenger realtime health OK"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "K-ssenger realtime health failed"
+          exit 1
       - name: Run real Neon + Socket.IO Alice/Bob/Charlie smoke
         env:
           KSSENGER_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
