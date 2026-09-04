@@ -94,6 +94,16 @@ export async function addGroupMember(actorId: string, conversationId: string, me
     );
     if ((existingCount ?? 0) > 0) throw new Error('GROUP_MEMBER_ALREADY_PRESENT');
 
+    const { rowCount: banCount } = await client.query(
+      `select 1
+         from public.group_bans
+        where conversation_id = $1
+          and user_id = $2
+        limit 1`,
+      [conversationId, memberId],
+    );
+    if ((banCount ?? 0) > 0) throw new Error('GROUP_MEMBER_BANNED');
+
     const { rowCount: contactCount } = await client.query(
       `select 1 from public.contacts where owner_id = $1 and contact_id = $2`,
       [actorId, memberId],
