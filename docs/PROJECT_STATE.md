@@ -12,15 +12,15 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #198 on head `5b8322f4a30b41050143d794017fb25de4fa2ff1`: SUCCESS
+- CI #200 on head `f50022edee3835d8cc3272432c73715b71e87a16`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers, bounded moderator-only group-ban listing primitive and strict group-scoped moderation read payload coverage are CI-validated through #198
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers, bounded moderator-only group-ban listing primitive and strict group-scoped moderation read payload coverage are CI-validated through #200
 - mobile has a guarded realtime moderation client for mute/unmute/ban/unban plus the future moderator-only ban-list event; malformed or rejected acknowledgements fail closed instead of being treated as success
-- current functional head includes commit `71e30fe2fdffd2a06739897df73f23399b7b1dd4`, which normalizes persisted mute expiry to an ISO string before realtime acknowledgement/event serialization; CI for this head must pass before release validation
+- current functional head includes commit `1f36c2dcbc828dfd2275374142c13ed7378db0f1`, adding centralized fail-closed consumption of `group:moderation` and `group:banned` events for the mobile UI; CI for this head must pass before release validation
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -90,6 +90,7 @@ Completed and CI-validated unless explicitly noted:
 - mobile moderation helpers mirror backend role boundaries, build bounded mute/unmute/ban/unban payloads and defensively normalize incoming moderation events
 - moderator-only banned-user list responses have a typed mobile contract and fail-closed normalization: malformed entries, invalid dates and responses above the backend 200-entry bound are rejected before UI consumption
 - `groupModerationRealtime.ts` centralizes authenticated realtime mute/unmute/ban/unban requests, ack validation and the future `group:bans-list` call so `GroupsScreen` does not duplicate low-level socket handling
+- the same realtime module now centralizes `group:moderation` and `group:banned` subscriptions; malformed event payloads are dropped before reaching UI state
 - group moderation controls are not yet exposed in `GroupsScreen`; moderator-only banned-user Socket.IO listing must be wired before unban UX
 - group read-receipt preference parity is not yet complete
 - plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated and device-tested
