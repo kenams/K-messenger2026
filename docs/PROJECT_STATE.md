@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #192 on head `c4cea18a75ac2b155bf116cfd11fd6a6772b8316`: SUCCESS
+- CI #194 on head `f913b4d0f1d478f77f5377cc489ff661b3285371`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers, bounded moderator-only group-ban listing primitive and strict group-scoped moderation read payload coverage are CI-validated through #192
-- functional head `dd48db7adc67edd9f2979f1135bca11c1b7066b9` adds defensive mobile normalization for moderator-only banned-user list responses, including a hard 200-entry cap and rejection of malformed profile/date fields; CI for this head is pending and must pass before release validation
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks, authenticated Socket.IO moderation handlers, bounded moderator-only group-ban listing primitive and strict group-scoped moderation read payload coverage are CI-validated through #194
+- functional head `e050768ef467f5c17d48ef595f10b245e7c701fa` normalizes moderator ban-list timestamps to explicit ISO strings at the server boundary so the mobile fail-closed parser receives a deterministic wire contract; CI for this head is pending and must pass before release validation
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -69,7 +69,8 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - `addGroupMember` rejects any target still present in `group_bans`; unban must occur first
 - `persistEncryptedMessage()` enforces group mute status before insertion
 - `group:mute`, `group:ban` and `group:unban` are registered and CI-validated
-- `listGroupBans()` provides a bounded (max 200), profile-shaped ban list only after a transaction-scoped owner/admin check; Socket.IO exposure is still pending on the current head
+- `listGroupBans()` provides a bounded (max 200), profile-shaped ban list only after a transaction-scoped owner/admin check; its `bannedAt` field is normalized server-side to an ISO timestamp string
+- Socket.IO exposure of the moderator-only ban list is still pending on the current head
 
 ## Mobile Runtime
 Completed and CI-validated unless explicitly noted:
