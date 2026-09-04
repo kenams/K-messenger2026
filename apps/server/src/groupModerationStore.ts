@@ -3,6 +3,16 @@ import { query, transaction } from './db.js';
 
 type GroupRole = 'member' | 'admin' | 'owner';
 
+export type GroupBanSummary = {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  bannedBy: string;
+  reason: string | null;
+  bannedAt: Date;
+};
+
 async function requireModerator(client: PoolClient, actorId: string, conversationId: string) {
   const { rows } = await client.query<{ role: GroupRole }>(
     `select cm.role
@@ -37,6 +47,44 @@ async function requireModeratableTarget(
   if (targetRole === 'owner') throw new Error('GROUP_OWNER_IMMUTABLE');
   if (actorRole === 'admin' && targetRole !== 'member') throw new Error('GROUP_OWNER_REQUIRED');
   return targetRole;
+}
+
+export async function listGroupBans(actorId: string, conversationId: string): Promise<GroupBanSummary[]> {
+  return transaction(async (client) => {
+    await requireModerator(client, actorId, conversationId);
+    const { rows } = await client.query<{
+      user_id: string;
+      username: string;
+      display_name: string;
+      avatar_url: string | null;
+      banned_by: string;
+      reason: string | null;
+      created_at: Date;
+    }>(
+      `select gb.user_id,
+              p.username,
+              p.display_name,
+              p.avatar_url,
+              gb.banned_by,
+              gb.reason,
+              gb.created_at
+         from public.group_bans gb
+         join public.profiles p on p.id = gb.user_id
+        where gb.conversation_id = $1
+        order by gb.created_at desc
+        limit 200`,
+      [conversationId],
+    );
+    return rows.map((row) => ({
+      userId: row.user_id,
+      username: row.username,
+      displayName: row.display_name,
+      avatarUrl: row.avatar_url,
+      bannedBy: row.banned_by,
+      reason: row.reason,
+      bannedAt: row.created_at,
+    }));
+  });
 }
 
 export async function setGroupMute(
