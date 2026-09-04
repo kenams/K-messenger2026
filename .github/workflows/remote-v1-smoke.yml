@@ -1,8 +1,7 @@
 name: Remote V1 Smoke
 
 on:
-  push:
-    branches: [fix/feed-kmap-contact-security]
+  workflow_dispatch:
 
 jobs:
   remote-v1-smoke:
