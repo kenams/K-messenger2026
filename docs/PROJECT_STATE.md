@@ -12,14 +12,14 @@
 
 ## Latest Verified GitHub State
 Verified on 2026-09-04:
-- CI #186 on head `47bee5a295dcb19f9fe8a33ea47d1460859b60e0`: SUCCESS
+- CI #188 on head `64b4e2100bc8f7ea7fa33ac85e0b5455d6847c20`: SUCCESS
 - workspace/typecheck: SUCCESS
 - server tests: SUCCESS
 - core Alice/Bob/Charlie RLS integration suite: SUCCESS
 - K-Feed/Moments/K-MAP isolated PostgreSQL 17 RLS suite: SUCCESS
 - DB-level single-owner enforcement is CI-validated in fresh core installs plus incremental migration `0005_group_single_owner.sql`
-- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict mute/ban payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks and authenticated Socket.IO moderation handlers are CI-validated through #186
-- functional head `186bde91eaf75b53be0c850f04433eb9c5702bf3` completes mobile moderation helper coverage with safe unban payload construction plus defensive moderation-event normalization; CI #187 is queued and must pass before this helper update is treated as release-validated
+- migration `0006_group_moderation.sql`, guarded backend mute/ban primitives, strict moderation payload validation, active-ban reinvite protection, persistence-level group mute enforcement, persistence-level receipt membership checks and authenticated Socket.IO moderation handlers are CI-validated through #188
+- functional head `5560a51377d7e74161221a65f5e5a35031ac7c01` adds a bounded moderator-only group-ban listing primitive; CI for this head is pending and must pass before release validation
 - earlier Android APK builds are verified successful, including APK #25 wired to the public Render + Neon configuration
 
 ## Dedicated Remote K-ssenger Backend
@@ -29,6 +29,8 @@ Re-verified through the connected Neon project on 2026-09-04:
 - PostgreSQL 17
 - region `aws-eu-central-1`
 - dedicated free project (`free_v3`)
+- database `kssenger`
+- remote public schema contains exactly 10 ordinary tables and all 10 have RLS enabled
 - Neon Auth / Better Auth and Data API remain the intended auth/data surfaces
 - no other Neon project was touched during this run
 - remote public schema remains intentionally unchanged by this run
@@ -50,61 +52,52 @@ Completed and CI-validated unless explicitly marked pending on the current head:
 - identity is derived from verified JWT `sub`; client-supplied identity is never trusted
 - server runtime has no `@supabase/supabase-js` dependency
 - PostgreSQL access uses `pg`, parameterized SQL and explicit transactions
-- contacts/request/accept/decline/cancel/remove/favorite/block paths are Neon/Postgres-backed
+- contacts request/accept/decline/cancel/remove/favorite/block paths are Neon/Postgres-backed
 - presence and K-Pulse authorization are real server paths
-- realtime presence audience honors `privacy_settings.show_online`; users set to `nobody` are not broadcast to contacts
-- contacts/list and search mask invisible/private presence instead of leaking the stored state
-- contact list exposes nickname, custom status and now-playing metadata only through privacy-aware server shaping
-- `show_music='nobody'` suppresses now-playing title/artist from the contact list response
+- realtime presence audience honors privacy settings and masks private/invisible presence
 - message history/persistence/receipts remain ciphertext-envelope only
-- receipt persistence independently requires the verified user to still be a member of the message conversation both when loading the message and immediately before the receipt upsert
-- direct conversation creation/reuse uses contact/block checks plus transaction advisory locking to prevent duplicate 1:1 conversations
-- authenticated `conversations:list` returns only conversations where the verified user is a member and exposes safe metadata without plaintext/ciphertext bodies
-- group creation/member add/remove/role promotion/demotion/leave are transaction-backed and authorization checked server-side
-- group ownership transfer is transaction-backed with explicit row-count conflict checks
-- the Neon core schema defines a partial unique index allowing at most one `owner` membership per conversation; incremental migration 0005 carries the same guard for existing databases
-- removed/leaving sockets are evicted from group rooms; newly invited online sockets join only after DB authorization succeeds
+- receipt persistence independently requires current conversation membership
+- direct conversation creation/reuse uses contact/block checks plus transaction advisory locking
+- authenticated `conversations:list` exposes only the verified user's conversations and safe metadata
+- group create/member add/remove/promote/demote/leave and ownership transfer are transaction-backed and authorization checked server-side
+- a partial unique index permits at most one group owner; migration 0005 carries the same guard for existing databases
+- removed/leaving/banned sockets are evicted from group rooms; invited online sockets join only after DB authorization succeeds
 - `groupModerationStore.ts` provides role-checked mute, ban and unban primitives; admins cannot moderate owners/admins and self-moderation is rejected
 - migration 0006 adds `muted_until` plus backend-controlled `group_bans`; authenticated clients have no direct mutation grant
-- strict `groupMuteSchema` / `groupBanSchema` contracts reject forged extra moderation fields, validate ISO mute expiry and bound ban reasons to 240 characters
+- strict mute/ban contracts reject forged extra moderation fields, validate ISO mute expiry and bound ban reasons to 240 characters
 - `addGroupMember` rejects any target still present in `group_bans`; unban must occur first
-- `persistEncryptedMessage()` calls `requireGroupCanSend()` before insertion for defense-in-depth mute enforcement
-- `group:mute`, `group:ban` and `group:unban` are registered and CI-validated: store authorization remains authoritative, banned sockets are evicted after the transaction succeeds, and affected clients receive bounded moderation/update events
+- `persistEncryptedMessage()` enforces group mute status before insertion
+- `group:mute`, `group:ban` and `group:unban` are registered and CI-validated
+- `listGroupBans()` now provides a bounded (max 200), profile-shaped ban list only after a transaction-scoped owner/admin check; Socket.IO exposure is still pending on the current head
 
 ## Mobile Runtime
 Completed and CI-validated unless explicitly noted:
-- Neon Auth/Data API client is explicit through `backend.ts`
-- obsolete mobile Supabase compatibility shim removed
-- authenticated Socket.IO client endpoint is `EXPO_PUBLIC_KSSENGER_SOCKET_URL`
-- reconnect behavior resolves a fresh Neon Auth access token for every initial connection/reconnection
+- Neon Auth/Data API client is explicit through `backend.ts`; obsolete mobile Supabase compatibility shim is removed
+- authenticated Socket.IO endpoint is `EXPO_PUBLIC_KSSENGER_SOCKET_URL`
+- reconnect resolves a fresh Neon Auth access token for every initial connection/reconnection
 - app lifecycle publishes online/away/offline presence
-- Contacts uses real server contacts/search/requests instead of fake demo data
-- incoming vs outgoing contact requests are distinguished
-- real presence updates and debounced login events are consumed
+- Contacts uses real server contacts/search/requests, real presence updates and debounced login events
 - K-Pulse sends/receives through the real authorization/rate-limit path
-- contact groups/list names, nicknames, custom status and now-playing music are rendered from real backend data
 - profile editing supports display name, username, custom status, bio, HTTPS avatar URL and now-playing title/artist
-- login-event notices honor the authenticated user's `login_notifications` preference
-- `Moi -> Vie privée` edits self-scoped Neon privacy settings for online visibility, music visibility, K-Pulse policy, login alerts and direct-chat read receipts
-- direct conversations honor `read_receipts=false` by emitting only `delivered` instead of `read` while open
+- privacy settings control online visibility, music visibility, K-Pulse policy, login alerts and direct-chat read receipts through self-scoped Neon RLS
+- direct conversations honor `read_receipts=false` by emitting delivered-only receipts while open
 - selecting a contact opens/reuses a real direct conversation and loads encrypted-envelope history
 - Chats private list uses authenticated `conversations:list`
 - Groups lists/creates/opens real groups and renders real members/presence/history
-- owner/admin group controls call real server mutations: invite contact, remove member, promote/demote admin, transfer ownership and leave group
-- mobile moderation helpers mirror backend role boundaries, construct bounded one-hour mute/unmute/ban/unban payloads without accepting actor identity from the client, and defensively normalize incoming moderation events before UI consumption
-- group moderation controls for mute/ban/unban are not yet exposed in `GroupsScreen`; server wiring is CI-validated
+- owner/admin group controls call real server mutations for invite/remove/promote/demote/ownership transfer/leave
+- mobile moderation helpers mirror backend role boundaries, build bounded mute/unmute/ban/unban payloads and defensively normalize incoming moderation events
+- group moderation controls are not yet exposed in `GroupsScreen`; moderator-only banned-user Socket.IO listing must be wired before unban UX
 - group read-receipt preference parity is not yet complete
 - plaintext message sending remains intentionally locked until a vetted native E2EE protocol/device-key path is integrated and device-tested
 - authenticated account export is exposed; exported messages remain encrypted envelopes
 
 ## Social Identity Direction
-K-ssenger should recreate the feeling that made classic social messengers alive without copying Microsoft branding/assets:
+K-ssenger recreates the alive, presence-first feel of classic social messengers without copying Microsoft branding/assets:
 - presence is a first-class social signal
 - contacts can show expressive display names, custom status and current music
 - login alerts recreate the “someone just came online” moment with user-controlled privacy
-- K-Pulse is the outward K-ssenger attention mechanic; legacy `wizz` naming remains internal compatibility only
-- favorites can drive stronger social signals without exposing everyone equally
-- user privacy controls must remain stronger than the nostalgic behavior they enable
+- K-Pulse is the public K-ssenger attention mechanic; legacy `wizz` naming remains internal compatibility only
+- privacy controls remain stronger than the nostalgic behavior they enable
 
 ## Neon Social Modules Prepared
 CI-validated Neon-native schema covers:
@@ -118,17 +111,16 @@ CI-validated Neon-native schema covers:
 - explicit least-privilege grants for the Data API `authenticated` role
 
 ## Deployment / Release State
-- dedicated public realtime endpoint is configured as `https://kssenger-server.onrender.com` and the mobile preview configuration points to the K-ssenger Render/Neon stack
-- do not claim that the latest server commit is deployed without deployment-version proof
+- dedicated public realtime endpoint is configured as `https://kssenger-server.onrender.com`; mobile preview points to the K-ssenger Render/Neon stack
+- do not claim the latest server commit is deployed without deployment-version proof
 - do not deploy the current moderation head before migration 0006 is approved/applied
 - mobile realtime fails closed when `EXPO_PUBLIC_KSSENGER_SOCKET_URL` is missing
-- Android debug APK CI builds through Expo prebuild + Gradle
-- earlier Android APK artifacts are verified; verify each newer functional head separately before treating it as the release candidate
+- Android debug APK CI builds through Expo prebuild + Gradle; earlier APK artifacts are verified
 - no verified iOS signing environment or Apple signing credentials are available here
 
 ## Account / Auth Safety
-- account export is implemented through the authenticated Data API/RLS surface
-- Better Auth supports authenticated user deletion only when deletion is enabled in auth configuration and protected by password/fresh-session/verification safeguards
+- account export is implemented through authenticated Data API/RLS
+- Better Auth user deletion must only be enabled with proper password/fresh-session/verification safeguards
 - secure full account deletion remains unfinished; never fake deletion by deleting only the profile row
 
 ## Branding / Legal Safety
@@ -138,12 +130,12 @@ CI-validated Neon-native schema covers:
 - trademark clearance remains required before commercial launch
 
 ## Remaining V1 Priorities
-1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership/moderation changes -> ownership transfer -> forced reconnect/token refresh
+1. complete the real multi-user remote test with at least two devices/accounts: signup/login -> contacts -> presence/login alert -> K-Pulse -> direct/group open -> receipts -> group membership/moderation -> ownership transfer -> forced reconnect/token refresh
 2. integrate a vetted native E2EE/device-key protocol, then enable actual private/group message sending; do not claim production E2EE before device proof
 3. apply and verify K-Feed/Moments/K-MAP plus group-integrity/moderation migrations on the dedicated remote Neon branch through the explicit migration-approval flow
 4. replace K-Feed/Moments/K-MAP placeholder UI with real Neon-native runtime after the remote schema/storage is ready
 5. add approved native media upload/storage and push notifications; never store large media blobs in Postgres
-6. wire the moderation helpers into mobile Groups for mute/unmute/ban and consume `group:moderation` / `group:banned`; add a moderator-only banned-user listing path before exposing unban UX
+6. wire moderator-only ban listing into Socket.IO, then expose Groups mute/unmute/ban/unban controls and consume moderation events
 7. complete moderation/report/block UX and securely verified Auth account deletion
 8. verify the current-head Android artifact, then move toward signed Android/iOS release builds when signing is available
 9. release polish/design/logo comes after the functional/security gates, preserving the independent K-ssenger brand
