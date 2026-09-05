@@ -36,16 +36,17 @@ function requireManagementKey(apiKey?: string) {
   return key;
 }
 
+export function buildMediaPresignUrl(objectKey: string) {
+  if (!objectKey || objectKey.startsWith('/') || objectKey.includes('..')) throw new Error('MEDIA_OBJECT_KEY_INVALID');
+  return `${NEON_API_BASE}/projects/${KSSENGER_NEON_PROJECT_ID}/branches/${KSSENGER_NEON_BRANCH_ID}/buckets/${KSSENGER_MEDIA_BUCKET}/objects/${encodeURIComponent(objectKey)}/presign`;
+}
+
 async function presignObject(objectKey: string, operation: 'upload' | 'download', contentType: string | undefined, apiKey?: string, fetchImpl: FetchLike = fetch) {
   const key = requireManagementKey(apiKey);
-  // CRITICAL FIX (2026-09-05): joining per-segment encodeURIComponent with
-  // real "/" produced literal extra path segments (e.g. .../objects/userId/
-  // avatar/file.jpg/presign) instead of one encoded object key segment
-  // (.../objects/userId%2Favatar%2Ffile.jpg/presign). Neon's API router
-  // returned a flat 404 "this route does not exist" for every real request -
-  // verified directly against the live Neon Object Storage API. The object
-  // key must be encoded as a SINGLE path segment (slashes as %2F).
-  const url = `${NEON_API_BASE}/projects/${KSSENGER_NEON_PROJECT_ID}/branches/${KSSENGER_NEON_BRANCH_ID}/buckets/${KSSENGER_MEDIA_BUCKET}/objects/${encodeURIComponent(objectKey)}/presign`;
+  // Neon expects the full object key as one encoded route parameter. Keeping
+  // this construction in buildMediaPresignUrl also gives CI a direct regression
+  // target so nested user/purpose/object keys cannot silently become 404s again.
+  const url = buildMediaPresignUrl(objectKey);
   const response = await fetchImpl(url, {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, accept: 'application/json', 'content-type': 'application/json' },
