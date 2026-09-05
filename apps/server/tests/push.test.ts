@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const queryMock = vi.fn();
-const warnMock = vi.fn();
+const { queryMock, warnMock } = vi.hoisted(() => ({
+  queryMock: vi.fn(),
+  warnMock: vi.fn(),
+}));
 
 vi.mock('../src/db.js', () => ({ query: queryMock }));
 vi.mock('../src/logger.js', () => ({ logger: { warn: warnMock } }));
