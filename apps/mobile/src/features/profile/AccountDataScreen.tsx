@@ -33,13 +33,14 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
     setBusy(true);
     setNotice('');
     try {
-      const [profiles, privacy, contacts, requests, blocks, devices, conversations, members, messages, receipts, ageProfile, videos, videoReports, moments, momentViews, momentReactions, momentReports, locationShares] = await Promise.all([
+      const [profiles, privacy, contacts, requests, blocks, devices, pushSubscriptions, conversations, members, messages, receipts, ageProfile, videos, videoReports, moments, momentViews, momentReactions, momentReports, locationShares] = await Promise.all([
         readOwnedTable('profiles', 'id', profile.id),
         readOwnedTable('privacy_settings', 'user_id', profile.id),
         readOwnedTable('contacts', 'owner_id', profile.id),
         readTable('contact_requests'),
         readTable('blocks'),
         readOwnedTable('devices', 'user_id', profile.id),
+        readOwnedTable('push_subscriptions', 'user_id', profile.id, 'id,device_id,platform,enabled,last_seen_at,created_at,updated_at'),
         readTable('conversations'),
         readTable('conversation_members'),
         readTable('messages'),
@@ -60,16 +61,17 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
       const locationPoints = await readRowsForIds('location_points', 'share_id', ownedShareIds);
 
       const payload = {
-        format: 'k-ssenger-account-export-v2',
+        format: 'k-ssenger-account-export-v3',
         exported_at: new Date().toISOString(),
         user_id: profile.id,
-        note: 'Private message bodies remain encrypted envelopes. This export does not decrypt server-side ciphertext. Relationship and conversation rows are limited by K-ssenger RLS; public profile directory rows for other users are intentionally excluded.',
+        note: 'Private message bodies remain encrypted envelopes. Push provider tokens are intentionally excluded from this portable export. Relationship and conversation rows are limited by K-ssenger RLS; public profile directory rows for other users are intentionally excluded.',
         profile: profiles[0] ?? null,
         privacy_settings: privacy,
         contacts,
         contact_requests: requests,
         blocks,
         devices,
+        push_subscriptions: pushSubscriptions,
         conversations,
         conversation_members: members,
         encrypted_messages: messages,
@@ -113,7 +115,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>📦 Exporter mon compte</Text>
-          <Text style={styles.copy}>Génère un export JSON de ton profil, paramètres, relations, conversations autorisées, K-Feed, Moments et partages K-MAP. Les messages privés restent sous forme chiffrée.</Text>
+          <Text style={styles.copy}>Génère un export JSON de ton profil, paramètres, relations, conversations autorisées, appareils, K-Feed, Moments et partages K-MAP. Les messages privés restent chiffrés et les jetons push ne sont jamais exportés.</Text>
           <TouchableOpacity style={styles.primary} disabled={busy} onPress={() => void exportData()}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Créer mon export</Text>}
           </TouchableOpacity>
