@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import { query } from './db.js';
 import { requireGroupCanSend } from './groupModerationStore.js';
+import { sendConversationPush } from './push.js';
 import { messageHistorySchema, messageSendSchema } from './validation.js';
 
 type Envelope = z.infer<typeof messageSendSchema>;
@@ -52,6 +53,13 @@ export async function persistEncryptedMessage(userId: string, envelope: Envelope
 
   const stored = rows[0];
   if (!stored) throw new Error('MESSAGE_PERSIST_FAILED');
+
+  if (!stored.duplicate) {
+    // Do not include plaintext or ciphertext in push payloads. Delivery is
+    // intentionally best-effort so a provider outage cannot fail messaging.
+    void sendConversationPush(envelope.conversationId, userId, stored.id);
+  }
+
   return { id: stored.id, createdAt: stored.created_at, duplicate: stored.duplicate };
 }
 
