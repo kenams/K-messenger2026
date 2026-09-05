@@ -13,6 +13,55 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+          cache: npm
+      - run: npm ci
+      - name: Gate Neon-only runtime assumptions
+        run: node scripts/no-supabase-runtime-gate.mjs
+      - name: Gate high-severity runtime dependency advisories
+        run: node scripts/runtime-audit-gate.mjs
       - run: npm run typecheck
       - run: npm run test:server
+
+  rls-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: kssenger_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d kssenger_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run Alice/Bob/Charlie Neon core RLS integration suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+          KSSENGER_RLS_RESET: "1"
+        run: node scripts/neon-rls-integration-test.mjs
+      - name: Run K-Feed Moments and K-MAP RLS integration suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+        run: node scripts/neon-social-rls-integration-test.mjs
+      - name: Run push subscription RLS isolation suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+        run: node scripts/neon-push-rls-integration-test.mjs
+      - name: Run private media metadata RLS isolation suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+        run: node scripts/neon-media-rls-integration-test.mjs
+      - name: Run Signal PQXDH prekey isolation suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+        run: node scripts/neon-signal-prekeys-rls-integration-test.mjs

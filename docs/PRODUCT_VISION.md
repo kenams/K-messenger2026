@@ -1,89 +1,97 @@
-# K-ssenger — Product Vision
+# K-ssenger - Product Vision
 
-## Positionnement
+## Positioning
 
-> Et si MSN Messenger n'était jamais mort et avait continué d'évoluer jusqu'en 2027 ?
+K-ssenger should not become a clone of WhatsApp, Telegram or Discord. Its visible identity is K-ssenger: presence, expressive profiles, contact lists, K-Pulse, voluntary social location and private conversations.
 
-K-ssenger ne doit pas devenir un clone de WhatsApp, Telegram ou Discord. L'identité visible reste MSN : présence, personnalisation, connexions, Wizz et contacts.
+The product must stay independently branded and must not imply Microsoft affiliation.
 
-## Architecture produit
+## Product Architecture
 
 ### Contacts
-- statuts : Disponible, Occupé, Absent, Invisible, Hors ligne
-- favoris
-- pseudo, avatar, bio, statut personnalisé
-- musique actuelle
-- événement de connexion configurable
-- recherche et demandes de contact
+
+- statuses: Available, Busy, Away, Invisible, Offline
+- favorites
+- username, avatar, bio, custom status
+- current music
+- configurable login event
+- user search and contact requests
 
 ### Chats
-- privé 1:1
-- groupes
-- E2EE
-- réponses, réactions, édition, suppression
-- texte, image, vidéo, document, vocal
-- accusés envoyé/livré/lu
-- offline, retry, reconnexion, déduplication
 
-### Wizz
-- bouton visible directement dans le chat
-- vibration, animation, son original K-ssenger
-- cooldown et rate limit
-- respect DND / Reduce Motion
-- variantes futures : Classic, Love, Fire, Troll
+- private 1:1
+- groups
+- vetted E2EE before any production E2EE claim
+- replies, reactions, edits, deletion
+- text, image, video, document, voice
+- sent/delivered/read receipts
+- offline, retry, reconnect, deduplication
+
+### K-Pulse
+
+- directly visible chat button
+- vibration, animation and original K-ssenger sound
+- cooldown and rate limit
+- DND / Reduce Motion support
+- future variants: Classic, Love, Fire
 
 ### K-MAP
-- carte sociale opt-in
-- position ponctuelle
-- partage live avec durée
-- position précise ou approximative
+
+- opt-in social map
+- one-time position
+- live sharing with duration
+- precise or approximate position
 - Je viens vers toi
-- ETA et trajet
+- ETA and route
 - On se capte ?
-- point de rendez-vous
+- meeting point
 - Meet Mode
-- road trip / groupe
+- road trip / group
 - Ghost Mode
-- blocage coupe immédiatement le partage
+- block immediately stops sharing access
 
 ### Moments
-- stories photo/vidéo/texte
-- expiration 24 h
-- vue unique
-- confidentialité par audience
-- réponses privées
 
-### Communautés
-- grands groupes
+- photo/video/text stories
+- 24h expiration
+- single view
+- audience privacy
+- private replies
+
+### Communities
+
+- large groups
 - channels
-- admins/modérateurs
-- publications et médias
-- signalement et modération
+- admins/moderators
+- posts and media
+- reporting and moderation
 
-### Moi
-- profil
-- sécurité
-- appareils
-- confidentialité
+### Me
+
+- profile
+- security
+- devices
+- privacy
 - notifications
-- apparence
+- appearance
 - chats
-- stockage
-- aide
+- storage
+- help
 
-## Navigation cible
+## Target Navigation
 
-Contacts · Chats · K-MAP · Moments · Moi
+Contacts - Chats - K-MAP - Moments - Me
 
-Communautés reste accessible depuis Chats tant que le produit n'a pas besoin d'un onglet dédié.
+Communities stay reachable from Chats until the product needs a dedicated tab.
 
-## Différenciateur
+## Differentiator
 
-La présence devient un événement social :
-- qui vient de se connecter
-- qui est disponible
-- qui écoute quoi
-- qui accepte d'être visible sur K-MAP
-- qui peut être rejoint
+Presence becomes a social event:
 
-Le but est : ouvrir K-ssenger, voir qui est là, puis parler ou se retrouver.
+- who just connected
+- who is available
+- who is listening to what
+- who opted into K-MAP visibility
+- who can be met now
+
+The goal: open K-ssenger, see who is around, then talk or meet.
