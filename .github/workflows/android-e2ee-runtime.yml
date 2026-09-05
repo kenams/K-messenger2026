@@ -1,0 +1,73 @@
+name: Android E2EE Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/modules/kssenger-signal/**'
+      - 'apps/mobile/src/lib/e2ee.ts'
+      - 'apps/mobile/src/lib/signalDevice.ts'
+      - '.github/workflows/android-e2ee-runtime.yml'
+  push:
+    branches:
+      - fix/feed-kmap-contact-security
+    paths:
+      - 'apps/mobile/modules/kssenger-signal/**'
+      - 'apps/mobile/src/lib/e2ee.ts'
+      - 'apps/mobile/src/lib/signalDevice.ts'
+      - '.github/workflows/android-e2ee-runtime.yml'
+
+jobs:
+  android-runtime-e2ee:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: '1'
+      EXPO_PUBLIC_NEON_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
+      EXPO_PUBLIC_NEON_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
+      EXPO_PUBLIC_KSSENGER_SOCKET_URL: https://kssenger-server.onrender.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - name: Prebuild Android native project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android
+      - name: Install Android emulator image
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n kssenger-ci -k "system-images;android-35;google_apis;x86_64" --force
+      - name: Start Android emulator
+        run: |
+          sudo chmod 666 /dev/kvm || true
+          nohup "$ANDROID_HOME/emulator/emulator" -avd kssenger-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot > /tmp/kssenger-emulator.log 2>&1 &
+          adb wait-for-device
+          for i in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/kssenger-emulator.log
+          exit 1
+      - name: Execute native libsignal PQXDH and Double Ratchet instrumentation
+        working-directory: apps/mobile/android
+        run: ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Upload instrumentation reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kssenger-e2ee-instrumentation-reports
+          path: |
+            apps/mobile/android/**/build/reports/androidTests/**
+            apps/mobile/android/**/build/outputs/androidTest-results/**
+            /tmp/kssenger-emulator.log
+          if-no-files-found: ignore
+          retention-days: 7
