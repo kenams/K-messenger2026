@@ -54,7 +54,14 @@ type SearchResponse = {
 type ContactRequest = { id: string; sender_id: string; recipient_id: string; status: string };
 type RequestsResponse = { ok: boolean; requests?: ContactRequest[] };
 type LoginNotifications = 'all_contacts' | 'favorites' | 'nobody';
-
+type BlockedUser = {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  blocked_at: string;
+};
+type BlockedResponse = { ok: boolean; blocked?: BlockedUser[]; error?: string };
 type SimpleAck = { ok: boolean; error?: string };
 
 const presenceIcon: Record<Presence, string> = {
@@ -68,7 +75,9 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<SearchResponse['profiles']>([]);
   const [requests, setRequests] = useState<ContactRequest[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [blockedCollapsed, setBlockedCollapsed] = useState(true);
   const [loading, setLoading] = useState(isRealtimeConfigured);
   const [notice, setNotice] = useState('');
   const [managingContactId, setManagingContactId] = useState<string | null>(null);
@@ -105,6 +114,12 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     if (response.ok) setRequests(response.requests ?? []);
   };
 
+  const loadBlockedUsers = async (client: Socket) => {
+    const response = await emitAck<BlockedResponse>(client, 'contacts:blocked');
+    if (!response.ok) throw new Error(response.error ?? 'BLOCKED_CONTACTS_FAILED');
+    setBlockedUsers(response.blocked ?? []);
+  };
+
   const loadLoginNotificationPreference = async (userId: string) => {
     const { data } = await getBackend()
       .from('privacy_settings')
@@ -136,6 +151,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       const refresh = () => {
         void loadContacts(client).catch(() => setNotice('Impossible de charger les contacts.'));
         void loadRequests(client);
+        void loadBlockedUsers(client).catch(() => setNotice('Impossible de charger les personnes bloquées.'));
       };
       const onPresence = ({ userId: changedUserId, status }: { userId: string; status: Presence }) => {
         setContacts((items) => items.map((item) => item.id === changedUserId ? { ...item, presence: status } : item));
@@ -148,6 +164,10 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         if (sender && shouldNotify) setNotice(`🟢 ${sender.nickname} vient de se connecter.`);
       };
       const onRequest = () => void loadRequests(client);
+      const onBlockedChanged = () => {
+        void Promise.all([loadContacts(client), loadRequests(client), loadBlockedUsers(client)])
+          .catch(() => setNotice('Synchronisation de la liste de blocage impossible.'));
+      };
       const onKPulse = ({ senderId }: { senderId: string }) => {
         const sender = contactsRef.current.find((item) => item.id === senderId);
         setNotice(`⚡ K-Pulse reçu${sender ? ` de ${sender.nickname}` : ''} !`);
@@ -161,6 +181,8 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       client.on('contact:declined', onRequest);
       client.on('contact:cancelled', onRequest);
       client.on('contact:removed', refresh);
+      client.on('contact:blocked', onBlockedChanged);
+      client.on('contact:unblocked', onBlockedChanged);
       client.on('kpulse:receive', onKPulse);
       cleanupListeners = () => {
         client.off('connect', refresh);
@@ -171,11 +193,13 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         client.off('contact:declined', onRequest);
         client.off('contact:cancelled', onRequest);
         client.off('contact:removed', refresh);
+        client.off('contact:blocked', onBlockedChanged);
+        client.off('contact:unblocked', onBlockedChanged);
         client.off('kpulse:receive', onKPulse);
       };
 
       try {
-        await Promise.all([loadContacts(client), loadRequests(client)]);
+        await Promise.all([loadContacts(client), loadRequests(client), loadBlockedUsers(client)]);
         if (active) setNotice('');
       } catch {
         if (active) setNotice('Connexion aux contacts K-ssenger impossible.');
@@ -299,8 +323,19 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       return;
     }
     setManagingContactId(null);
-    await Promise.all([loadContacts(socket), loadRequests(socket)]);
+    await Promise.all([loadContacts(socket), loadRequests(socket), loadBlockedUsers(socket)]);
     setNotice(`${contact.nickname} est bloqué. Les interactions et partages actifs sont coupés.`);
+  };
+
+  const unblockContact = async (blocked: BlockedUser) => {
+    if (!socket) return;
+    const response = await emitAck<SimpleAck>(socket, 'contact:unblock', { userId: blocked.id });
+    if (!response.ok) {
+      setNotice('Déblocage impossible.');
+      return;
+    }
+    await loadBlockedUsers(socket);
+    setNotice(`${blocked.display_name} est débloqué. Il n’a pas été réajouté automatiquement à tes contacts.`);
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator /><Text style={styles.counter}>Chargement de tes contacts…</Text></View>;
@@ -347,6 +382,27 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
               <View style={[styles.avatar, profile.presence === 'online' && styles.avatarOnline]}><Text style={styles.avatarText}>{profile.display_name[0] ?? '?'}</Text></View>
               <View style={styles.flex}><Text style={styles.nickname}>{profile.display_name}</Text><Text style={styles.status}>@{profile.username}</Text></View>
               <TouchableOpacity style={styles.accept} onPress={() => void requestContact(profile.id)}><Text style={styles.acceptText}>Ajouter</Text></TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {!!blockedUsers.length && !search.trim() && (
+        <View style={styles.group}>
+          <TouchableOpacity style={styles.groupHeader} onPress={() => setBlockedCollapsed((value) => !value)} accessibilityRole="button" accessibilityLabel="Afficher ou masquer les personnes bloquées">
+            <Text style={styles.groupTitle}>{blockedCollapsed ? '▸' : '▾'} PERSONNES BLOQUÉES</Text>
+            <Text style={styles.groupCount}>{blockedUsers.length}</Text>
+          </TouchableOpacity>
+          {!blockedCollapsed && blockedUsers.map((blocked) => (
+            <View key={blocked.id} style={styles.contact}>
+              <View style={styles.avatar}><Text style={styles.avatarText}>{blocked.display_name[0] ?? '?'}</Text></View>
+              <View style={styles.flex}>
+                <Text style={styles.nickname}>{blocked.display_name}</Text>
+                <Text style={styles.status}>@{blocked.username} · interactions coupées</Text>
+              </View>
+              <TouchableOpacity style={styles.secondaryAction} onPress={() => void unblockContact(blocked)} accessibilityLabel={`Débloquer ${blocked.display_name}`}>
+                <Text style={styles.secondaryActionText}>Débloquer</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </View>
