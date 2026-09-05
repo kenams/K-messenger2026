@@ -2,6 +2,7 @@ package com.kahdigital.kssenger.signal
 
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.util.UUID
 import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.SessionBuilder
 import org.signal.libsignal.protocol.SessionCipher
@@ -18,6 +19,7 @@ import org.signal.libsignal.protocol.state.SessionRecord
 import org.signal.libsignal.protocol.state.SignedPreKeyRecord
 
 private const val STORE_PROBE_KEY = "__probe__"
+private const val INSTALLATION_ID_KEY = "installation:id"
 private const val SESSION_PROBE_NAME = "00000000-0000-4000-8000-000000000001"
 private const val SESSION_PROBE_DEVICE = 1
 private const val SELFTEST_ALICE = "00000000-0000-4000-8000-0000000000a1"
@@ -26,6 +28,17 @@ private const val SELFTEST_BOB = "00000000-0000-4000-8000-0000000000b1"
 class KssengerSignalModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KssengerSignalBridge")
+
+    AsyncFunction("getInstallationId") {
+      val context = appContext.reactContext ?: throw IllegalStateException("ANDROID_CONTEXT_UNAVAILABLE")
+      val store = KeystoreBlobStore(context, "installation-v1")
+      store.get(INSTALLATION_ID_KEY)?.toString(Charsets.UTF_8)?.let { existing ->
+        return@AsyncFunction UUID.fromString(existing).toString()
+      }
+      val generated = UUID.randomUUID().toString()
+      store.put(INSTALLATION_ID_KEY, generated.toByteArray(Charsets.UTF_8))
+      generated
+    }
 
     AsyncFunction("getStatus") {
       val libsignalLoaded = runCatching {
@@ -42,9 +55,7 @@ class KssengerSignalModule : Module() {
 
       val context = appContext.reactContext
       val nativeStore = context?.let { KeystoreBlobStore(it) }
-      val nativeStoreReady = nativeStore != null && runCatching {
-        verifyPersistentEncryptedStore(nativeStore)
-      }.getOrDefault(false)
+      val nativeStoreReady = nativeStore != null && runCatching { verifyPersistentEncryptedStore(nativeStore) }.getOrDefault(false)
       val sessionStoreReady = libsignalLoaded && nativeStoreReady && nativeStore != null && runCatching {
         verifyOfficialSessionStore(SignalSessionStore(nativeStore))
       }.getOrDefault(false)
@@ -70,37 +81,17 @@ class KssengerSignalModule : Module() {
     }
 
     AsyncFunction("processRemoteBundle") {
-        deviceUuid: String,
-        localUserId: String,
-        localSignalDeviceId: Int,
-        remoteUserId: String,
-        remoteSignalDeviceId: Int,
-        registrationId: Int,
-        identityKey: String,
-        signedPreKeyId: Int,
-        signedPreKeyPublic: String,
-        signedPreKeySignature: String,
-        oneTimePreKeyId: Int?,
-        oneTimePreKeyPublic: String?,
-        pqPreKeyId: Int,
-        pqPreKeyPublic: String,
-        pqPreKeySignature: String,
+        deviceUuid: String, localUserId: String, localSignalDeviceId: Int,
+        remoteUserId: String, remoteSignalDeviceId: Int, registrationId: Int,
+        identityKey: String, signedPreKeyId: Int, signedPreKeyPublic: String,
+        signedPreKeySignature: String, oneTimePreKeyId: Int?, oneTimePreKeyPublic: String?,
+        pqPreKeyId: Int, pqPreKeyPublic: String, pqPreKeySignature: String,
       ->
       protocol(deviceUuid).processRemoteBundle(
-        localUserId,
-        localSignalDeviceId,
-        remoteUserId,
-        remoteSignalDeviceId,
-        registrationId,
-        identityKey,
-        signedPreKeyId,
-        signedPreKeyPublic,
-        signedPreKeySignature,
-        oneTimePreKeyId,
-        oneTimePreKeyPublic,
-        pqPreKeyId,
-        pqPreKeyPublic,
-        pqPreKeySignature,
+        localUserId, localSignalDeviceId, remoteUserId, remoteSignalDeviceId,
+        registrationId, identityKey, signedPreKeyId, signedPreKeyPublic,
+        signedPreKeySignature, oneTimePreKeyId, oneTimePreKeyPublic,
+        pqPreKeyId, pqPreKeyPublic, pqPreKeySignature,
       )
       true
     }
@@ -110,39 +101,17 @@ class KssengerSignalModule : Module() {
     }
 
     AsyncFunction("encrypt") {
-        deviceUuid: String,
-        localUserId: String,
-        localSignalDeviceId: Int,
-        remoteUserId: String,
-        remoteSignalDeviceId: Int,
-        plaintext: String,
+        deviceUuid: String, localUserId: String, localSignalDeviceId: Int,
+        remoteUserId: String, remoteSignalDeviceId: Int, plaintext: String,
       ->
-      protocol(deviceUuid).encrypt(
-        localUserId,
-        localSignalDeviceId,
-        remoteUserId,
-        remoteSignalDeviceId,
-        plaintext,
-      )
+      protocol(deviceUuid).encrypt(localUserId, localSignalDeviceId, remoteUserId, remoteSignalDeviceId, plaintext)
     }
 
     AsyncFunction("decrypt") {
-        deviceUuid: String,
-        localUserId: String,
-        localSignalDeviceId: Int,
-        remoteUserId: String,
-        remoteSignalDeviceId: Int,
-        kind: String,
-        ciphertext: String,
+        deviceUuid: String, localUserId: String, localSignalDeviceId: Int,
+        remoteUserId: String, remoteSignalDeviceId: Int, kind: String, ciphertext: String,
       ->
-      protocol(deviceUuid).decrypt(
-        localUserId,
-        localSignalDeviceId,
-        remoteUserId,
-        remoteSignalDeviceId,
-        kind,
-        ciphertext,
-      )
+      protocol(deviceUuid).decrypt(localUserId, localSignalDeviceId, remoteUserId, remoteSignalDeviceId, kind, ciphertext)
     }
   }
 
@@ -169,8 +138,7 @@ class KssengerSignalModule : Module() {
     val contains = store.containsSession(address)
     val indexed = store.getSubDeviceSessions(SESSION_PROBE_NAME).contains(SESSION_PROBE_DEVICE)
     store.deleteSession(address)
-    val cleaned = !store.containsSession(address) &&
-      !store.getSubDeviceSessions(SESSION_PROBE_NAME).contains(SESSION_PROBE_DEVICE)
+    val cleaned = !store.containsSession(address) && !store.getSubDeviceSessions(SESSION_PROBE_NAME).contains(SESSION_PROBE_DEVICE)
     return contains && indexed && serialized.contentEquals(loaded) && cleaned
   }
 
@@ -183,9 +151,7 @@ class KssengerSignalModule : Module() {
     SignalPreKeyStore(store)
     SignalSignedPreKeyStore(store)
     SignalKyberPreKeyStore(store)
-    return firstPair.contentEquals(secondPair) &&
-      firstRegistration == secondRegistration &&
-      firstRegistration in 1..16380
+    return firstPair.contentEquals(secondPair) && firstRegistration == secondRegistration && firstRegistration in 1..16380
   }
 
   private fun verifyAliceBobSession(context: android.content.Context): Boolean {
@@ -213,45 +179,27 @@ class KssengerSignalModule : Module() {
     bobPreKeys.storePreKey(ecPreKeyId, PreKeyRecord(ecPreKeyId, ecPair))
     val signedPair = ECKeyPair.generate()
     val signedSignature = bobPair.privateKey.calculateSignature(signedPair.publicKey.serialize())
-    val signedRecord = SignedPreKeyRecord(signedPreKeyId, System.currentTimeMillis(), signedPair, signedSignature)
-    bobSigned.storeSignedPreKey(signedPreKeyId, signedRecord)
+    bobSigned.storeSignedPreKey(signedPreKeyId, SignedPreKeyRecord(signedPreKeyId, System.currentTimeMillis(), signedPair, signedSignature))
     val kyberPair = KEMKeyPair.generate(KEMKeyType.KYBER_1024)
     val kyberSignature = bobPair.privateKey.calculateSignature(kyberPair.publicKey.serialize())
-    val kyberRecord = KyberPreKeyRecord(kyberPreKeyId, System.currentTimeMillis(), kyberPair, kyberSignature)
-    bobKyber.storeKyberPreKey(kyberPreKeyId, kyberRecord)
+    bobKyber.storeKyberPreKey(kyberPreKeyId, KyberPreKeyRecord(kyberPreKeyId, System.currentTimeMillis(), kyberPair, kyberSignature))
     val bundle = PreKeyBundle(
-      bobIdentity.localRegistrationId,
-      1,
-      ecPreKeyId,
-      ecPair.publicKey,
-      signedPreKeyId,
-      signedPair.publicKey,
-      signedSignature,
-      bobPair.publicKey,
-      kyberPreKeyId,
-      kyberPair.publicKey,
-      kyberSignature,
+      bobIdentity.localRegistrationId, 1, ecPreKeyId, ecPair.publicKey,
+      signedPreKeyId, signedPair.publicKey, signedSignature, bobPair.publicKey,
+      kyberPreKeyId, kyberPair.publicKey, kyberSignature,
     )
     SessionBuilder(aliceSessions, alicePreKeys, aliceSigned, aliceIdentity, bobAddress, aliceAddress).process(bundle)
-    val aliceCipher = SessionCipher(
-      aliceSessions, alicePreKeys, aliceSigned, aliceKyber, aliceIdentity, aliceAddress, bobAddress,
-    )
-    val bobCipher = SessionCipher(
-      bobSessions, bobPreKeys, bobSigned, bobKyber, bobIdentity, bobAddress, aliceAddress,
-    )
+    val aliceCipher = SessionCipher(aliceSessions, alicePreKeys, aliceSigned, aliceKyber, aliceIdentity, aliceAddress, bobAddress)
+    val bobCipher = SessionCipher(bobSessions, bobPreKeys, bobSigned, bobKyber, bobIdentity, bobAddress, aliceAddress)
     val outbound = "kssenger-e2ee-alice-bob-v1".toByteArray(Charsets.UTF_8)
     val firstCiphertext = aliceCipher.encrypt(outbound)
     if (firstCiphertext !is PreKeySignalMessage) return false
-    val bobPlaintext = bobCipher.decrypt(firstCiphertext)
-    if (!outbound.contentEquals(bobPlaintext)) return false
-    if (bobPreKeys.containsPreKey(ecPreKeyId)) return false
-    if (bobKyber.containsKyberPreKey(kyberPreKeyId)) return false
+    if (!outbound.contentEquals(bobCipher.decrypt(firstCiphertext))) return false
+    if (bobPreKeys.containsPreKey(ecPreKeyId) || bobKyber.containsKyberPreKey(kyberPreKeyId)) return false
     val reply = "kssenger-e2ee-bob-alice-v1".toByteArray(Charsets.UTF_8)
     val replyCiphertext = bobCipher.encrypt(reply)
     if (replyCiphertext !is SignalMessage) return false
     val alicePlaintext = aliceCipher.decrypt(replyCiphertext)
-    return reply.contentEquals(alicePlaintext) &&
-      aliceSessions.containsSession(bobAddress) &&
-      bobSessions.containsSession(aliceAddress)
+    return reply.contentEquals(alicePlaintext) && aliceSessions.containsSession(bobAddress) && bobSessions.containsSession(aliceAddress)
   }
 }
