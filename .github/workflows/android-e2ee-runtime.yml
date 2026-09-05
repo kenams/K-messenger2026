@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 45
     env:
       CI: '1'
+      ANDROID_AVD_HOME: ${{ runner.temp }}/kssenger-avd
       EXPO_PUBLIC_NEON_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
       EXPO_PUBLIC_NEON_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
       EXPO_PUBLIC_KSSENGER_SOCKET_URL: https://kssenger-server.onrender.com
@@ -43,7 +44,9 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n kssenger-ci -k "system-images;android-35;google_apis;x86_64" --force
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n kssenger-ci -k "system-images;android-35;google_apis;x86_64" -p "$ANDROID_AVD_HOME/kssenger-ci.avd" --force
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx kssenger-ci
       - name: Start Android emulator
         run: |
           sudo chmod 666 /dev/kvm || true
@@ -51,6 +54,7 @@ jobs:
           adb wait-for-device
           for i in $(seq 1 120); do
             if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              adb shell input keyevent 82 || true
               exit 0
             fi
             sleep 2
