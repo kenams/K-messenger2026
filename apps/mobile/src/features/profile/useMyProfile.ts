@@ -7,6 +7,7 @@ export type MyProfile = {
   display_name: string;
   nickname: string | null;
   avatar_url: string | null;
+  avatar_media_id: string | null;
   bio: string | null;
   custom_status: string | null;
   presence: 'online' | 'busy' | 'away' | 'invisible' | 'offline';
@@ -24,7 +25,7 @@ export function useMyProfile(userId: string) {
     setError(null);
     const { data, error: queryError } = await getBackend()
       .from('profiles')
-      .select('id,username,display_name,nickname,avatar_url,bio,custom_status,presence,now_playing_title,now_playing_artist')
+      .select('id,username,display_name,nickname,avatar_url,avatar_media_id,bio,custom_status,presence,now_playing_title,now_playing_artist')
       .eq('id', userId)
       .maybeSingle();
 

@@ -117,6 +117,11 @@ export async function prepareMediaDownload(userId: string, raw: unknown, options
        from public.media_objects m
       where m.id=$1 and m.status='ready' and (
         m.owner_id=$2::uuid
+        or (m.purpose='avatar' and exists(
+          select 1 from public.profiles p where p.avatar_media_id=m.id
+            and public.not_blocked($2::uuid,p.id)
+            and (p.id=$2::uuid or public.is_contact($2::uuid,p.id))
+        ))
         or (m.purpose='chat' and m.conversation_id is not null and public.is_conversation_member(m.conversation_id,$2::uuid) and public.not_blocked($2::uuid,m.owner_id))
         or (m.purpose='kfeed' and exists(
           select 1 from public.public_videos v where (v.media_object_id=m.id or v.thumbnail_media_id=m.id)
