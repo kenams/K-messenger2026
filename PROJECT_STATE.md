@@ -25,7 +25,7 @@ Live infrastructure applied and verified:
 - `claim_signal_prekey_bundle(uuid)`: authenticated contact-only, block-aware, atomic prekey claim using row locking/`SKIP LOCKED`, one claim per caller/device/bundle version and post-quantum last-resort fallback.
 - Media content bindings connect verified `media_objects` to avatars, K-Feed and Moments instead of trusting arbitrary client URLs.
 
-Repository Neon migrations now run through `0013_media_content_bindings.sql`.
+Repository Neon migrations run through `0013_media_content_bindings.sql`.
 
 ## Operational / implemented
 
@@ -49,18 +49,18 @@ Repository Neon migrations now run through `0013_media_content_bindings.sql`.
 - K-ssenger does not use custom cryptography.
 - The official Signal Messenger Android artifacts `org.signal:libsignal-client:0.100.0` and `org.signal:libsignal-android:0.100.0` are pinned through an Expo config plugin and Signal's official Maven repository.
 - Android `expo prebuild` with that plugin has passed. The internal APK workflow fails closed unless both exact official libsignal `0.100.0` artifacts resolve in the release runtime classpath before `assembleRelease`.
-- The live PQXDH prekey server surface is deployed as described above. It stores public key material only; device private keys must remain native/on-device.
-- `apps/mobile/modules/kssenger-signal` is now a real autolinked Android Expo native module named `KssengerSignalBridge`.
-- The Android bridge probes that the official libsignal runtime is actually loadable and performs a real AES/GCM encrypt/decrypt round-trip with a non-exportable Android Keystore key. This proves the native crypto runtime boundary and OS-backed secure-storage capability without using JavaScript cryptography.
-- The bridge still reports `sessionStoreReady=false`, `deviceKeyStoreReady=false` and `selfTestPassed=false` until persistent libsignal identity/prekey/session stores and a real Signal session self-test exist. `apps/mobile/src/lib/e2ee.ts` requires every readiness bit including `libsignalLoaded` before E2EE can become available.
+- The live PQXDH prekey server surface is deployed as described above. It stores public key material only; device private keys remain native/on-device.
+- `apps/mobile/modules/kssenger-signal` is an autolinked Android Expo native module named `KssengerSignalBridge`.
+- The bridge verifies that the official libsignal runtime and its state-store interfaces are loadable.
+- Native encrypted persistence now exists in `KeystoreBlobStore`: libsignal record bytes can be stored as opaque blobs encrypted with AES-256/GCM using a non-exportable Android Keystore key. Private record bytes never cross the React Native/JavaScript boundary. The bridge performs a write/read/delete persistence self-check and may report `deviceKeyStoreReady=true` only when this OS-backed store succeeds.
+- `sessionStoreReady=false` and `selfTestPassed=false` remain deliberate until official libsignal `IdentityKeyStore`, `PreKeyStore`, `SignedPreKeyStore`, `KyberPreKeyStore` and `SessionStore` adapters are wired to the native encrypted store and a real Signal session encrypt/decrypt self-test succeeds.
 - Private/group plaintext composition remains locked. Production E2EE must not be claimed until two real devices prove encrypt/decrypt, identity verification, prekey consumption, ratchet continuity and reinstall/device-revocation behavior.
 
 ## Validation
 
-- CI run #341 is green on head `662a6f9dc3969749ea7aea3855b680566ff7277e`.
-- Native bridge commit `ecd11bddddb4736be0b8ea5a4a602e25f1f98a4b` passed the main CI test/typecheck/server-test job; CI run #342 RLS integration and Android Internal APK run #79 are still running and remain release gates until green.
-- Android run #79 has already completed checkout, dependency installation, public-backend validation and Expo Android prebuild with the local bridge present. It is currently resolving the exact official libsignal release dependencies before release assembly.
-- Android CI guard commit `e6ce1b27736bedd8ed0289936ed80623c38357bd` adds explicit resolution checks for both official libsignal Android artifacts before release APK assembly.
+- Main CI was green on head `11c5a193bed7d0b04a11dda9a4f2f498f1f42266` before this run (CI run #343).
+- Native encrypted store commits `ec1d87fd8694916a7e3fa287ed95d1d0a08cbcdf` and `fbcff7f873e4faa0bd3156b065a9bae96318ef81` advance the E2EE storage gate without changing the fail-closed session/self-test flags. CI on the new head remains a release gate until green.
+- The dedicated Neon project `late-flower-65059830` was re-inspected during this run and no other Neon project was touched.
 - Media RLS integration uses transaction savepoints for expected authorization failures so negative tests cannot poison later assertions.
 - Real remote social smoke remains green after the server changes.
 - Account deletion provider scope has dedicated regression tests that assert the fixed K-ssenger project/branch URL, DELETE method, fail-closed missing credential behavior and provider failure behavior.
@@ -82,7 +82,7 @@ Repository Neon migrations now run through `0013_media_content_bindings.sql`.
 
 ## Remaining premium V1 release gates
 
-1. Implement persistent native libsignal identity/prekey/session stores behind `KssengerSignalBridge`, add a real native Signal session self-test, then complete two-device E2EE proof before unlocking private/group plaintext composition.
+1. Wire official native libsignal identity/prekey/PQ/session store adapters to `KeystoreBlobStore`, add a real native Signal session self-test, then complete two-device E2EE proof before unlocking private/group plaintext composition.
 2. Configure the server-only Neon management credential on the K-ssenger production server and validate the full in-app self-delete route with a disposable password-authenticated account, including fresh-token enforcement and stale-session rejection. Provider-side deletion + FK cascade are proven.
 3. Validate the completed private media pipeline on physical Android/iOS devices, including avatar/chat/K-Feed/Moments upload, playback/download authorization and failure recovery.
 4. Complete real-device Android/iOS push delivery and K-MAP GPS permission validation; implementation exists but device proof remains required.
