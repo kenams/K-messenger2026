@@ -39,6 +39,7 @@ import {
 import { banGroupMember, setGroupMute, unbanGroupMember } from './groupModerationStore.js';
 import { registerGroupBanListHandler } from './groupModerationSocket.js';
 import { registerMediaHandlers } from './mediaSocket.js';
+import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -152,6 +153,15 @@ io.on('connection', (socket) => {
     socket,
     userId,
     consumeRateLimit: (action) => socialLimiter.consume(`${userId}:media:${action}`),
+  });
+
+  // CRITICAL FIX (2026-09-05): same class of bug -- account:delete was fully
+  // implemented (authorizeAndDeleteOwnAccount) but never registered, so
+  // account deletion (V1 hard requirement) had no effect at all.
+  registerAccountDeletionHandler({
+    socket,
+    userId,
+    consumeRateLimit: () => socialLimiter.consume(`${userId}:account:delete`),
   });
 
   socket.on('conversation:direct', async (raw, ack) => {
