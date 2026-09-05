@@ -29,6 +29,7 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - Android Internal APK #109 produced the standalone internal release artifact with the dedicated K-ssenger Neon/Auth/Data API and Render realtime endpoints.
 - `9ab1109248f12db3b188e084087548b28c1ca19a` extended authorized private-avatar rendering to contacts/search surfaces with signed short-lived downloads and initials fallback when access is not authorized. CI #412 is GREEN; Android validations are being re-run on the moving branch head.
 - `027854edf702a8f7e98a56fed67731d695b61013` makes realtime startup wait for an authenticated Socket.IO connection and rejects request/ack commands while disconnected instead of allowing timed-out commands to execute later from Socket.IO's buffer. This prevents ghost duplicate contact/K-Pulse/message actions after reconnect.
+- `419aa3033e76995dc1e5164e1a164d665b689b7d` adds a CI regression contract for private chat media: downloads must stay authorization-aware, uploads remain bound to the active conversation, and the Signal envelope carries only the private media reference rather than a stored public URL.
 
 ## Live Neon surface
 
@@ -51,6 +52,7 @@ The live V1 surface includes profiles/privacy, contacts/blocks, conversations/me
 - Account export v3.
 - Account deletion UI/server route with password reauthentication, fresh Neon token and provider scope hard-coded to the dedicated K-ssenger project/branch. Provider deletion remains externally blocked by `ACCOUNT_DELETE_PROVIDER_404`; do not weaken auth to bypass it.
 - Media prepare/upload/complete/download handlers are registered in the real server path. The nested Object Storage presign key 404 bug is fixed and regression-covered.
+- Chat media client behavior is regression-covered so authorized private downloads and conversation-scoped uploads cannot silently regress to public URLs.
 
 ## E2EE
 
