@@ -15,6 +15,7 @@ Verified 2026-09-05:
 - Android Debug APK run `33972121430` succeeded and uploaded an APK artifact.
 - Remote Social Smoke run `33972121474` failed at K-Feed with `INVALID_KFEED_MEDIA`: the smoke script still inserted a `public_videos` row without a ready `media_object_id` after migration `0013_media_content_bindings.sql` made verified media mandatory.
 - This workspace fix updates `remote-social-smoke-v2.mjs` and `remote-v1-smoke.mjs` to prepare/upload/complete media through the authenticated realtime media handlers before creating K-Feed rows.
+- Follow-up run `33973000202` failed before executing the smoke script because the single `/health` wake request to Render timed out after 30 seconds. The workflow now uses the same bounded retry health loop as Remote V1 Smoke.
 - Head `40b987e167b796a294d2369254a7b05ea9090bfe` passed CI run #256: triaged dependency audit, TypeScript, server tests, core RLS integration and social/K-MAP RLS integration all succeeded.
 - Account export TypeScript failures from runs #241/#242 were fixed by `ec00b8a595d1986537b31054d37c65efe2bd4698`; later CI is green.
 - Production EAS configuration points only at the dedicated public K-ssenger Neon Auth/Data API and K-ssenger realtime endpoints (`43a277ad977d65f8518dd45915e8481d0984ec3e`). No secret credential is embedded.
