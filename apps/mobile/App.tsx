@@ -13,6 +13,7 @@ import { PrivacySettingsScreen } from './src/features/profile/PrivacySettingsScr
 import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
 import type { MyProfile } from './src/features/profile/useMyProfile';
 import { getBackend } from './src/lib/backend';
+import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket } from './src/lib/realtime';
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
@@ -41,6 +42,10 @@ function ageFromBirthDate(value: string): number | null {
   const monthDelta = now.getUTCMonth() - (month - 1);
   if (monthDelta < 0 || (monthDelta === 0 && now.getUTCDate() < day)) age -= 1;
   return age;
+}
+
+function isHttpsAvatarUrl(value: string | null | undefined): value is string {
+  return !!value && /^https:\/\//i.test(value);
 }
 
 export default function App({ profile, onProfileChanged }: AppProps) {
@@ -197,7 +202,22 @@ export default function App({ profile, onProfileChanged }: AppProps) {
 function Avatar({ profile, size = 'small' }: { profile: MyProfile; size?: 'small' | 'large' }) {
   const style = size === 'large' ? styles.profileAvatar : styles.avatar;
   const textStyle = size === 'large' ? styles.profileAvatarText : styles.avatarText;
-  if (profile.avatar_url) return <Image source={{ uri: profile.avatar_url }} style={style} />;
+  const [signedAvatarUrl, setSignedAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!profile.avatar_media_id) {
+      setSignedAvatarUrl(null);
+      return () => { active = false; };
+    }
+    void getMediaDownload(profile.avatar_media_id)
+      .then((download) => { if (active) setSignedAvatarUrl(download.url); })
+      .catch(() => { if (active) setSignedAvatarUrl(null); });
+    return () => { active = false; };
+  }, [profile.avatar_media_id]);
+
+  const avatarUri = signedAvatarUrl ?? (isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : null);
+  if (avatarUri) return <Image source={{ uri: avatarUri }} style={style} />;
   return <View style={style}><Text style={textStyle}>{profile.display_name[0]?.toUpperCase() ?? 'K'}</Text></View>;
 }
 
