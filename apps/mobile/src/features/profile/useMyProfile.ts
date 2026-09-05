@@ -23,19 +23,25 @@ export function useMyProfile(userId: string) {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: queryError } = await getBackend()
-      .from('profiles')
-      .select('id,username,display_name,nickname,avatar_url,avatar_media_id,bio,custom_status,presence,now_playing_title,now_playing_artist')
-      .eq('id', userId)
-      .maybeSingle();
+    try {
+      const { data, error: queryError } = await getBackend()
+        .from('profiles')
+        .select('id,username,display_name,nickname,avatar_url,avatar_media_id,bio,custom_status,presence,now_playing_title,now_playing_artist')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (queryError) {
+      if (queryError) {
+        setProfile(null);
+        setError('PROFILE_LOAD_FAILED');
+        return;
+      }
+      setProfile((data as MyProfile | null) ?? null);
+    } catch {
       setProfile(null);
       setError('PROFILE_LOAD_FAILED');
-    } else {
-      setProfile((data as MyProfile | null) ?? null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [userId]);
 
   useEffect(() => {

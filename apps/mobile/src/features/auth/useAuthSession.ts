@@ -20,14 +20,18 @@ export function useAuthSession(): AuthSessionState {
     const auth = getBackend().auth;
     let active = true;
 
-    void auth.getSession().then(({ data, error }) => {
-      if (!active) return;
-      if (error || !data.session) {
-        setState({ loading: false, configured: true, session: null });
-        return;
-      }
-      setState({ loading: false, configured: true, session: data.session as KssengerSession });
-    });
+    void auth.getSession()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error || !data.session) {
+          setState({ loading: false, configured: true, session: null });
+          return;
+        }
+        setState({ loading: false, configured: true, session: data.session as KssengerSession });
+      })
+      .catch(() => {
+        if (active) setState({ loading: false, configured: true, session: null });
+      });
 
     const { data: listener } = auth.onAuthStateChange((_event, session) => {
       if (active) setState({ loading: false, configured: true, session: (session as KssengerSession | null) ?? null });
