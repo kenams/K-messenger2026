@@ -20,6 +20,7 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - Region: `aws-eu-central-1`, PostgreSQL 17.
 - Better Auth and Neon Data API are active for the dedicated K-ssenger backend.
 - Runtime Supabase assumptions are retired; historical migration references are not an active backend.
+- CI now fails if Supabase packages, environment variables or hosted endpoints are reintroduced under active `apps/` or `packages/` runtime sources.
 - No other project/database is allowed to be modified.
 
 ## Latest verified delivery state
@@ -30,12 +31,14 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `9ab1109248f12db3b188e084087548b28c1ca19a` extended authorized private-avatar rendering to contacts/search surfaces with signed short-lived downloads and initials fallback when access is not authorized. CI #412 is GREEN; Android validations are being re-run on the moving branch head.
 - `027854edf702a8f7e98a56fed67731d695b61013` makes realtime startup wait for an authenticated Socket.IO connection and rejects request/ack commands while disconnected instead of allowing timed-out commands to execute later from Socket.IO's buffer. This prevents ghost duplicate contact/K-Pulse/message actions after reconnect.
 - `419aa3033e76995dc1e5164e1a164d665b689b7d` adds a CI regression contract for private chat media: downloads must stay authorization-aware, uploads remain bound to the active conversation, and the Signal envelope carries only the private media reference rather than a stored public URL.
+- `54abd0b58e62d431a34a3bb3e70f69b1974e35b3` is verified GREEN in CI #446 and Android E2EE Runtime #91.
+- `9a740b8f3d55991fc94e416ab1bbc392eb8445fd` adds the Neon-only runtime regression scanner; `e947e71aac878d957815539a9a52bf758830dc97` wires it into mandatory CI.
 
 ## Live Neon surface
 
 Repository/live migrations are verified through `0016_signal_group_prekey_claim.sql`.
 
-The live V1 surface includes profiles/privacy, contacts/blocks, conversations/messages/receipts, group membership/moderation, K-Feed, Moments, K-MAP, push subscriptions, private media metadata and Signal device bundles/prekeys with FORCE RLS. Contact/shared-group Signal device discovery and `claim_signal_prekey_bundle(uuid)` are fail-closed and block-aware.
+The live V1 surface includes profiles/privacy, contacts/blocks, conversations/messages/receipts, group membership/moderation, K-Feed, Moments, K-MAP, push subscriptions, private media metadata and Signal device bundles/prekeys. Live inspection on 2026-09-05 confirms all 26 public tables have RLS enabled. FORCE RLS is additionally enabled on the six security-sensitive tables currently designed for owner-role enforcement: `device_key_bundles`, `device_one_time_prekeys`, `device_pq_one_time_prekeys`, `device_prekey_claims`, `media_objects` and `push_subscriptions`. Contact/shared-group Signal device discovery and `claim_signal_prekey_bundle(uuid)` are fail-closed and block-aware.
 
 ## Operational V1 modules
 
