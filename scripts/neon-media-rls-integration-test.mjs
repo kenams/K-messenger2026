@@ -9,9 +9,22 @@ const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
 let pass = 0;
 let fail = 0;
+let savepointCounter = 0;
 function check(name, ok) { if (ok) { pass += 1; console.log(`PASS  ${name}`); } else { fail += 1; console.log(`FAIL  ${name}`); } }
 async function asUser(userId, fn) { await client.query('begin'); await client.query('set local role authenticated'); await client.query(`select set_config('request.jwt.claims',$1,true)`, [JSON.stringify({ sub:userId, role:'authenticated' })]); try { return await fn(); } finally { await client.query('rollback'); } }
-async function blocked(fn) { try { await fn(); return false; } catch { return true; } }
+async function blocked(fn) {
+  const savepoint = `expected_failure_${++savepointCounter}`;
+  await client.query(`savepoint ${savepoint}`);
+  try {
+    await fn();
+    await client.query(`release savepoint ${savepoint}`);
+    return false;
+  } catch {
+    await client.query(`rollback to savepoint ${savepoint}`);
+    await client.query(`release savepoint ${savepoint}`);
+    return true;
+  }
+}
 
 async function main() {
   await client.connect();
