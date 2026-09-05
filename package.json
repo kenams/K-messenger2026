@@ -6,6 +6,7 @@
   "scripts": {
     "dev:server": "npm --workspace @kssenger/server run dev",
     "test:server": "npm --workspace @kssenger/server test",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "release:check-neon-live": "node scripts/neon-live-release-readiness.mjs"
   }
 }
