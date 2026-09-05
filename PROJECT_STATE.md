@@ -29,7 +29,7 @@ Verified live security/data surfaces include:
 - `shares_group(uuid, uuid)` security-definer membership predicate;
 - `claim_signal_prekey_bundle(uuid)` supporting authorized contacts or current group peers, block-aware fail-closed authorization, row locking/`SKIP LOCKED`, one-time EC/PQ claims and PQ last-resort fallback.
 
-The dedicated K-ssenger Neon project/branch, Better Auth and Data API were re-inspected on 2026-09-05. `main` remains READY. No other Neon project was touched.
+The dedicated K-ssenger Neon project/branch, Better Auth and Data API were re-inspected on 2026-09-05. `main` remains READY. A database health check found no queries running longer than five minutes. No other Neon project was touched.
 
 ## Operational V1 modules
 
@@ -38,7 +38,8 @@ The dedicated K-ssenger Neon project/branch, Better Auth and Data API were re-in
 - Contacts lifecycle: search/request/accept/decline/cancel/remove/favorite/block/unblock plus blocked-user UI.
 - Realtime presence with authenticated reconnect-safe socket sessions.
 - K-Pulse/Wizz realtime attention interaction.
-- Direct conversations with membership/block authorization, encrypted-envelope history, delivery/read receipts and reconnect resynchronization.
+- Direct conversations with membership/block authorization, native-libsignal multi-device encrypted envelopes, delivery/read receipts and reconnect resynchronization.
+- Direct chat composer is wired end-to-end to native libsignal: plaintext is passed only to the native bridge for encryption, the server receives the encrypted multi-device envelope, and incoming envelopes are decrypted only on the recipient device. There is no plaintext transport fallback.
 - Groups with create/invite/remove/roles/leave/ownership transfer plus mute/ban/unban/moderator ban listing.
 - Account export v3; provider push tokens excluded and private messages remain encrypted envelopes.
 - Account deletion UX/server route with password reauthentication, freshly issued Neon Auth token, explicit destructive confirmation, exact socket identity matching and hard-scoped K-ssenger Neon provider deletion. Provider deletion + FK cascade were live-proven with a disposable K-ssenger-only identity. Production server management credential validation remains a release gate.
@@ -58,15 +59,15 @@ The dedicated K-ssenger Neon project/branch, Better Auth and Data API were re-in
 - Kyber storage supports encrypted persistence, one-time consumption and replay tracking for last-resort `(kyber id, signed prekey id, base key)` tuples.
 - `SignalDeviceProtocol` provides native device provisioning, public bundle publication data, claimed remote-bundle processing, session presence, encrypt/decrypt and native-only private key/session state.
 - Android E2EE Runtime #26 is GREEN on commit `e975fc908d12ac67a7baf2828780e809dddc3979`. The Android 35 emulator successfully executed the real native libsignal instrumentation step end-to-end: EC + signed + Kyber provisioning, official `PreKeyBundle` processing, first `PreKeySignalMessage`, one-time EC/PQ consumption, Bob reply as normal `SignalMessage`, Alice decrypt and surviving ratchet sessions.
-- Commit `6a2a55cc54a6a504a7b460547606a0c9787443e2` extends instrumentation to recreate both `SignalDeviceProtocol` instances from the same installation UUIDs after session establishment and then continue bidirectional `SignalMessage` ratcheting. This proves app/process-object recreation uses Android-Keystore-backed persisted identity/session state rather than an in-memory-only test path once its runtime workflow is green.
-- Private/group plaintext composition remains fail-closed until real two-physical-device validation is completed.
-- K-ssenger must not claim production E2EE until the physical device proof passes.
+- Persistence test run #29 exposed an incorrect assertion in the test rather than a cryptographic/storage failure: Alice was expected to emit a normal `SignalMessage` immediately after Bob decrypted Alice's initial prekey message, before Alice had received Bob's acknowledgement path. libsignal may correctly continue emitting prekey envelopes until that acknowledgement is received.
+- Commit `502e7bfbd7866f3484c6681d61d0363f42f00656` fixes the persistence test by completing one Bob -> Alice normal Signal ratchet turn before recreating both `SignalDeviceProtocol` objects, then requiring post-recreation bidirectional normal `SignalMessage` ratcheting. This is the current native persistence validation target.
+- K-ssenger must not claim production E2EE until real two-physical-device server-mediated proof passes.
 
 ## Validation state
 
-- CI #387 on commit `e975fc908d12ac67a7baf2828780e809dddc3979` is GREEN.
-- Android E2EE Runtime #26 on the same commit is GREEN. Its `Execute native libsignal PQXDH and Double Ratchet instrumentation` step completed successfully on Android 35.
-- Commit `6a2a55cc54a6a504a7b460547606a0c9787443e2` adds persistence/recreation coverage and is the current E2EE validation target.
+- CI #389 on commit `20dae52befec7ba737dee6900e621601608deeb2` is GREEN.
+- Android E2EE Runtime #29 failed only on the prekey-vs-signal assertion described above; Android 35 emulator startup and native instrumentation execution both ran successfully.
+- CI #390 and Android E2EE Runtime #31 are running on corrected commit `502e7bfbd7866f3484c6681d61d0363f42f00656`.
 - Dedicated Neon project `late-flower-65059830`, branch `br-falling-sea-b1k36u32`, Better Auth and Data API were re-inspected and remain active/READY. No other Neon project was touched.
 
 ## Security invariants
@@ -79,13 +80,12 @@ The dedicated K-ssenger Neon project/branch, Better Auth and Data API were re-in
 - Never log private plaintext, auth tokens, private keys or session records.
 - Never invent custom cryptography.
 - Do not claim production E2EE until vetted native libsignal integration is proven on real devices.
-- Private/group plaintext composition stays locked until the E2EE gate is satisfied.
 - K-MAP remains explicit opt-in; no background/permanent hidden tracking.
 
 ## Remaining premium V1 release gates
 
-1. Obtain a green runtime on the new persistence/recreation instrumentation commit `6a2a55cc54a6a504a7b460547606a0c9787443e2`.
-2. Complete the real two-physical-device server-mediated Signal proof covering device discovery/prekey claim, identity continuity, one-time/PQ prekeys, ratchet continuity, reinstall/device revocation and offline/reconnect before unlocking private/group plaintext composition.
+1. Obtain a green runtime on corrected persistence/recreation instrumentation commit `502e7bfbd7866f3484c6681d61d0363f42f00656`.
+2. Complete the real two-physical-device server-mediated Signal proof covering device discovery/prekey claim, identity continuity, one-time/PQ prekeys, ratchet continuity, device revocation and offline/reconnect.
 3. Configure the server-only Neon management credential on the K-ssenger production server and validate full in-app self-delete with a disposable password-authenticated account, including fresh-token enforcement/stale-session rejection.
 4. Validate private media end-to-end on physical Android/iOS: avatar/chat/K-Feed/Moments upload, playback/download authorization and recovery paths.
 5. Validate real-device Android/iOS push delivery and K-MAP GPS permission flows.
@@ -94,4 +94,4 @@ The dedicated K-ssenger Neon project/branch, Better Auth and Data API were re-in
 
 ## Release rule
 
-Keep PR #2 draft while any critical security/native gate above remains incomplete. Do not merge, unlock plaintext or label this production E2EE merely to obtain a release build.
+Keep PR #2 draft while any critical security/native gate above remains incomplete. Do not merge or label this production E2EE merely to obtain a release build.
