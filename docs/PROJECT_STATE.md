@@ -41,7 +41,9 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `aa096581717632dac080f2ecf2c0130a46e12a7b` hardens the mobile dedicated-Neon runtime check so malformed/non-HTTPS URLs and URLs containing credentials, query parameters or fragments fail closed before client creation.
 - `4fa4fb99242317cc0447c3fbf079cedda25a2050` is verified GREEN in CI #454 and Android E2EE Runtime #99.
 - `92c35c8bc2b72fafa8accf5129334005a618e434` adds repository migration `0018_contact_removal_revokes_kmap_shares.sql`: removing either side of a contact relationship revokes every still-active direct K-MAP share between the pair at the database boundary.
-- `3d74c4b7c2a39f037cc6256f04846a3a1b09c6a0` extends the Neon social RLS integration suite so contact-removal K-MAP revocation is a mandatory regression contract. CI #456 and Android E2EE Runtime #101 are queued on this head at the time of this state update.
+- `3d74c4b7c2a39f037cc6256f04846a3a1b09c6a0` extends the Neon social RLS integration suite so contact-removal K-MAP revocation is a mandatory regression contract.
+- `6fa9fd0ae66df042bd45c1a05a4600726f40592d` is confirmed GREEN in CI #457; Android E2EE Runtime #102 is still in progress at this verification point.
+- `202e2ac0f995d89bd5f716a99e61b8bc97560347` hardens all private-media presigned requests on mobile: runtime now rejects non-HTTPS URLs, embedded URL credentials, wrong HTTP methods and already-expired/near-expired signatures before any upload/download fetch occurs.
 
 ## Live Neon surface
 
@@ -65,6 +67,7 @@ The live V1 surface includes profiles/privacy, contacts/blocks, conversations/me
 - Account deletion UI/server route with password reauthentication, fresh Neon token and provider scope hard-coded to the dedicated K-ssenger project/branch. Provider deletion remains externally blocked by `ACCOUNT_DELETE_PROVIDER_404`; do not weaken auth to bypass it.
 - Media prepare/upload/complete/download handlers are registered in the real server path. The nested Object Storage presign key 404 bug is fixed and regression-covered.
 - Chat media client behavior is regression-covered so authorized private downloads and conversation-scoped uploads cannot silently regress to public URLs.
+- Mobile private-media requests now validate signed request protocol, credentials, method and expiry before touching the network.
 
 ## E2EE
 
