@@ -10,6 +10,7 @@ const BOB = '22222222-2222-4222-8222-222222222222';
 const CHARLIE = '33333333-3333-4333-8333-333333333333';
 const ALICE_DEVICE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 const BOB_DEVICE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+const CHARLIE_DEVICE = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3';
 let pass = 0;
 let fail = 0;
 
@@ -50,18 +51,50 @@ async function main() {
   await client.connect();
   await client.query(await fs.readFile('neon/migrations/0011_signal_prekeys.sql', 'utf8'));
   await client.query(await fs.readFile('neon/migrations/0012_signal_prekey_claim_fix.sql', 'utf8'));
+  await client.query(await fs.readFile('neon/migrations/0014_contact_signal_device_discovery.sql', 'utf8'));
+  await client.query(await fs.readFile('neon/migrations/0015_group_signal_device_discovery.sql', 'utf8'));
 
   await client.query(
     `insert into public.devices(id,user_id,name) values
-      ($1,$2,'Alice CI device'),($3,$4,'Bob CI device')
+      ($1,$2,'Alice CI device'),($3,$4,'Bob CI device'),($5,$6,'Charlie CI device')
      on conflict(id) do update set revoked_at=null`,
-    [ALICE_DEVICE, ALICE, BOB_DEVICE, BOB],
+    [ALICE_DEVICE, ALICE, BOB_DEVICE, BOB, CHARLIE_DEVICE, CHARLIE],
   );
   await client.query(
     `insert into public.contacts(owner_id,contact_id) values ($1,$2),($2,$1)
      on conflict(owner_id,contact_id) do nothing`,
     [ALICE, BOB],
   );
+
+  await asUser(ALICE, async () => {
+    const visible = await client.query('select id from public.devices where id in ($1,$2,$3) order by id', [ALICE_DEVICE, BOB_DEVICE, CHARLIE_DEVICE]);
+    check('device owner sees own device plus active contact device', visible.rows.some((row) => row.id === ALICE_DEVICE) && visible.rows.some((row) => row.id === BOB_DEVICE));
+    check('stranger device remains hidden from contact discovery', !visible.rows.some((row) => row.id === CHARLIE_DEVICE));
+  });
+
+  const group = await client.query(
+    `insert into public.conversations(kind,title,created_by) values ('group','Signal CI group',$1) returning id`,
+    [ALICE],
+  );
+  const groupId = group.rows[0].id;
+  await client.query(
+    `insert into public.conversation_members(conversation_id,user_id,role) values
+      ($1,$2,'owner'),($1,$3,'member'),($1,$4,'member')`,
+    [groupId, ALICE, BOB, CHARLIE],
+  );
+
+  await asUser(CHARLIE, async () => {
+    const visible = await client.query('select id from public.devices where id in ($1,$2) order by id', [ALICE_DEVICE, BOB_DEVICE]);
+    check('group member can discover active peer devices without contact relation', visible.rows.some((row) => row.id === ALICE_DEVICE) && visible.rows.some((row) => row.id === BOB_DEVICE));
+  });
+
+  await client.query('insert into public.blocks(blocker_id,blocked_id) values($1,$2) on conflict do nothing', [ALICE, CHARLIE]);
+  await asUser(CHARLIE, async () => {
+    const hidden = await client.query('select id from public.devices where id=$1', [ALICE_DEVICE]);
+    check('block hides device even when users share a group', hidden.rows.length === 0);
+  });
+  await client.query('delete from public.blocks where blocker_id=$1 and blocked_id=$2', [ALICE, CHARLIE]);
+
   await client.query(
     `insert into public.device_key_bundles
       (device_id,user_id,bundle_version,registration_id,identity_key,signed_prekey_id,signed_prekey_public,signed_prekey_signature,pq_last_resort_prekey_id,pq_last_resort_prekey_public,pq_last_resort_prekey_signature)
@@ -99,9 +132,14 @@ async function main() {
   await asUser(BOB, async () => {
     check('same contact cannot drain same device bundle twice', await blocked(() => client.query('select * from public.claim_signal_prekey_bundle($1)', [ALICE_DEVICE])));
   });
+
+  await client.query('delete from public.conversation_members where conversation_id=$1 and user_id=$2', [groupId, CHARLIE]);
   await asUser(CHARLIE, async () => {
-    check('stranger cannot claim a prekey bundle', await blocked(() => client.query('select * from public.claim_signal_prekey_bundle($1)', [ALICE_DEVICE])));
+    const hidden = await client.query('select id from public.devices where id=$1', [ALICE_DEVICE]);
+    check('former group member loses device discovery immediately', hidden.rows.length === 0);
+    check('former group member cannot claim target bundle', await blocked(() => client.query('select * from public.claim_signal_prekey_bundle($1)', [ALICE_DEVICE])));
   });
+
   await asUser(ALICE, async () => {
     check('device owner cannot self-claim own bundle', await blocked(() => client.query('select * from public.claim_signal_prekey_bundle($1)', [ALICE_DEVICE])));
   });
@@ -114,7 +152,9 @@ async function main() {
   await client.query('delete from public.device_pq_one_time_prekeys where device_id=$1', [ALICE_DEVICE]);
   await client.query('delete from public.device_one_time_prekeys where device_id=$1', [ALICE_DEVICE]);
   await client.query('delete from public.device_key_bundles where device_id=$1', [ALICE_DEVICE]);
-  await client.query('delete from public.devices where id in ($1,$2)', [ALICE_DEVICE, BOB_DEVICE]);
+  await client.query('delete from public.conversation_members where conversation_id=$1', [groupId]);
+  await client.query('delete from public.conversations where id=$1', [groupId]);
+  await client.query('delete from public.devices where id in ($1,$2,$3)', [ALICE_DEVICE, BOB_DEVICE, CHARLIE_DEVICE]);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await client.end();
