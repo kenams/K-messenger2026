@@ -119,7 +119,10 @@ jobs:
           exit 1
       - name: Execute native libsignal PQXDH and Double Ratchet instrumentation
         working-directory: apps/mobile/android
-        run: ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace --console=plain 2>&1 | tee "$RUNNER_TEMP/kssenger-gradle-e2ee.log"
       - name: Upload instrumentation reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -129,5 +132,6 @@ jobs:
             apps/mobile/android/**/build/reports/androidTests/**
             apps/mobile/android/**/build/outputs/androidTest-results/**
             ${{ runner.temp }}/kssenger-emulator.log
+            ${{ runner.temp }}/kssenger-gradle-e2ee.log
           if-no-files-found: ignore
           retention-days: 7
