@@ -21,6 +21,7 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - Better Auth and Neon Data API are active for the dedicated K-ssenger backend.
 - Runtime Supabase assumptions are retired; historical migration references are not an active backend.
 - CI now fails if Supabase packages, environment variables or hosted endpoints are reintroduced under active `apps/` or `packages/` runtime sources.
+- CI also fails if server/database credentials or secret-like `EXPO_PUBLIC_*` variables enter the mobile source/config surface. Public mobile configuration is limited to dedicated K-ssenger service endpoints.
 - No other project/database is allowed to be modified.
 
 ## Latest verified delivery state
@@ -33,6 +34,8 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `419aa3033e76995dc1e5164e1a164d665b689b7d` adds a CI regression contract for private chat media: downloads must stay authorization-aware, uploads remain bound to the active conversation, and the Signal envelope carries only the private media reference rather than a stored public URL.
 - `54abd0b58e62d431a34a3bb3e70f69b1974e35b3` is verified GREEN in CI #446 and Android E2EE Runtime #91.
 - `9a740b8f3d55991fc94e416ab1bbc392eb8445fd` adds the Neon-only runtime regression scanner; `e947e71aac878d957815539a9a52bf758830dc97` wires it into mandatory CI.
+- `081d1933be72b268ac75ddb07a3fad6c5e48a884` is verified GREEN in CI #449 and Android E2EE Runtime #94.
+- `3800b783fbbe62e59c6840d30229985c3d829963` adds a mobile secret-surface scanner; `c1a82f13cded7c3e73a0358c1ef6eb5df661e51e` makes it mandatory in CI so database URLs, provider keys, auth/JWT secrets, private keys and secret-like `EXPO_PUBLIC_*` variables cannot silently enter the shipped mobile surface.
 
 ## Live Neon surface
 
