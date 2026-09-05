@@ -22,6 +22,7 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - Runtime Supabase assumptions are retired; historical migration references are not an active backend.
 - CI now fails if Supabase packages, environment variables or hosted endpoints are reintroduced under active `apps/` or `packages/` runtime sources.
 - CI also fails if server/database credentials or secret-like `EXPO_PUBLIC_*` variables enter the mobile source/config surface. Public mobile configuration is limited to dedicated K-ssenger service endpoints.
+- Mobile Neon configuration additionally fails closed unless both public endpoints are exact HTTPS K-ssenger endpoints with no embedded URL credentials, query parameters or fragments.
 - No other project/database is allowed to be modified.
 
 ## Latest verified delivery state
@@ -36,6 +37,8 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `9a740b8f3d55991fc94e416ab1bbc392eb8445fd` adds the Neon-only runtime regression scanner; `e947e71aac878d957815539a9a52bf758830dc97` wires it into mandatory CI.
 - `081d1933be72b268ac75ddb07a3fad6c5e48a884` is verified GREEN in CI #449 and Android E2EE Runtime #94.
 - `3800b783fbbe62e59c6840d30229985c3d829963` adds a mobile secret-surface scanner; `c1a82f13cded7c3e73a0358c1ef6eb5df661e51e` makes it mandatory in CI so database URLs, provider keys, auth/JWT secrets, private keys and secret-like `EXPO_PUBLIC_*` variables cannot silently enter the shipped mobile surface.
+- `5b6c7d1feb894a833ea9c6cfe4b7c81301ef173a` is verified GREEN in CI #452 and Android E2EE Runtime #97.
+- `aa096581717632dac080f2ecf2c0130a46e12a7b` hardens the mobile dedicated-Neon runtime check so malformed/non-HTTPS URLs and URLs containing credentials, query parameters or fragments fail closed before client creation.
 
 ## Live Neon surface
 
