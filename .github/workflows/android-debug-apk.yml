@@ -51,6 +51,17 @@ jobs:
         working-directory: apps/mobile
         run: npx expo prebuild --platform android
 
+      - name: Verify libsignal release hardening survived prebuild
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          test -f android/app/proguard-rules.pro
+          grep -F -- '-keep class org.signal.libsignal.** { *; }' android/app/proguard-rules.pro
+          grep -F -- '-keep class com.kahdigital.kssenger.signal.** { *; }' android/app/proguard-rules.pro
+          grep -F 'coreLibraryDesugaringEnabled true' android/app/build.gradle
+          grep -F 'org.signal:libsignal-client:0.100.0' android/app/build.gradle
+          grep -F 'org.signal:libsignal-android:0.100.0' android/app/build.gradle
+
       - name: Verify official libsignal release dependencies
         working-directory: apps/mobile/android
         run: |
