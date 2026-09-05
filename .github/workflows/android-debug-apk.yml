@@ -51,6 +51,14 @@ jobs:
         working-directory: apps/mobile
         run: npx expo prebuild --platform android
 
+      - name: Verify official libsignal release dependencies
+        working-directory: apps/mobile/android
+        run: |
+          set -euo pipefail
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > /tmp/kssenger-release-deps.txt
+          grep -F 'org.signal:libsignal-client:0.100.0' /tmp/kssenger-release-deps.txt
+          grep -F 'org.signal:libsignal-android:0.100.0' /tmp/kssenger-release-deps.txt
+
       - name: Build standalone internal release APK
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease --no-daemon
