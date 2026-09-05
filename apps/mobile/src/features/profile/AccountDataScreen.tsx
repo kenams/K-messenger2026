@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
-import { changeNeonPassword } from '../../lib/neonAuth';
+import { reauthenticateNeonPassword, changeNeonPassword } from '../../lib/neonAuth';
+import { disconnectRealtimeSocket, emitAck, getRealtimeSocket } from '../../lib/realtime';
 import type { MyProfile } from './useMyProfile';
 
 type ExportRow = Record<string, unknown>;
+type DeleteAck = { ok: boolean; error?: string };
 
 async function readTable(table: string, select = '*'): Promise<ExportRow[]> {
   const { data, error } = await getBackend().from(table).select(select);
@@ -29,11 +31,15 @@ async function readRowsForIds(table: string, column: string, ids: string[], sele
 export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [passwordBusy, setPasswordBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [notice, setNotice] = useState('');
   const [passwordNotice, setPasswordNotice] = useState('');
+  const [deleteNotice, setDeleteNotice] = useState('');
 
   const exportData = async () => {
     setBusy(true);
@@ -61,9 +67,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
         readOwnedTable('location_shares', 'owner_id', profile.id),
       ]);
 
-      const ownedShareIds = locationShares
-        .map((share) => share.id)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      const ownedShareIds = locationShares.map((share) => share.id).filter((id): id is string => typeof id === 'string' && id.length > 0);
       const locationPoints = await readRowsForIds('location_points', 'share_id', ownedShareIds);
 
       const payload = {
@@ -83,26 +87,12 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
         encrypted_messages: messages,
         message_receipts: receipts,
         age_profile: ageProfile,
-        k_feed: {
-          owned_videos: videos,
-          reports_submitted: videoReports,
-        },
-        moments: {
-          owned: moments,
-          views_made: momentViews,
-          reactions_made: momentReactions,
-          reports_submitted: momentReports,
-        },
-        k_map: {
-          owned_shares: locationShares,
-          owned_share_points: locationPoints,
-        },
+        k_feed: { owned_videos: videos, reports_submitted: videoReports },
+        moments: { owned: moments, views_made: momentViews, reactions_made: momentReactions, reports_submitted: momentReports },
+        k_map: { owned_shares: locationShares, owned_share_points: locationPoints },
       };
 
-      await Share.share({
-        title: `K-ssenger export ${new Date().toISOString().slice(0, 10)}`,
-        message: JSON.stringify(payload, null, 2),
-      });
+      await Share.share({ title: `K-ssenger export ${new Date().toISOString().slice(0, 10)}`, message: JSON.stringify(payload, null, 2) });
       setNotice('Export complet généré avec les données autorisées par ton compte.');
     } catch {
       setNotice('Export impossible pour le moment. Aucune donnée partielle n’a été partagée.');
@@ -114,30 +104,14 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
   const changePassword = async () => {
     if (passwordBusy) return;
     setPasswordNotice('');
-    if (currentPassword.length < 8) {
-      setPasswordNotice('Entre ton mot de passe actuel.');
-      return;
-    }
-    if (newPassword.length < 8) {
-      setPasswordNotice('Le nouveau mot de passe doit contenir au moins 8 caractères.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordNotice('La confirmation du nouveau mot de passe ne correspond pas.');
-      return;
-    }
-    if (newPassword === currentPassword) {
-      setPasswordNotice('Choisis un nouveau mot de passe différent de l’ancien.');
-      return;
-    }
+    if (currentPassword.length < 8) return setPasswordNotice('Entre ton mot de passe actuel.');
+    if (newPassword.length < 8) return setPasswordNotice('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+    if (newPassword !== confirmPassword) return setPasswordNotice('La confirmation du nouveau mot de passe ne correspond pas.');
+    if (newPassword === currentPassword) return setPasswordNotice('Choisis un nouveau mot de passe différent de l’ancien.');
 
     setPasswordBusy(true);
     try {
-      const result = await changeNeonPassword({
-        currentPassword,
-        newPassword,
-        revokeOtherSessions: true,
-      });
+      const result = await changeNeonPassword({ currentPassword, newPassword, revokeOtherSessions: true });
       if (result.error) throw result.error;
       setCurrentPassword('');
       setNewPassword('');
@@ -147,6 +121,31 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
       setPasswordNotice('Modification refusée. Vérifie ton mot de passe actuel et réessaie.');
     } finally {
       setPasswordBusy(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (deleteBusy) return;
+    setDeleteNotice('');
+    if (deletePassword.length < 8) return setDeleteNotice('Entre ton mot de passe actuel.');
+    if (deleteConfirmation !== 'DELETE') return setDeleteNotice('Tape exactement DELETE pour confirmer la suppression définitive.');
+
+    setDeleteBusy(true);
+    try {
+      const freshAccessToken = await reauthenticateNeonPassword(deletePassword);
+      const socket = await getRealtimeSocket();
+      const response = await emitAck<DeleteAck>(socket, 'account:delete', { freshAccessToken, confirmation: 'DELETE' });
+      if (!response.ok) throw new Error(response.error ?? 'ACCOUNT_DELETE_REJECTED');
+
+      setDeletePassword('');
+      setDeleteConfirmation('');
+      disconnectRealtimeSocket();
+      await getBackend().auth.signOut();
+      setDeleteNotice('Compte supprimé définitivement.');
+    } catch {
+      setDeleteNotice('Suppression refusée. Vérifie ton mot de passe et réessaie. Si le service sécurisé de suppression n’est pas configuré côté serveur, aucune donnée n’est effacée.');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -181,8 +180,13 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
 
         <View style={styles.warningCard}>
           <Text style={styles.cardTitle}>🗑️ Supprimer mon compte</Text>
-          <Text style={styles.copy}>Le Neon Auth géré de K-ssenger ne fournit pas encore l’endpoint self-delete nécessaire. K-ssenger ne simulera jamais une suppression en effaçant seulement le profil tout en laissant l’identité Auth active.</Text>
-          <View style={styles.disabled}><Text style={styles.disabledText}>Suppression sécurisée indisponible chez le fournisseur Auth actuel</Text></View>
+          <Text style={styles.copy}>Action définitive. K-ssenger demande ton mot de passe, obtient un jeton Neon Auth fraîchement émis puis exige la confirmation DELETE. Le serveur ne peut cibler que le projet Neon K-ssenger dédié.</Text>
+          <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={deletePassword} onChangeText={setDeletePassword} placeholder="Mot de passe actuel" style={styles.input} />
+          <TextInput autoCapitalize="characters" autoCorrect={false} value={deleteConfirmation} onChangeText={setDeleteConfirmation} placeholder="Tape DELETE" style={styles.input} />
+          <TouchableOpacity style={[styles.danger, deleteBusy && styles.buttonDisabled]} disabled={deleteBusy} onPress={() => void deleteAccount()}>
+            {deleteBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Supprimer définitivement mon compte</Text>}
+          </TouchableOpacity>
+          {!!deleteNotice && <Text style={styles.deleteNotice}>{deleteNotice}</Text>}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -190,6 +194,11 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' }, header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, back: { fontSize: 39, color: '#2189c5' }, brand: { color: '#3784b5', fontSize: 9, letterSpacing: 2, fontWeight: '900' }, title: { color: '#173448', fontSize: 18, fontWeight: '900' },
-  content: { padding: 18, paddingBottom: 40 }, card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 18, padding: 16 }, sectionGap: { marginTop: 14 }, warningCard: { marginTop: 14, backgroundColor: '#fffaf0', borderWidth: 1, borderColor: '#ead9ad', borderRadius: 18, padding: 16 }, cardTitle: { color: '#173448', fontSize: 16, fontWeight: '900' }, copy: { color: '#6e8796', lineHeight: 19, marginTop: 8 }, input: { minHeight: 48, marginTop: 10, paddingHorizontal: 13, backgroundColor: '#f7fafc', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 13 }, primary: { minHeight: 48, marginTop: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 15 }, buttonDisabled: { opacity: 0.55 }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { marginTop: 14, padding: 12, borderRadius: 14, backgroundColor: '#ede9df', alignItems: 'center' }, disabledText: { color: '#8b8067', fontSize: 11, fontWeight: '800', textAlign: 'center' }, notice: { marginTop: 12, color: '#326e94', fontWeight: '700' },
+  safe: { flex: 1, backgroundColor: '#edf7fc' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderBottomWidth: 1, borderBottomColor: '#d7e9f3' },
+  back: { fontSize: 39, color: '#2189c5' }, brand: { color: '#3784b5', fontSize: 9, letterSpacing: 2, fontWeight: '900' }, title: { color: '#173448', fontSize: 18, fontWeight: '900' },
+  content: { padding: 18, paddingBottom: 40 }, card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 18, padding: 16 }, sectionGap: { marginTop: 14 }, warningCard: { marginTop: 14, backgroundColor: '#fff6f4', borderWidth: 1, borderColor: '#efb8ad', borderRadius: 18, padding: 16 },
+  cardTitle: { color: '#173448', fontSize: 16, fontWeight: '900' }, copy: { color: '#6e8796', lineHeight: 19, marginTop: 8 }, input: { minHeight: 48, marginTop: 10, paddingHorizontal: 13, backgroundColor: '#f7fafc', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 13 },
+  primary: { minHeight: 48, marginTop: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 15 }, danger: { minHeight: 48, marginTop: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#b42318', borderRadius: 15 }, buttonDisabled: { opacity: 0.55 }, primaryText: { color: '#fff', fontWeight: '900', textAlign: 'center' },
+  notice: { marginTop: 12, color: '#326e94', fontWeight: '700' }, deleteNotice: { marginTop: 12, color: '#9d281d', fontWeight: '700' },
 });
