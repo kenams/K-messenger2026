@@ -34,4 +34,20 @@ describe('private chat media client contract', () => {
   it('keeps the UI claim scoped to encrypted text and media references', () => {
     expect(directChatSource).toContain('texte et références média chiffrés de bout en bout');
   });
+
+  it('fails closed on unsafe or expired presigned media requests before fetch', () => {
+    expect(mediaClientSource).toContain("assertSignedMediaRequest(prepared.upload, 'PUT')");
+    expect(mediaClientSource).toContain("assertSignedMediaRequest(prepared.download, 'GET')");
+    expect(mediaClientSource).toContain("parsed.protocol !== 'https:'");
+    expect(mediaClientSource).toContain('parsed.username || parsed.password');
+    expect(mediaClientSource).toContain('request.method.toUpperCase() !== expectedMethod');
+    expect(mediaClientSource).toContain('expiresAt <= Date.now() + MIN_SIGNED_URL_LIFETIME_MS');
+
+    const uploadGuard = mediaClientSource.indexOf("assertSignedMediaRequest(prepared.upload, 'PUT')");
+    const uploadFetch = mediaClientSource.indexOf('fetch(prepared.upload.url');
+    const downloadGuard = mediaClientSource.indexOf("assertSignedMediaRequest(prepared.download, 'GET')");
+    expect(uploadGuard).toBeGreaterThan(-1);
+    expect(uploadFetch).toBeGreaterThan(uploadGuard);
+    expect(downloadGuard).toBeGreaterThan(-1);
+  });
 });
