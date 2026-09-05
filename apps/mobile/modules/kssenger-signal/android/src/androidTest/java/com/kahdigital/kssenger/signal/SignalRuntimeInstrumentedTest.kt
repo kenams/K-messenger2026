@@ -74,4 +74,101 @@ class SignalRuntimeInstrumentedTest {
     assertTrue(alice.hasSession(bobUser, bobDeviceNumber))
     assertTrue(bob.hasSession(aliceUser, aliceDeviceNumber))
   }
+
+  @Test
+  fun encryptedSessionsSurviveProtocolRecreationAndContinueRatchet() {
+    val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    val aliceDevice = UUID.randomUUID().toString()
+    val bobDevice = UUID.randomUUID().toString()
+    val aliceUser = "33333333-3333-4333-8333-333333333333"
+    val bobUser = "44444444-4444-4444-8444-444444444444"
+    val aliceDeviceNumber = 3
+    val bobDeviceNumber = 4
+
+    var alice = SignalDeviceProtocol(context, aliceDevice)
+    var bob = SignalDeviceProtocol(context, bobDevice)
+    val bobBundle = bob.provision(10)
+
+    @Suppress("UNCHECKED_CAST")
+    val ec = (bobBundle["oneTimePreKeys"] as List<Map<String, Any>>).first()
+    @Suppress("UNCHECKED_CAST")
+    val pq = (bobBundle["pqOneTimePreKeys"] as List<Map<String, Any>>).first()
+
+    alice.processRemoteBundle(
+      aliceUser,
+      aliceDeviceNumber,
+      bobUser,
+      bobDeviceNumber,
+      bobBundle["registrationId"] as Int,
+      bobBundle["identityKey"] as String,
+      bobBundle["signedPreKeyId"] as Int,
+      bobBundle["signedPreKeyPublic"] as String,
+      bobBundle["signedPreKeySignature"] as String,
+      ec["keyId"] as Int,
+      ec["publicKey"] as String,
+      pq["keyId"] as Int,
+      pq["publicKey"] as String,
+      pq["signature"] as String,
+    )
+
+    val bootstrapPlaintext = "K-ssenger persisted session bootstrap"
+    val bootstrap = alice.encrypt(aliceUser, aliceDeviceNumber, bobUser, bobDeviceNumber, bootstrapPlaintext)
+    assertEquals("prekey", bootstrap["kind"])
+    assertEquals(
+      bootstrapPlaintext,
+      bob.decrypt(
+        bobUser,
+        bobDeviceNumber,
+        aliceUser,
+        aliceDeviceNumber,
+        bootstrap["kind"] as String,
+        bootstrap["ciphertext"] as String,
+      ),
+    )
+
+    // Recreate both protocol objects using the exact same installation UUIDs.
+    // This simulates app/process reconstruction and proves that identity + session
+    // state is recovered from Android-Keystore-backed encrypted persistence rather
+    // than an in-memory test store.
+    alice = SignalDeviceProtocol(context, aliceDevice)
+    bob = SignalDeviceProtocol(context, bobDevice)
+    assertTrue(alice.hasSession(bobUser, bobDeviceNumber))
+    assertTrue(bob.hasSession(aliceUser, aliceDeviceNumber))
+
+    val afterRestartPlaintext = "K-ssenger persisted ratchet Alice -> Bob"
+    val afterRestart = alice.encrypt(
+      aliceUser,
+      aliceDeviceNumber,
+      bobUser,
+      bobDeviceNumber,
+      afterRestartPlaintext,
+    )
+    assertEquals("signal", afterRestart["kind"])
+    assertEquals(
+      afterRestartPlaintext,
+      bob.decrypt(
+        bobUser,
+        bobDeviceNumber,
+        aliceUser,
+        aliceDeviceNumber,
+        afterRestart["kind"] as String,
+        afterRestart["ciphertext"] as String,
+      ),
+    )
+
+    val replyPlaintext = "K-ssenger persisted ratchet Bob -> Alice"
+    val reply = bob.encrypt(bobUser, bobDeviceNumber, aliceUser, aliceDeviceNumber, replyPlaintext)
+    assertEquals("signal", reply["kind"])
+    assertEquals(
+      replyPlaintext,
+      alice.decrypt(
+        aliceUser,
+        aliceDeviceNumber,
+        bobUser,
+        bobDeviceNumber,
+        reply["kind"] as String,
+        reply["ciphertext"] as String,
+      ),
+    )
+  }
 }
