@@ -23,7 +23,16 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Wake realtime service
-        run: curl --fail --silent --show-error --max-time 30 https://kssenger-server.onrender.com/health
+        run: |
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error --max-time 15 https://kssenger-server.onrender.com/health | grep -q '"ok":true'; then
+              echo "K-ssenger realtime health OK"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "K-ssenger realtime health failed"
+          exit 1
       - name: Run real Neon social smoke
         env:
           KSSENGER_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
