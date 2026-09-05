@@ -13,6 +13,7 @@ Active PR: #2 (`Security hardening + messaging reliability`) — intentionally k
 - Managed Neon Auth / Better Auth and the Neon Data API are the only identity/data backend for the active V1.
 - Retired `supabase/` project configuration and migrations have been removed from the active branch.
 - The insecure legacy plaintext `apps/web` beta path and its beta smoke workflow have also been removed from the active V1 branch.
+- Neon project discovery re-verified the dedicated `K-ssenger` project as `late-flower-65059830`; no other Neon project was modified.
 - No non-K-ssenger database/project was touched during this run.
 
 ## Live Neon V1 surface
@@ -47,7 +48,8 @@ The dedicated live database contains the V1 tables used by the active implementa
 
 ## Validation
 
-- Latest cleanup/state lineage is based on CI-green source commits; CI run #286 is green on head `0a7d8e383c333cdfd327f84eded877778d5b8e38`.
+- CI run #301 is green on head `d51a0bc0706b065109d762eb151b41568f0069f5`.
+- Current head `d3cdf981ad3eac1bd51d319799ad52e1073d10a2` makes the manual remote V1 smoke reproducible with `npm ci` plus npm cache; CI for this new head remains a release gate until green.
 - Real Neon social smoke passed 9/9 checks for auth/profile/age, contacts, K-MAP privacy/revoke, Moments isolation/reaction authorization, K-Feed moderation isolation and anti-forgery RLS.
 - Managed Neon Auth self-service deletion was tested with a disposable account and the public delete endpoint returned HTTP 404. The disposable test accounts from that run were deleted through the K-ssenger Neon management integration. The mobile app must therefore keep self-delete unavailable until Neon exposes a supported secure path; do not fake deletion by deleting only profile rows.
 - Android Internal APK workflow run #56 completed successfully. Artifact `k-ssenger-android-internal-release` was produced (~25 MB, SHA-256 digest recorded by GitHub Actions). It uses a CI-generated validation keystore and is for device validation, not Play Store trust/signing.
