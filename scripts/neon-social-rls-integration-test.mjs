@@ -44,6 +44,8 @@ async function main() {
   await apply('neon/migrations/0002_social_content_location.sql');
   await apply('neon/migrations/0003_social_content_grants.sql');
   await apply('neon/migrations/0004_kmap_owner_revoke_policy.sql');
+  await apply('neon/migrations/0017_block_revokes_kmap_shares.sql');
+  await apply('neon/migrations/0018_contact_removal_revokes_kmap_shares.sql');
 
   await client.query(
     `insert into public.user_age_profile (user_id, birth_date)
@@ -115,6 +117,24 @@ async function main() {
     const result = await client.query('update public.location_shares set revoked_at=now() where id=$1 returning id', [shareId]);
     check('K-MAP owner can explicitly revoke a share', result.rows.length === 1);
   });
+
+  await client.query(
+    `insert into public.contacts (owner_id, contact_id)
+     values ($1, $2), ($2, $1)
+     on conflict (owner_id, contact_id) do nothing`,
+    [ALICE, BOB],
+  );
+  const { rows: contactShareRows } = await client.query(
+    `insert into public.location_shares (owner_id, recipient_user_id, precision, mode, expires_at)
+     values ($1, $2, 'precise', 'live', now() + interval '1 hour') returning id`,
+    [BOB, ALICE],
+  );
+  const contactShareId = contactShareRows[0].id;
+  await client.query('delete from public.contacts where owner_id=$1 and contact_id=$2', [ALICE, BOB]);
+  {
+    const { rows } = await client.query('select revoked_at from public.location_shares where id=$1', [contactShareId]);
+    check('removing a contact auto-revokes active K-MAP shares in either direction', !!rows[0]?.revoked_at);
+  }
 
   const { rows: share2Rows } = await client.query(
     `insert into public.location_shares (owner_id, recipient_user_id, precision, mode, expires_at)
