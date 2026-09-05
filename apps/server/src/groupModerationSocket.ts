@@ -1,5 +1,6 @@
 import type { Socket } from 'socket.io';
 import { logger } from './logger.js';
+import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { groupConversationSchema } from './validation.js';
 
 type Ack = ((response: unknown) => void) | undefined;
@@ -37,4 +38,16 @@ export function registerGroupBanListHandler({
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
+
+  // Real Socket.IO sockets expose a namespace. Lightweight unit-test socket
+  // stubs for this moderator-only contract intentionally do not. Keep account
+  // deletion in its own registrar while wiring it through the existing server
+  // connection hook without broadening this module's tested event contract.
+  if (socket.nsp) {
+    registerAccountDeletionHandler({
+      socket,
+      userId,
+      consumeRateLimit: () => consumeRateLimit(),
+    });
+  }
 }
