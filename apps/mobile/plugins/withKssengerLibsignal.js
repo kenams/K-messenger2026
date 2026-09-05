@@ -1,4 +1,35 @@
-const { withProjectBuildGradle, withAppBuildGradle } = require('expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
+const { withProjectBuildGradle, withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
+
+// CRITICAL FIX (2026-09-05): the release APK build (EAS "preview" profile)
+// runs R8/ProGuard minification with zero keep rules for libsignal or the
+// custom native module. libsignal-client/-android load classes via JNI,
+// which R8's static analysis cannot see as "used" -- it stripped/renamed
+// them, causing an immediate native crash on app launch before any JS ever
+// ran (matches the real report: app opens then closes instantly). This mod
+// appends the required keep rules to the generated proguard-rules.pro.
+const PROGUARD_RULES = `
+# K-ssenger libsignal native runtime (JNI-loaded, invisible to R8 static analysis).
+-keep class org.signal.libsignal.** { *; }
+-keepclassmembers class org.signal.libsignal.** { *; }
+-keep class com.kahdigital.kssenger.signal.** { *; }
+-dontwarn org.signal.libsignal.**
+`;
+
+function withKssengerLibsignalProguard(config) {
+  return withDangerousMod(config, [
+    'android',
+    (modConfig) => {
+      const proguardPath = path.join(modConfig.modRequest.platformProjectRoot, 'app', 'proguard-rules.pro');
+      const current = fs.existsSync(proguardPath) ? fs.readFileSync(proguardPath, 'utf8') : '';
+      if (!current.includes('org.signal.libsignal')) {
+        fs.writeFileSync(proguardPath, `${current}\n${PROGUARD_RULES}`);
+      }
+      return modConfig;
+    },
+  ]);
+}
 
 const SIGNAL_VERSION = '0.100.0';
 const SIGNAL_MAVEN = 'https://build-artifacts.signal.org/libraries/maven/';
@@ -80,6 +111,8 @@ module.exports = function withKssengerLibsignal(config) {
     appConfig.modResults.contents = addSignalDependencies(appConfig.modResults.contents);
     return appConfig;
   });
+
+  config = withKssengerLibsignalProguard(config);
 
   return config;
 };
