@@ -6,6 +6,27 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "K-ssenger utilise votre position uniquement lorsque vous choisissez explicitement de la partager."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "K-ssenger accède uniquement aux photos et vidéos que vous choisissez de partager.",
+          "cameraPermission": "K-ssenger utilise la caméra uniquement lorsque vous choisissez de créer un média."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kahdigital.kssenger"
