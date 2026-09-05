@@ -50,11 +50,15 @@ jobs:
 
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          ADB="$ANDROID_HOME/platform-tools/adb"
+          EMULATOR="$ANDROID_HOME/emulator/emulator"
           test -x "$SDKMANAGER"
           test -x "$AVDMANAGER"
 
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          test -x "$ADB"
+          test -x "$EMULATOR"
 
           echo no | "$AVDMANAGER" create avd \
             -n kssenger-ci \
@@ -62,14 +66,23 @@ jobs:
             -p "$ANDROID_AVD_HOME/kssenger-ci.avd" \
             --force
 
-          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx kssenger-ci
+          "$EMULATOR" -list-avds | grep -Fx kssenger-ci
       - name: Start Android emulator
         shell: bash
         run: |
           set -euo pipefail
-          sudo chmod 666 /dev/kvm || true
-          adb start-server
-          nohup "$ANDROID_HOME/emulator/emulator" \
+          ADB="$ANDROID_HOME/platform-tools/adb"
+          EMULATOR="$ANDROID_HOME/emulator/emulator"
+          LOG="$RUNNER_TEMP/kssenger-emulator.log"
+
+          test -x "$ADB"
+          test -x "$EMULATOR"
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm || true
+          fi
+
+          "$ADB" start-server
+          nohup "$EMULATOR" \
             -avd kssenger-ci \
             -no-window \
             -no-audio \
@@ -77,20 +90,32 @@ jobs:
             -no-metrics \
             -gpu swiftshader_indirect \
             -no-snapshot \
-            > /tmp/kssenger-emulator.log 2>&1 &
+            > "$LOG" 2>&1 &
+          EMULATOR_PID=$!
 
-          adb wait-for-device
-          for i in $(seq 1 120); do
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
-              adb shell input keyevent 82 || true
-              adb shell settings put global window_animation_scale 0 || true
-              adb shell settings put global transition_animation_scale 0 || true
-              adb shell settings put global animator_duration_scale 0 || true
-              exit 0
+          for i in $(seq 1 150); do
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+              echo "Android emulator exited before boot completed"
+              cat "$LOG" || true
+              exit 1
+            fi
+
+            if "$ADB" devices | awk 'NR>1 && $2 == "device" { found=1 } END { exit !found }'; then
+              if [ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+                "$ADB" shell input keyevent 82 || true
+                "$ADB" shell settings put global window_animation_scale 0 || true
+                "$ADB" shell settings put global transition_animation_scale 0 || true
+                "$ADB" shell settings put global animator_duration_scale 0 || true
+                "$ADB" shell getprop ro.build.version.sdk
+                exit 0
+              fi
             fi
             sleep 2
           done
-          cat /tmp/kssenger-emulator.log
+
+          echo "Android emulator did not finish booting"
+          "$ADB" devices -l || true
+          cat "$LOG" || true
           exit 1
       - name: Execute native libsignal PQXDH and Double Ratchet instrumentation
         working-directory: apps/mobile/android
@@ -103,6 +128,6 @@ jobs:
           path: |
             apps/mobile/android/**/build/reports/androidTests/**
             apps/mobile/android/**/build/outputs/androidTest-results/**
-            /tmp/kssenger-emulator.log
+            ${{ runner.temp }}/kssenger-emulator.log
           if-no-files-found: ignore
           retention-days: 7
