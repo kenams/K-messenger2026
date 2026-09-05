@@ -8,10 +8,28 @@ function normalizePublicEndpoint(value: string) {
   return value.replace(/\/+$/, '');
 }
 
+function isSafePublicEndpoint(value: string, expected: string) {
+  try {
+    const parsed = new URL(value);
+    const expectedUrl = new URL(expected);
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.username === '' &&
+      parsed.password === '' &&
+      parsed.search === '' &&
+      parsed.hash === '' &&
+      normalizePublicEndpoint(parsed.toString()) === normalizePublicEndpoint(expectedUrl.toString())
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Public K-ssenger Neon endpoints only. These values identify the dedicated
  * backend; they are not database credentials. Fail closed if configuration is
- * absent or points at any other Neon project/database instead of silently
+ * absent, malformed, contains URL credentials/query fragments, uses plaintext
+ * HTTP, or points at any other Neon project/database instead of silently
  * falling back to a foreign backend.
  */
 export const neonConfig = Object.freeze({
@@ -20,8 +38,8 @@ export const neonConfig = Object.freeze({
 });
 
 export const isNeonBackendConfigured =
-  neonConfig.authUrl === KSSENGER_AUTH_URL &&
-  neonConfig.dataApiUrl === KSSENGER_DATA_API_URL;
+  isSafePublicEndpoint(neonConfig.authUrl, KSSENGER_AUTH_URL) &&
+  isSafePublicEndpoint(neonConfig.dataApiUrl, KSSENGER_DATA_API_URL);
 
 export function requireNeonBackend() {
   if (!isNeonBackendConfigured) {
