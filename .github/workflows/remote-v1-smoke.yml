@@ -2,6 +2,15 @@ name: Remote V1 Smoke
 
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/feed-kmap-contact-security]
+    paths:
+      - 'apps/server/**'
+      - 'neon/migrations/**'
+      - 'scripts/remote-v1-smoke*.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/remote-v1-smoke.yml'
 
 jobs:
   remote-v1-smoke:

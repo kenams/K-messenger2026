@@ -23,21 +23,69 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function makeClient() {
+function makeAuthClient() {
   return createClient({
     auth: { adapter: SupabaseAuthAdapter(), url: AUTH_URL },
     dataApi: { url: DATA_API_URL },
   });
 }
 
+function makeDataClient(accessToken) {
+  return createClient({
+    dataApi: { url: DATA_API_URL, getToken: async () => accessToken },
+  });
+}
+
+function signalMaterial(label, purpose) {
+  return `${label}-${purpose}-${crypto.randomBytes(48).toString('base64url')}`;
+}
+
+async function publishSignalPrekeys(actor) {
+  const registrationId = 1000 + crypto.randomInt(1, 15000);
+  const bundle = await actor.client.from('device_key_bundles').insert({
+    device_id: actor.deviceId,
+    user_id: actor.userId,
+    bundle_version: 1,
+    registration_id: registrationId,
+    identity_key: signalMaterial(actor.label, 'identity'),
+    signed_prekey_id: 11,
+    signed_prekey_public: signalMaterial(actor.label, 'signed-prekey'),
+    signed_prekey_signature: signalMaterial(actor.label, 'signed-signature'),
+    pq_last_resort_prekey_id: 211,
+    pq_last_resort_prekey_public: signalMaterial(actor.label, 'pq-last-resort'),
+    pq_last_resort_prekey_signature: signalMaterial(actor.label, 'pq-last-resort-signature'),
+  });
+  if (bundle.error) throw new Error(`${actor.label} Signal bundle failed: ${bundle.error.message}`);
+
+  const ecKeys = [31, 32, 33].map((keyId) => ({
+    device_id: actor.deviceId,
+    key_id: keyId,
+    public_key: signalMaterial(actor.label, `ec-${keyId}`),
+  }));
+  const ec = await actor.client.from('device_one_time_prekeys').insert(ecKeys);
+  if (ec.error) throw new Error(`${actor.label} Signal EC prekeys failed: ${ec.error.message}`);
+
+  const pqKeys = [41, 42, 43].map((keyId) => ({
+    device_id: actor.deviceId,
+    key_id: keyId,
+    public_key: signalMaterial(actor.label, `pq-${keyId}`),
+    signature: signalMaterial(actor.label, `pq-signature-${keyId}`),
+  }));
+  const pq = await actor.client.from('device_pq_one_time_prekeys').insert(pqKeys);
+  if (pq.error) throw new Error(`${actor.label} Signal PQ prekeys failed: ${pq.error.message}`);
+
+  ok(`${actor.label} Signal public bundle/prekeys`);
+}
+
 async function signUp(label) {
-  const client = makeClient();
+  globalThis.__resetKssengerSmokeCookies?.();
+  const auth = makeAuthClient();
   const username = `smoke_${label}_${stamp}`.replace(/[^a-z0-9._]/g, '_').slice(0, 32);
   const email = `kssenger-v1-${label}-${stamp}@example.com`;
   const password = `Kss!${crypto.randomBytes(18).toString('base64url')}`;
   const displayName = `Smoke ${label}`;
 
-  const signup = await client.auth.signUp({
+  const signup = await auth.auth.signUp({
     email,
     password,
     options: { data: { username, display_name: displayName } },
@@ -46,13 +94,14 @@ async function signUp(label) {
 
   let session = signup.data?.session ?? null;
   if (!session) {
-    const signin = await client.auth.signInWithPassword({ email, password });
+    const signin = await auth.auth.signInWithPassword({ email, password });
     if (signin.error) throw new Error(`${label} signin failed: ${signin.error.message}`);
     session = signin.data?.session ?? null;
   }
   assert(session?.user?.id && session?.access_token, `${label} session missing`);
   const userId = session.user.id;
   const accessToken = session.access_token;
+  const client = makeDataClient(accessToken);
   createdUsers.push(userId);
 
   const profile = await client.from('profiles').insert({
@@ -84,7 +133,9 @@ async function signUp(label) {
   }
 
   ok(`${label} signup/login/profile/device`);
-  return { label, client, userId, accessToken, username, deviceId: deviceResult.data.id };
+  const actor = { label, auth, client, userId, accessToken, username, deviceId: deviceResult.data.id };
+  await publishSignalPrekeys(actor);
+  return actor;
 }
 
 function connectSocket(actor) {
@@ -175,6 +226,37 @@ async function makeContacts(sender, senderSocket, recipient, recipientSocket) {
   ok(`${sender.label}<->${recipient.label} contact lifecycle`);
 }
 
+async function visibleDeviceIds(actor, ids) {
+  const result = await actor.client.from('devices').select('id,user_id').in('id', ids);
+  if (result.error) throw new Error(`${actor.label} device discovery failed: ${result.error.message}`);
+  return new Set((result.data ?? []).map((row) => row.id));
+}
+
+async function assertVisibleDevices(actor, expectedIds, forbiddenIds, label) {
+  const visible = await visibleDeviceIds(actor, [...expectedIds, ...forbiddenIds]);
+  for (const id of expectedIds) assert(visible.has(id), `${label}: expected device ${id} hidden`);
+  for (const id of forbiddenIds) assert(!visible.has(id), `${label}: forbidden device ${id} visible`);
+  ok(label);
+}
+
+async function claimSignalBundle(actor, target, expectedEcId, expectedPqId, label) {
+  const result = await actor.client.rpc('claim_signal_prekey_bundle', { p_device_id: target.deviceId });
+  if (result.error) throw new Error(`${label}: ${result.error.message}`);
+  const bundle = result.data?.[0];
+  assert(bundle?.device_id === target.deviceId, `${label}: wrong target device`);
+  assert(bundle?.user_id === target.userId, `${label}: wrong target user`);
+  assert(bundle?.one_time_prekey_id === expectedEcId, `${label}: wrong EC one-time prekey`);
+  assert(bundle?.pq_prekey_id === expectedPqId, `${label}: wrong PQ one-time prekey`);
+  assert(bundle?.pq_is_last_resort === false, `${label}: unexpectedly fell back to last resort PQ prekey`);
+  ok(label);
+}
+
+async function assertClaimRejected(actor, target, label) {
+  const result = await actor.client.rpc('claim_signal_prekey_bundle', { p_device_id: target.deviceId });
+  assert(Boolean(result.error), `${label}: claim unexpectedly succeeded`);
+  ok(label);
+}
+
 async function main() {
   const actors = [];
   const sockets = [];
@@ -192,6 +274,12 @@ async function main() {
 
     await makeContacts(alice, aliceSocket, bob, bobSocket);
     await makeContacts(alice, aliceSocket, charlie, charlieSocket);
+
+    await assertVisibleDevices(alice, [bob.deviceId, charlie.deviceId], [], 'Signal contact device discovery');
+    await assertVisibleDevices(bob, [alice.deviceId], [charlie.deviceId], 'Signal discovery hides non-contact before shared group');
+    await claimSignalBundle(alice, bob, 31, 41, 'Signal contact prekey claim');
+    await claimSignalBundle(bob, alice, 31, 41, 'Signal reciprocal contact prekey claim');
+    await assertClaimRejected(alice, bob, 'Signal duplicate prekey claim rejected');
 
     const presenceEvent = waitEvent(bobSocket, 'presence:changed', (payload) => payload?.userId === alice.userId && payload?.status === 'online');
     const presence = await ack(aliceSocket, 'presence:update', { status: 'online' });
@@ -244,6 +332,9 @@ async function main() {
     assert((await ack(bobSocket, 'conversation:join', { conversationId: groupId }))?.ok, 'Bob group join failed');
     assert((await ack(charlieSocket, 'conversation:join', { conversationId: groupId }))?.ok, 'Charlie group join failed');
     ok('group create + member joins');
+
+    await assertVisibleDevices(charlie, [bob.deviceId], [], 'Signal shared-group device discovery');
+    await claimSignalBundle(charlie, bob, 32, 42, 'Signal shared-group prekey claim');
 
     const promote = await ack(aliceSocket, 'group:role-set', { conversationId: groupId, userId: bob.userId, role: 'admin' });
     assert(promote?.ok, 'Bob admin promotion failed');
@@ -349,6 +440,11 @@ async function main() {
     assert(!bobPendingVideo.error && (bobPendingVideo.data?.length ?? 0) === 0, 'pending K-Feed video leaked before moderation');
     ok('K-Feed age/moderation RLS pending isolation');
 
+    const block = await ack(aliceSocket, 'contact:block', { userId: charlie.userId });
+    assert(block?.ok, 'Alice block of Charlie failed');
+    await assertVisibleDevices(charlie, [], [alice.deviceId], 'Signal block hides peer devices');
+    await assertClaimRejected(charlie, alice, 'Signal block rejects prekey claim');
+
     bobSocket.close();
     const bobReconnected = await connectSocket(bob);
     sockets.push(bobReconnected);
@@ -363,7 +459,7 @@ async function main() {
       try { socket.close(); } catch {}
     }
     for (const actor of actors) {
-      try { await actor.client.auth.signOut(); } catch {}
+      try { await actor.auth.auth.signOut(); } catch {}
     }
   }
 }
