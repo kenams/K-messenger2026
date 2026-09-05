@@ -7,6 +7,7 @@ import type { Socket } from 'socket.io-client';
 import type { Contact } from '../contacts/MsnContactsScreen';
 import { getBackend } from '../../lib/backend';
 import { canUnlockPrivateComposer, getKssengerE2eeStatus } from '../../lib/e2ee';
+import { loadLocalMessage, storeLocalMessage } from '../../lib/localMessageStore';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import {
   decryptDirectFromContact,
@@ -147,7 +148,16 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       setConversationId(id);
 
       const decryptMessage = async (message: EncryptedMessage): Promise<EncryptedMessage> => {
-        if (message.senderUserId === userId || !ready) return message;
+        if (message.senderUserId === userId) {
+          if (message.plaintext) return { ...message, content: message.content ?? parseChatContent(message.plaintext) };
+          try {
+            const localPlaintext = await loadLocalMessage(userId, message.id);
+            return localPlaintext ? { ...message, plaintext: localPlaintext, content: parseChatContent(localPlaintext) } : message;
+          } catch {
+            return message;
+          }
+        }
+        if (!ready) return message;
         if (message.algorithm !== 'signal-libsignal-multidevice-v1' || !message.ciphertext || !message.senderDeviceId) return { ...message, decryptFailed: true };
         try {
           const plaintext = await decryptDirectFromContact(userId, message.senderUserId, message.senderDeviceId, message.ciphertext);
@@ -229,6 +239,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       const createdAt = new Date().toISOString();
       const response = await emitAck<SendResponse>(socket, 'message:send', { clientMessageId, conversationId, senderDeviceId: encrypted.senderDeviceId, algorithm: encrypted.algorithm, ciphertext: encrypted.ciphertext, createdAt });
       if (!response.ok || !response.id) throw new Error(response.error ?? 'MESSAGE_SEND_FAILED');
+      await storeLocalMessage(currentUserId, response.id, plaintext).catch(() => undefined);
       setComposer('');
       setHistory((items) => items.some((item) => item.id === response.id) ? items : [...items, {
         id: response.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: encrypted.senderDeviceId,
