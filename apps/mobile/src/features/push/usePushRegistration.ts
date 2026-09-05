@@ -54,6 +54,35 @@ export async function clearMyPushSubscriptions(userId: string) {
   if (error) throw error;
 }
 
+/**
+ * Prevent a logged-out account from continuing to receive private K-ssenger
+ * metadata on this device. We require at least one remote revocation path to
+ * succeed: delete the authenticated subscription row or unregister the native
+ * token. Visible notifications are also dismissed after the revocation attempt.
+ */
+export async function unregisterPushForSignOut(userId: string) {
+  let remoteRevoked = false;
+
+  try {
+    await clearMyPushSubscriptions(userId);
+    remoteRevoked = true;
+  } catch {
+    // Native token revocation below is an independent privacy fallback.
+  }
+
+  try {
+    if (Device.isDevice && platformName()) {
+      await Notifications.unregisterForNotificationsAsync();
+      remoteRevoked = true;
+    }
+  } catch {
+    // Database deletion above is sufficient if it succeeded.
+  }
+
+  await Notifications.dismissAllNotificationsAsync().catch(() => undefined);
+  if (!remoteRevoked) throw new Error('KSSENGER_PUSH_SIGNOUT_REVOCATION_FAILED');
+}
+
 async function registerPushSubscription(userId: string) {
   const platform = platformName();
   if (!platform) return;
