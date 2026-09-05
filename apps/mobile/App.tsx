@@ -12,6 +12,7 @@ import { PrivacySettingsScreen } from './src/features/profile/PrivacySettingsScr
 import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
 import type { MyProfile } from './src/features/profile/useMyProfile';
 import { getBackend } from './src/lib/backend';
+import { disconnectRealtimeSocket } from './src/lib/realtime';
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
 
@@ -199,6 +200,23 @@ function ProfileHeader({ profile, onEdit }: { profile: MyProfile; onEdit: () => 
 }
 
 function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void }) {
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
+
+  const signOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError('');
+    try {
+      disconnectRealtimeSocket();
+      const { error } = await getBackend().auth.signOut();
+      if (error) throw error;
+    } catch {
+      setSignOutError('Déconnexion impossible pour le moment. Réessaie.');
+      setSigningOut(false);
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.profilePage}>
       <Avatar profile={profile} size="large" />
@@ -207,6 +225,10 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy }: { prof
       {!!profile.now_playing_title && <Text style={styles.profileMusic}>♫ {profile.now_playing_artist ? `${profile.now_playing_artist} — ` : ''}{profile.now_playing_title}</Text>}
       {!!profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>}
       <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes"/><ProfileButton icon="🔒" label="Vie privée" onPress={onPrivacy}/></View>
+      <TouchableOpacity disabled={signingOut} style={[styles.signOutButton, signingOut && styles.disabled]} onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Se déconnecter de K-ssenger">
+        {signingOut ? <ActivityIndicator /> : <Text style={styles.signOutText}>Se déconnecter</Text>}
+      </TouchableOpacity>
+      {!!signOutError && <Text style={styles.error}>{signOutError}</Text>}
       <Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text>
     </ScrollView>
   );
@@ -227,4 +249,5 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, avatarRing: { position: 'relative' }, avatar: { width: 58, height: 58, borderRadius: 19, backgroundColor: '#2f93cf', borderWidth: 4, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 25, fontWeight: '900' }, onlineDot: { position: 'absolute', width: 15, height: 15, borderRadius: 8, backgroundColor: '#4ac769', right: -2, bottom: -2, borderWidth: 3, borderColor: '#fff' }, name: { color: '#16394e', fontSize: 18, fontWeight: '900', marginTop: 2 }, status: { color: '#5d7c8e', fontSize: 11, marginTop: 2 }, headerAction: { fontSize: 20, marginLeft: 5 },
   tabs: { flexDirection: 'row', paddingTop: 7, paddingBottom: 9, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, tab: { flex: 1, alignItems: 'center' }, tabIcon: { fontSize: 18 }, tabLabel: { marginTop: 2, color: '#8299a7', fontSize: 8 }, tabActive: { color: '#238ac8', fontWeight: '900' },
   profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900', textAlign: 'center' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileMusic: { color: '#4e7d55', marginTop: 5, fontSize: 12, fontStyle: 'italic', textAlign: 'center' }, profileBio: { color: '#657e8d', marginTop: 10, textAlign: 'center', lineHeight: 19, maxWidth: 360 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 18 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
+  signOutButton: { marginTop: 18, minWidth: 180, alignItems: 'center', paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d7e4eb', borderRadius: 14 }, signOutText: { color: '#4c6879', fontWeight: '900' },
 });
