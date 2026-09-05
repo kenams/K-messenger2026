@@ -52,14 +52,18 @@ Repository Neon migrations run through `0013_media_content_bindings.sql`.
 - The live PQXDH prekey server surface is deployed as described above. It stores public key material only; device private keys remain native/on-device.
 - `apps/mobile/modules/kssenger-signal` is an autolinked Android Expo native module named `KssengerSignalBridge`.
 - The bridge verifies that the official libsignal runtime and its state-store interfaces are loadable.
-- Native encrypted persistence now exists in `KeystoreBlobStore`: libsignal record bytes can be stored as opaque blobs encrypted with AES-256/GCM using a non-exportable Android Keystore key. Private record bytes never cross the React Native/JavaScript boundary. The bridge performs a write/read/delete persistence self-check and may report `deviceKeyStoreReady=true` only when this OS-backed store succeeds.
-- `sessionStoreReady=false` and `selfTestPassed=false` remain deliberate until official libsignal `IdentityKeyStore`, `PreKeyStore`, `SignedPreKeyStore`, `KyberPreKeyStore` and `SessionStore` adapters are wired to the native encrypted store and a real Signal session encrypt/decrypt self-test succeeds.
+- Native encrypted persistence exists in `KeystoreBlobStore`: libsignal record bytes are stored as opaque blobs encrypted with AES-256/GCM using a non-exportable Android Keystore key. Private record bytes never cross the React Native/JavaScript boundary. The bridge performs a write/read/delete persistence self-check and reports `deviceKeyStoreReady=true` only when this OS-backed store succeeds.
+- `SignalSessionStore` now directly implements the official `org.signal.libsignal.protocol.state.SessionStore` interface on top of `KeystoreBlobStore`. It persists serialized official `SessionRecord` objects, maintains per-recipient device indexes, supports existing-session loads, deletion and delete-all without exposing session bytes to JavaScript.
+- The bridge performs a native official-libsignal SessionRecord store/load/delete verification. `sessionStoreReady` can become true only if the libsignal JNI runtime, encrypted persistence and the official SessionStore adapter all succeed together.
+- `selfTestPassed=false` remains deliberate until identity/prekey/PQ stores are wired and a real Alice/Bob libsignal session encrypts/decrypts natively.
 - Private/group plaintext composition remains locked. Production E2EE must not be claimed until two real devices prove encrypt/decrypt, identity verification, prekey consumption, ratchet continuity and reinstall/device-revocation behavior.
 
 ## Validation
 
 - Main CI was green on head `11c5a193bed7d0b04a11dda9a4f2f498f1f42266` before this run (CI run #343).
-- Native encrypted store commits `ec1d87fd8694916a7e3fa287ed95d1d0a08cbcdf` and `fbcff7f873e4faa0bd3156b065a9bae96318ef81` advance the E2EE storage gate without changing the fail-closed session/self-test flags. CI on the new head remains a release gate until green.
+- Native encrypted persistence commits: `ec1d87fd8694916a7e3fa287ed95d1d0a08cbcdf`, `fbcff7f873e4faa0bd3156b065a9bae96318ef81`.
+- Official libsignal SessionStore commits: `d2c437d00423596eb0d2a75cef081768462bd7f9`, `59e705b7ee733aebf5b99048cba7160065215ce8`.
+- CI run #348 is currently validating the new native-store/session-store head; it remains a release gate until green.
 - The dedicated Neon project `late-flower-65059830` was re-inspected during this run and no other Neon project was touched.
 - Media RLS integration uses transaction savepoints for expected authorization failures so negative tests cannot poison later assertions.
 - Real remote social smoke remains green after the server changes.
@@ -82,7 +86,7 @@ Repository Neon migrations run through `0013_media_content_bindings.sql`.
 
 ## Remaining premium V1 release gates
 
-1. Wire official native libsignal identity/prekey/PQ/session store adapters to `KeystoreBlobStore`, add a real native Signal session self-test, then complete two-device E2EE proof before unlocking private/group plaintext composition.
+1. Wire official native libsignal `IdentityKeyStore`, `PreKeyStore`, `SignedPreKeyStore` and `KyberPreKeyStore` adapters to `KeystoreBlobStore`, add a real native Alice/Bob Signal session self-test, then complete two-device E2EE proof before unlocking private/group plaintext composition.
 2. Configure the server-only Neon management credential on the K-ssenger production server and validate the full in-app self-delete route with a disposable password-authenticated account, including fresh-token enforcement and stale-session rejection. Provider-side deletion + FK cascade are proven.
 3. Validate the completed private media pipeline on physical Android/iOS devices, including avatar/chat/K-Feed/Moments upload, playback/download authorization and failure recovery.
 4. Complete real-device Android/iOS push delivery and K-MAP GPS permission validation; implementation exists but device proof remains required.
