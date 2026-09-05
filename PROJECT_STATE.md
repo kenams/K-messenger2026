@@ -59,10 +59,11 @@ Repository Neon migrations run through `0013_media_content_bindings.sql`.
 
 ## Validation
 
-- General CI run #379 is green on head `f964d476af566c62ff515ef7193513084c42b989`.
-- Android E2EE Runtime run #13 reached Android native prebuild successfully but failed before instrumentation at the emulator-image bootstrap step; no E2EE test assertion failed because the emulator/test phase never started.
-- Commit `a462cc8069f602fee75d3dad53bbac26b0cb464f` hardens emulator bootstrap: strict shell error handling, explicit SDK/AVD manager validation, explicit Android 35 platform/image installation and removal of the invalid pre-emulator adb-key existence gate. This workflow remains a release gate until the instrumentation job is green.
-- The dedicated Neon project `late-flower-65059830` was re-inspected during this run and remains the K-ssenger free-v3 project in `aws-eu-central-1`; no other Neon project was touched.
+- CI on commit `15b194ca035265c043ea66ba9e2891e91226d403` has already passed dependency advisory gating, TypeScript typecheck, server tests, Alice/Bob/Charlie core Neon RLS, K-Feed/Moments/K-MAP RLS, push isolation, private-media isolation and Signal PQXDH prekey isolation. The workflow was still finishing container teardown at the last inspection.
+- Android E2EE Runtime #16 showed the previous failure was infrastructure-only: Android prebuild and system-image installation succeeded, but the job exited at emulator startup before any libsignal instrumentation assertion executed.
+- Commit `15b194ca035265c043ea66ba9e2891e91226d403` makes emulator startup deterministic by using explicit SDK `adb`/emulator paths, validating installed executables, guarding `/dev/kvm`, monitoring the emulator PID, polling only a connected `device`, and preserving emulator logs from the runner temp directory on failure.
+- Android E2EE Runtime #18 is the active validation of that bootstrap. At the last inspection, prebuild was green and the Android 35 emulator image installation was in progress; the release gate remains open until instrumentation itself is green.
+- The dedicated Neon project `late-flower-65059830` and its default `main` branch `br-falling-sea-b1k36u32` were re-inspected during this run and remain READY. The live `kssenger` database exposes the expected Neon Auth plus K-ssenger public tables for contacts, conversations/messages/receipts, devices/prekeys, moderation, media, Moments, K-Feed, K-MAP, privacy and push. No other Neon project was touched.
 - Media RLS integration uses transaction savepoints for expected authorization failures so negative tests cannot poison later assertions.
 - Real remote social smoke remains green after the server changes.
 - Account deletion provider scope has dedicated regression tests that assert the fixed K-ssenger project/branch URL, DELETE method, fail-closed missing credential behavior and provider failure behavior.
