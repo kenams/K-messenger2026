@@ -40,6 +40,7 @@ import { banGroupMember, setGroupMute, unbanGroupMember } from './groupModeratio
 import { registerGroupBanListHandler } from './groupModerationSocket.js';
 import { registerMediaHandlers } from './mediaSocket.js';
 import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
+import { sendConversationPush, sendKPulsePush } from './push.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -116,6 +117,12 @@ async function handleKPulseSend(
     const payload = { senderId: userId, variant, sentAt: new Date().toISOString() };
     io.to(`user:${recipientId}`).emit('kpulse:receive', payload);
     if (emitLegacyNudge) io.to(`user:${recipientId}`).emit('nudge:receive', payload);
+    // CRITICAL FIX (2026-09-05): sendKPulsePush existed and was unit-tested
+    // but never called -- push notifications for K-Pulse never fired.
+    // Fire-and-forget: push delivery failure must never fail the K-Pulse itself.
+    void sendKPulsePush(recipientId, userId).catch((error) =>
+      logger.warn('kpulse_push_failed', { recipientId, error: error instanceof Error ? error.message : 'unknown' })
+    );
     ack?.({ ok: true });
   } catch {
     ack?.({ ok: false, error: 'REJECTED' });
@@ -379,6 +386,12 @@ io.on('connection', (socket) => {
           senderUserId: userId,
           createdAt: stored.createdAt,
         });
+        // CRITICAL FIX (2026-09-05): sendConversationPush existed and was
+        // unit-tested but never called -- new-message push notifications
+        // never fired. Fire-and-forget, metadata-only (no plaintext).
+        void sendConversationPush(envelope.conversationId, userId, stored.id).catch((error) =>
+          logger.warn('message_push_failed', { conversationId: envelope.conversationId, error: error instanceof Error ? error.message : 'unknown' })
+        );
       }
 
       ack?.({ ok: true, id: stored.id, duplicate: stored.duplicate, clientMessageId: envelope.clientMessageId });
