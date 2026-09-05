@@ -43,15 +43,19 @@ jobs:
         run: |
           export ANDROID_AVD_HOME="$RUNNER_TEMP/kssenger-avd"
           echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
+          chmod 700 "$HOME/.android" "$ANDROID_AVD_HOME"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
-          mkdir -p "$ANDROID_AVD_HOME"
+          adb start-server
+          test -f "$HOME/.android/adbkey"
+          chmod 600 "$HOME/.android/adbkey"
           echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n kssenger-ci -k "system-images;android-35;google_apis;x86_64" -p "$ANDROID_AVD_HOME/kssenger-ci.avd" --force
           "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx kssenger-ci
       - name: Start Android emulator
         run: |
           sudo chmod 666 /dev/kvm || true
-          nohup "$ANDROID_HOME/emulator/emulator" -avd kssenger-ci -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot > /tmp/kssenger-emulator.log 2>&1 &
+          nohup "$ANDROID_HOME/emulator/emulator" -avd kssenger-ci -no-window -no-audio -no-boot-anim -no-metrics -gpu swiftshader_indirect -no-snapshot > /tmp/kssenger-emulator.log 2>&1 &
           adb wait-for-device
           for i in $(seq 1 120); do
             if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
