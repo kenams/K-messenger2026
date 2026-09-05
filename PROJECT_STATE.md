@@ -52,24 +52,24 @@ Repository Neon migrations run through `0013_media_content_bindings.sql`.
 - The live PQXDH prekey server surface is deployed as described above. It stores public key material only; device private keys remain native/on-device.
 - `apps/mobile/modules/kssenger-signal` is an autolinked Android Expo native module named `KssengerSignalBridge`.
 - The bridge verifies that the official libsignal runtime and its state-store interfaces are loadable.
-- Native encrypted persistence exists in `KeystoreBlobStore`: libsignal record bytes are stored as opaque blobs encrypted with AES-256/GCM using a non-exportable Android Keystore key. Private record bytes never cross the React Native/JavaScript boundary. The bridge performs a write/read/delete persistence self-check and reports `deviceKeyStoreReady=true` only when this OS-backed store succeeds.
-- `SignalSessionStore` now directly implements the official `org.signal.libsignal.protocol.state.SessionStore` interface on top of `KeystoreBlobStore`. It persists serialized official `SessionRecord` objects, maintains per-recipient device indexes, supports existing-session loads, deletion and delete-all without exposing session bytes to JavaScript.
-- The bridge performs a native official-libsignal SessionRecord store/load/delete verification. `sessionStoreReady` can become true only if the libsignal JNI runtime, encrypted persistence and the official SessionStore adapter all succeed together.
-- `selfTestPassed=false` remains deliberate until identity/prekey/PQ stores are wired and a real Alice/Bob libsignal session encrypts/decrypts natively.
+- Native encrypted persistence exists in `KeystoreBlobStore`: libsignal record bytes are stored as opaque blobs encrypted with AES-256/GCM using a non-exportable Android Keystore key. Private record bytes never cross the React Native/JavaScript boundary.
+- `SignalSessionStore` directly implements the official libsignal `SessionStore` interface and persists serialized `SessionRecord` objects with recipient/device indexes.
+- `SignalPreKeyStore` now directly implements the official libsignal `PreKeyStore`; one-time EC prekeys are serialized by libsignal and encrypted at rest behind Android Keystore.
+- `SignalSignedPreKeyStore` now directly implements the official libsignal `SignedPreKeyStore`, including an encrypted local index for rotation/history loading.
+- `SignalIdentityKeyStore` now directly implements the official libsignal `IdentityKeyStore`: the local identity pair and registration id are generated natively once, persisted encrypted, and remote identities use fail-closed TOFU replacement detection. Identity/private bytes never cross the JavaScript boundary.
+- `deviceKeyStoreReady` and `selfTestPassed` remain deliberately false until the Kyber store is implemented and all native stores are exercised together by a real Alice/Bob libsignal session.
 - Private/group plaintext composition remains locked. Production E2EE must not be claimed until two real devices prove encrypt/decrypt, identity verification, prekey consumption, ratchet continuity and reinstall/device-revocation behavior.
 
 ## Validation
 
-- Main CI was green on head `11c5a193bed7d0b04a11dda9a4f2f498f1f42266` before this run (CI run #343).
-- Native encrypted persistence commits: `ec1d87fd8694916a7e3fa287ed95d1d0a08cbcdf`, `fbcff7f873e4faa0bd3156b065a9bae96318ef81`.
-- Official libsignal SessionStore commits: `d2c437d00423596eb0d2a75cef081768462bd7f9`, `59e705b7ee733aebf5b99048cba7160065215ce8`.
-- CI run #348 is currently validating the new native-store/session-store head; it remains a release gate until green.
-- The dedicated Neon project `late-flower-65059830` was re-inspected during this run and no other Neon project was touched.
+- CI run #349 was green on head `cef15b54f482d447605f82aeab04d02543d1e657` before this run.
+- This run added native official-libsignal stores in commits `52d072ba182c690af782a8bc53b8f23cb1283d4e`, `9b80d06fe17ca283d05336068c840aef73673f37`, and `3cb06b70139ba36bb619f31f6758c549642ef7fe`.
+- CI and Android Internal APK validation were triggered for the new native-store head and remain release gates until green.
+- The dedicated Neon project `late-flower-65059830` was re-inspected during this run; it remains the K-ssenger free-v3 project in `aws-eu-central-1`, and no other Neon project was touched.
 - Media RLS integration uses transaction savepoints for expected authorization failures so negative tests cannot poison later assertions.
 - Real remote social smoke remains green after the server changes.
 - Account deletion provider scope has dedicated regression tests that assert the fixed K-ssenger project/branch URL, DELETE method, fail-closed missing credential behavior and provider failure behavior.
-- Neon Auth management deletion was live-tested with a disposable K-ssenger-only user: a profile row was created, the Auth identity was deleted through the dedicated K-ssenger project/branch, and a follow-up query returned zero remaining profile rows, proving FK cascade cleanup. The disposable identity is no longer present.
-- The media service is implemented end-to-end in code: signed upload preparation, post-upload provider probe, MIME/size verification, trusted `ready` promotion, and authorization-aware signed download.
+- Neon Auth management deletion was live-tested with a disposable K-ssenger-only user: provider deletion removed the Auth identity and FK cascade removed its profile row.
 
 ## Security invariants
 
@@ -86,7 +86,7 @@ Repository Neon migrations run through `0013_media_content_bindings.sql`.
 
 ## Remaining premium V1 release gates
 
-1. Wire official native libsignal `IdentityKeyStore`, `PreKeyStore`, `SignedPreKeyStore` and `KyberPreKeyStore` adapters to `KeystoreBlobStore`, add a real native Alice/Bob Signal session self-test, then complete two-device E2EE proof before unlocking private/group plaintext composition.
+1. Implement the official native libsignal `KyberPreKeyStore`, wire all identity/prekey/session/PQ stores into one native protocol store, then add a real native Alice/Bob PQXDH/Double-Ratchet encrypt/decrypt self-test and two-device proof before unlocking private/group plaintext composition.
 2. Configure the server-only Neon management credential on the K-ssenger production server and validate the full in-app self-delete route with a disposable password-authenticated account, including fresh-token enforcement and stale-session rejection. Provider-side deletion + FK cascade are proven.
 3. Validate the completed private media pipeline on physical Android/iOS devices, including avatar/chat/K-Feed/Moments upload, playback/download authorization and failure recovery.
 4. Complete real-device Android/iOS push delivery and K-MAP GPS permission validation; implementation exists but device proof remains required.
