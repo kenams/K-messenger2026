@@ -126,6 +126,31 @@ class SignalRuntimeInstrumentedTest {
       ),
     )
 
+    // Alice may continue emitting PreKeySignalMessage envelopes until she has
+    // received Bob's acknowledgement path. Complete one Bob -> Alice ratchet
+    // turn before simulating process recreation so the persisted test measures
+    // an acknowledged steady-state session rather than an unacknowledged prekey.
+    val acknowledgementPlaintext = "K-ssenger persisted session acknowledgement"
+    val acknowledgement = bob.encrypt(
+      bobUser,
+      bobDeviceNumber,
+      aliceUser,
+      aliceDeviceNumber,
+      acknowledgementPlaintext,
+    )
+    assertEquals("signal", acknowledgement["kind"])
+    assertEquals(
+      acknowledgementPlaintext,
+      alice.decrypt(
+        aliceUser,
+        aliceDeviceNumber,
+        bobUser,
+        bobDeviceNumber,
+        acknowledgement["kind"] as String,
+        acknowledgement["ciphertext"] as String,
+      ),
+    )
+
     // Recreate both protocol objects using the exact same installation UUIDs.
     // This simulates app/process reconstruction and proves that identity + session
     // state is recovered from Android-Keystore-backed encrypted persistence rather
