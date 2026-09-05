@@ -22,7 +22,6 @@ jobs:
     timeout-minutes: 45
     env:
       CI: '1'
-      ANDROID_AVD_HOME: ${{ runner.temp }}/kssenger-avd
       EXPO_PUBLIC_NEON_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
       EXPO_PUBLIC_NEON_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
       EXPO_PUBLIC_KSSENGER_SOCKET_URL: https://kssenger-server.onrender.com
@@ -42,6 +41,8 @@ jobs:
         run: npx expo prebuild --platform android
       - name: Install Android emulator image
         run: |
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/kssenger-avd"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "system-images;android-35;google_apis;x86_64"
           mkdir -p "$ANDROID_AVD_HOME"
