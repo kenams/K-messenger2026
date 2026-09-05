@@ -31,6 +31,7 @@ function inferVideoMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime
 
 export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
   const [videos, setVideos] = useState<FeedVideo[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -52,13 +53,15 @@ export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
         const profiles = await getBackend().from('profiles').select('id,username,display_name').in('id', ownerIds);
         if (!profiles.error) for (const profile of ((profiles.data ?? []) as unknown) as Array<{ id: string; username?: string; display_name?: string }>) authors.set(profile.id, profile.username ? `@${profile.username}` : profile.display_name ?? 'K-ssenger');
       }
-      setVideos(visibleRows.map((row) => ({
+      const nextVideos = visibleRows.map((row) => ({
         id: row.id, ownerId: row.owner_id, author: row.owner_id === me ? '@moi' : authors.get(row.owner_id) ?? 'K-ssenger',
         caption: row.caption, ageRating: row.age_rating, violence: row.violence_level, storagePath: row.storage_path,
         mediaObjectId: row.media_object_id, moderationStatus: row.moderation_status, publishedAt: row.published_at, isMine: row.owner_id === me,
-      })));
+      }));
+      setVideos(nextVideos);
+      setActiveId((current) => current && nextVideos.some((video) => video.id === current) ? current : (nextVideos[0]?.id ?? null));
       setNotice('');
-    } catch { setVideos([]); setNotice('K-Feed est momentanément indisponible.'); }
+    } catch { setVideos([]); setActiveId(null); setNotice('K-Feed est momentanément indisponible.'); }
     finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -109,31 +112,46 @@ export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
         </Pressable>
       </View>
       {!!notice && <View style={styles.noticeBox}><Text style={styles.notice}>{notice}</Text></View>}
-      <FlatList data={videos} keyExtractor={(item) => item.id} pagingEnabled showsVerticalScrollIndicator={false} snapToInterval={ITEM_HEIGHT} decelerationRate="fast"
+      <FlatList
+        data={videos}
+        keyExtractor={(item) => item.id}
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        snapToInterval={ITEM_HEIGHT}
+        decelerationRate="fast"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
-        renderItem={({ item }) => <VideoCard video={item} onReport={report} />}
+        onMomentumScrollEnd={(event) => {
+          const index = Math.max(0, Math.min(videos.length - 1, Math.round(event.nativeEvent.contentOffset.y / ITEM_HEIGHT)));
+          setActiveId(videos[index]?.id ?? null);
+        }}
+        renderItem={({ item }) => <VideoCard video={item} active={item.id === activeId} onReport={report} />}
         ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyTitle}>Aucun K-Clip disponible</Text><Text style={styles.emptyText}>Publie le premier clip. Les médias restent privés jusqu’à leur validation.</Text></View>}
       />
     </View>
   );
 }
 
-function NativeKClip({ uri }: { uri: string }) {
+function NativeKClip({ uri, active }: { uri: string; active: boolean }) {
   const player = useVideoPlayer(uri, (instance) => { instance.loop = true; });
+  useEffect(() => {
+    if (active) player.play();
+    else player.pause();
+    return () => { player.pause(); };
+  }, [active, player]);
   return <VideoView player={player} style={styles.nativeVideo} nativeControls allowsFullscreen allowsPictureInPicture contentFit="contain" />;
 }
 
-function VideoCard({ video, onReport }: { video: FeedVideo; onReport: (video: FeedVideo) => void }) {
+function VideoCard({ video, active, onReport }: { video: FeedVideo; active: boolean; onReport: (video: FeedVideo) => void }) {
   const sensitive = video.violence === 'graphic';
   const [revealed, setRevealed] = useState(!sensitive);
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const publicState = video.moderationStatus === 'approved' || video.moderationStatus === 'limited';
 
   useEffect(() => {
-    let active = true;
-    if (!video.mediaObjectId || (!video.isMine && !publicState)) return () => { active = false; };
-    void getMediaDownload(video.mediaObjectId).then((download) => { if (active) setSignedUrl(download.url); }).catch(() => { if (active) setSignedUrl(null); });
-    return () => { active = false; };
+    let mounted = true;
+    if (!video.mediaObjectId || (!video.isMine && !publicState)) return () => { mounted = false; };
+    void getMediaDownload(video.mediaObjectId).then((download) => { if (mounted) setSignedUrl(download.url); }).catch(() => { if (mounted) setSignedUrl(null); });
+    return () => { mounted = false; };
   }, [video.mediaObjectId, video.isMine, publicState]);
 
   const legacyUrl = /^https:\/\//i.test(video.storagePath) ? video.storagePath : null;
@@ -142,7 +160,7 @@ function VideoCard({ video, onReport }: { video: FeedVideo; onReport: (video: Fe
     <View style={styles.card}>
       <View style={styles.videoSurface}>
         {!revealed ? <View style={styles.warning}><Text style={styles.warningIcon}>⚠️</Text><Text style={styles.warningTitle}>Contenu sensible</Text><Text style={styles.warningText}>Ce K-Clip est classé 18+ avec images potentiellement choquantes.</Text><Pressable style={styles.revealButton} onPress={() => setRevealed(true)}><Text style={styles.revealText}>Afficher le contenu</Text></Pressable></View>
-        : playableUrl && (publicState || video.isMine) ? <NativeKClip uri={playableUrl} />
+        : playableUrl && (publicState || video.isMine) ? <NativeKClip uri={playableUrl} active={active} />
         : <View style={styles.mediaPending}><Text style={styles.play}>▣</Text><Text style={styles.mediaLabel}>{video.isMine && !publicState ? 'Clip en attente de modération' : 'Média indisponible'}</Text><Text style={styles.mediaHint}>K-ssenger ne remplace jamais le fichier réel par un faux média.</Text></View>}
       </View>
       <View style={styles.overlay} pointerEvents="box-none"><View style={styles.meta}><Text style={styles.author}>{video.author}</Text><Text style={styles.caption}>{video.caption || 'K-Clip'}</Text><Text style={styles.rating}>{video.ageRating}+ {video.violence !== 'none' ? '· contenu sensible' : ''} · {video.moderationStatus}</Text></View><View style={styles.actions}>{!video.isMine && <Pressable style={styles.action} onPress={() => onReport(video)}><Text style={styles.actionIcon}>⚑</Text><Text style={styles.actionLabel}>Signaler</Text></Pressable>}</View></View>
