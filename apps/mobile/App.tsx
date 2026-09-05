@@ -12,6 +12,7 @@ import { AccountDataScreen } from './src/features/profile/AccountDataScreen';
 import { PrivacySettingsScreen } from './src/features/profile/PrivacySettingsScreen';
 import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
 import type { MyProfile } from './src/features/profile/useMyProfile';
+import { unregisterPushForSignOut } from './src/features/push/usePushRegistration';
 import { getBackend } from './src/lib/backend';
 import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket } from './src/lib/realtime';
@@ -241,11 +242,12 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
     setSigningOut(true);
     setSignOutError('');
     try {
+      await unregisterPushForSignOut(profile.id);
       const { error } = await getBackend().auth.signOut();
       if (error) throw error;
       disconnectRealtimeSocket();
     } catch {
-      setSignOutError('Déconnexion impossible pour le moment. Réessaie.');
+      setSignOutError('Déconnexion sécurisée impossible pour le moment. Réessaie avec une connexion réseau afin de couper aussi les notifications de ce compte.');
       setSigningOut(false);
     }
   };
