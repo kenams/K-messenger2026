@@ -56,6 +56,26 @@ const ack = (s, event, payload = {}) => new Promise((resolve, reject) => {
   s.emit(event, payload, r => { clearTimeout(t); resolve(r); });
 });
 
+async function uploadSmokeMedia(socket, purpose, mimeType) {
+  const body = Buffer.concat([
+    Buffer.from('00000018667479706d703432000000006d70343269736f6d', 'hex'),
+    crypto.randomBytes(256),
+  ]);
+  const prepared = await ack(socket, 'media:prepare-upload', { purpose, mimeType, byteSize: body.length });
+  assert(prepared?.ok && prepared?.mediaId && prepared?.upload?.url, `${purpose} media prepare failed`);
+  const headers = { ...(prepared.upload.headers ?? {}) };
+  if (!Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')) headers['content-type'] = mimeType;
+  const uploaded = await fetch(prepared.upload.url, {
+    method: prepared.upload.method ?? 'PUT',
+    headers,
+    body,
+  });
+  if (!uploaded.ok) throw new Error(`${purpose} media upload failed: ${uploaded.status}`);
+  const completed = await ack(socket, 'media:complete-upload', { mediaId: prepared.mediaId });
+  assert(completed?.ok && completed?.status === 'ready', `${purpose} media complete failed`);
+  return prepared.mediaId;
+}
+
 async function main() {
   const a = await actor('alice');
   const b = await actor('bob');
@@ -96,8 +116,10 @@ async function main() {
     assert(Boolean(reaction.error), 'hidden Moment accepted reaction');
     pass('Moments reaction authorization');
 
-    const video = await a.db.from('public_videos').insert({ owner_id: a.userId, storage_path: `smoke/${stamp}.mp4`, caption: 'smoke', age_rating: 18, violence_level: 'none', visibility: 'public' }).select('id,moderation_status,published_at').single();
+    const videoMediaId = await uploadSmokeMedia(sa, 'kfeed', 'video/mp4');
+    const video = await a.db.from('public_videos').insert({ owner_id: a.userId, media_object_id: videoMediaId, storage_path: `media:${videoMediaId}`, caption: 'smoke', age_rating: 18, violence_level: 'none', visibility: 'public' }).select('id,media_object_id,storage_path,moderation_status,published_at').single();
     if (video.error) throw new Error(`K-Feed: ${video.error.message}`);
+    assert(video.data.media_object_id === videoMediaId && video.data.storage_path === `media:${videoMediaId}`, 'K-Feed media binding mismatch');
     assert(video.data.moderation_status === 'pending' && video.data.published_at === null, 'K-Feed moderation bypass');
     const invisible = await b.db.from('public_videos').select('id').eq('id', video.data.id);
     assert(!invisible.error && invisible.data.length === 0, 'pending K-Feed leaked');
