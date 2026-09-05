@@ -39,10 +39,13 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `3800b783fbbe62e59c6840d30229985c3d829963` adds a mobile secret-surface scanner; `c1a82f13cded7c3e73a0358c1ef6eb5df661e51e` makes it mandatory in CI so database URLs, provider keys, auth/JWT secrets, private keys and secret-like `EXPO_PUBLIC_*` variables cannot silently enter the shipped mobile surface.
 - `5b6c7d1feb894a833ea9c6cfe4b7c81301ef173a` is verified GREEN in CI #452 and Android E2EE Runtime #97.
 - `aa096581717632dac080f2ecf2c0130a46e12a7b` hardens the mobile dedicated-Neon runtime check so malformed/non-HTTPS URLs and URLs containing credentials, query parameters or fragments fail closed before client creation.
+- `4fa4fb99242317cc0447c3fbf079cedda25a2050` is verified GREEN in CI #454 and Android E2EE Runtime #99.
+- `92c35c8bc2b72fafa8accf5129334005a618e434` adds repository migration `0018_contact_removal_revokes_kmap_shares.sql`: removing either side of a contact relationship revokes every still-active direct K-MAP share between the pair at the database boundary.
+- `3d74c4b7c2a39f037cc6256f04846a3a1b09c6a0` extends the Neon social RLS integration suite so contact-removal K-MAP revocation is a mandatory regression contract. CI #456 and Android E2EE Runtime #101 are queued on this head at the time of this state update.
 
 ## Live Neon surface
 
-Repository/live migrations are verified through `0016_signal_group_prekey_claim.sql`.
+The dedicated live database remains the only allowed backend. Direct inspection on 2026-09-05 confirms the existing `revoke_location_on_block` trigger is installed on `blocks`; the new repository `0018` contact-removal trigger is not yet applied to live Neon and must go through the normal reviewed migration/apply path rather than being silently forced into production.
 
 The live V1 surface includes profiles/privacy, contacts/blocks, conversations/messages/receipts, group membership/moderation, K-Feed, Moments, K-MAP, push subscriptions, private media metadata and Signal device bundles/prekeys. Live inspection on 2026-09-05 confirms all 26 public tables have RLS enabled. FORCE RLS is additionally enabled on the six security-sensitive tables currently designed for owner-role enforcement: `device_key_bundles`, `device_one_time_prekeys`, `device_pq_one_time_prekeys`, `device_prekey_claims`, `media_objects` and `push_subscriptions`. Contact/shared-group Signal device discovery and `claim_signal_prekey_bundle(uuid)` are fail-closed and block-aware.
 
@@ -82,6 +85,7 @@ The live V1 surface includes profiles/privacy, contacts/blocks, conversations/me
 - Plaintext, auth tokens, private keys and Signal session records must never be logged.
 - No invented cryptography.
 - K-MAP is explicit opt-in; no hidden background/permanent tracking.
+- Blocking a user revokes active direct K-MAP shares at the database boundary; repository migration `0018` adds the equivalent invariant for contact removal and awaits reviewed live apply.
 - K-ssenger is independent from Microsoft and must not use Microsoft branding/assets/sounds or affiliation language.
 
 ## Remaining Premium V1 release gates
@@ -89,10 +93,11 @@ The live V1 surface includes profiles/privacy, contacts/blocks, conversations/me
 1. Real two-physical-device Android Signal proof through the production server: discovery/prekey claim, identity continuity, ratchet continuity, revocation and reconnect.
 2. Finish and physically validate chat media UX; private chat storage is already available, but every send/render path must remain authorization-aware and must not expose a public media URL.
 3. Validate avatar/K-Feed/Moments media, push delivery and K-MAP GPS permission flows on physical Android; repeat on iOS once native parity exists.
-4. Resolve external Neon `ACCOUNT_DELETE_PROVIDER_404`, then live-prove in-app self-delete with a disposable password-authenticated account.
-5. Validate final Alice/Bob/Charlie physical smoke: contacts, presence, K-Pulse, direct chat, offline/reconnect, receipts, groups, media, push, K-Feed, Moments, K-MAP, block/export/delete.
-6. Implement and prove vetted native iOS libsignal parity.
-7. Produce store-signed Android/iOS builds when signing credentials/tooling are available.
+4. Review/apply repository migration `0018_contact_removal_revokes_kmap_shares.sql` to the dedicated live Neon branch, then verify the trigger and direct-share revocation there.
+5. Resolve external Neon `ACCOUNT_DELETE_PROVIDER_404`, then live-prove in-app self-delete with a disposable password-authenticated account.
+6. Validate final Alice/Bob/Charlie physical smoke: contacts, presence, K-Pulse, direct chat, offline/reconnect, receipts, groups, media, push, K-Feed, Moments, K-MAP, block/export/delete.
+7. Implement and prove vetted native iOS libsignal parity.
+8. Produce store-signed Android/iOS builds when signing credentials/tooling are available.
 
 ## Release rule
 
