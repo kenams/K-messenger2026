@@ -1,0 +1,25 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.kahdigital.kssenger'
+version = '1.0.0'
+
+android {
+  namespace "com.kahdigital.kssenger.signal"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+repositories {
+  maven { url 'https://build-artifacts.signal.org/libraries/maven/' }
+  mavenCentral()
+}
+
+dependencies {
+  implementation "org.signal:libsignal-client:0.100.0"
+  implementation "org.signal:libsignal-android:0.100.0"
+}
