@@ -34,6 +34,7 @@ export type UploadLocalMediaInput = {
 };
 
 const MAX_MEDIA_BYTES = 104_857_600;
+const MIN_SIGNED_URL_LIFETIME_MS = 5_000;
 
 function assertLocalMediaInput(input: UploadLocalMediaInput) {
   if (!input.uri) throw new Error('KSSENGER_MEDIA_INVALID_LOCAL_ASSET');
@@ -42,6 +43,29 @@ function assertLocalMediaInput(input: UploadLocalMediaInput) {
   }
   if (input.purpose === 'chat' && !input.conversationId) throw new Error('KSSENGER_MEDIA_CHAT_CONVERSATION_REQUIRED');
   if (input.purpose !== 'chat' && input.conversationId) throw new Error('KSSENGER_MEDIA_CONVERSATION_NOT_ALLOWED');
+}
+
+function assertSignedMediaRequest(
+  request: { url: string; method: string; headers: Record<string, string>; expiresAt: string },
+  expectedMethod: 'GET' | 'PUT',
+) {
+  if (request.method.toUpperCase() !== expectedMethod) throw new Error('KSSENGER_MEDIA_INVALID_SIGNED_REQUEST');
+  let parsed: URL;
+  try {
+    parsed = new URL(request.url);
+  } catch {
+    throw new Error('KSSENGER_MEDIA_INVALID_SIGNED_REQUEST');
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    throw new Error('KSSENGER_MEDIA_INVALID_SIGNED_REQUEST');
+  }
+  const expiresAt = Date.parse(request.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() + MIN_SIGNED_URL_LIFETIME_MS) {
+    throw new Error('KSSENGER_MEDIA_SIGNED_REQUEST_EXPIRED');
+  }
+  if (!request.headers || typeof request.headers !== 'object' || Array.isArray(request.headers)) {
+    throw new Error('KSSENGER_MEDIA_INVALID_SIGNED_REQUEST');
+  }
 }
 
 export async function uploadLocalMedia(input: UploadLocalMediaInput): Promise<{ mediaId: string }> {
@@ -67,6 +91,7 @@ export async function uploadLocalMedia(input: UploadLocalMediaInput): Promise<{ 
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
   });
   if (!prepared.ok || !prepared.mediaId || !prepared.upload) throw new Error(prepared.error ?? 'KSSENGER_MEDIA_PREPARE_FAILED');
+  assertSignedMediaRequest(prepared.upload, 'PUT');
 
   const uploaded = await fetch(prepared.upload.url, {
     method: 'PUT',
@@ -84,5 +109,6 @@ export async function getMediaDownload(mediaId: string) {
   const socket = await getRealtimeSocket();
   const prepared = await emitAck<PreparedDownload>(socket, 'media:prepare-download', { mediaId });
   if (!prepared.ok || !prepared.download) throw new Error(prepared.error ?? 'KSSENGER_MEDIA_DOWNLOAD_FAILED');
+  assertSignedMediaRequest(prepared.download, 'GET');
   return prepared.download;
 }
