@@ -26,7 +26,10 @@ begin
 end;
 $$;
 
+-- This SECURITY DEFINER function is trigger-only. Keep it unavailable to API
+-- roles even when project default privileges grant EXECUTE to authenticated.
 revoke all on function public.revoke_location_shares_on_contact_removal() from public;
+revoke all on function public.revoke_location_shares_on_contact_removal() from authenticated;
 
 do $$
 begin
