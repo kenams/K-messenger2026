@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import { getBackend } from '../../lib/backend';
+import { getMediaDownload } from '../../lib/media';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
@@ -11,6 +12,7 @@ export type Contact = {
   nickname: string;
   handle: string;
   presence: Presence;
+  avatarUrl?: string;
   statusMessage?: string;
   nowPlaying?: string;
   favorite?: boolean;
@@ -68,6 +70,39 @@ const presenceIcon: Record<Presence, string> = {
   online: '🟢', busy: '🔴', away: '🟠', invisible: '👻', offline: '⚫',
 };
 
+function mediaIdFromAvatar(value: string | null | undefined): string | null {
+  if (!value?.startsWith('media:')) return null;
+  const id = value.slice('media:'.length);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : null;
+}
+
+function httpsAvatar(value: string | null | undefined): string | null {
+  return value && /^https:\/\//i.test(value) ? value : null;
+}
+
+function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: string; avatarUrl?: string | null; presence?: Presence }) {
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => httpsAvatar(avatarUrl));
+  const mediaId = mediaIdFromAvatar(avatarUrl);
+
+  useEffect(() => {
+    let active = true;
+    const legacyUrl = httpsAvatar(avatarUrl);
+    if (!mediaId) {
+      setResolvedUrl(legacyUrl);
+      return () => { active = false; };
+    }
+    setResolvedUrl(null);
+    void getMediaDownload(mediaId)
+      .then((download) => { if (active) setResolvedUrl(download.url); })
+      .catch(() => { if (active) setResolvedUrl(null); });
+    return () => { active = false; };
+  }, [avatarUrl, mediaId]);
+
+  const avatarStyle = [styles.avatar, presence === 'online' && styles.avatarOnline];
+  if (resolvedUrl) return <Image source={{ uri: resolvedUrl }} style={avatarStyle} />;
+  return <View style={avatarStyle}><Text style={styles.avatarText}>{displayName[0]?.toUpperCase() ?? '?'}</Text></View>;
+}
+
 export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => void }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
@@ -101,6 +136,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         nickname: row.profiles.nickname ?? row.profiles.display_name,
         handle: `@${row.profiles.username}`,
         presence: row.profiles.presence,
+        avatarUrl: row.profiles.avatar_url ?? undefined,
         statusMessage: row.profiles.custom_status ?? undefined,
         nowPlaying,
         favorite: row.favorite,
@@ -379,7 +415,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
           <View style={styles.groupHeader}><Text style={styles.groupTitle}>UTILISATEURS</Text><Text style={styles.groupCount}>{results.length}</Text></View>
           {results.map((profile) => (
             <View key={profile.id} style={styles.contact}>
-              <View style={[styles.avatar, profile.presence === 'online' && styles.avatarOnline]}><Text style={styles.avatarText}>{profile.display_name[0] ?? '?'}</Text></View>
+              <ContactAvatar displayName={profile.display_name} avatarUrl={profile.avatar_url} presence={profile.presence} />
               <View style={styles.flex}><Text style={styles.nickname}>{profile.display_name}</Text><Text style={styles.status}>@{profile.username}</Text></View>
               <TouchableOpacity style={styles.accept} onPress={() => void requestContact(profile.id)}><Text style={styles.acceptText}>Ajouter</Text></TouchableOpacity>
             </View>
@@ -395,7 +431,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
           </TouchableOpacity>
           {!blockedCollapsed && blockedUsers.map((blocked) => (
             <View key={blocked.id} style={styles.contact}>
-              <View style={styles.avatar}><Text style={styles.avatarText}>{blocked.display_name[0] ?? '?'}</Text></View>
+              <ContactAvatar displayName={blocked.display_name} avatarUrl={blocked.avatar_url} />
               <View style={styles.flex}>
                 <Text style={styles.nickname}>{blocked.display_name}</Text>
                 <Text style={styles.status}>@{blocked.username} · interactions coupées</Text>
@@ -421,7 +457,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
               <View key={contact.id}>
                 <View style={styles.contact}>
                   <TouchableOpacity style={styles.contactMain} onPress={() => onOpen(contact)} accessibilityRole="button">
-                    <View style={[styles.avatar, contact.presence === 'online' && styles.avatarOnline]}><Text style={styles.avatarText}>{contact.displayName[0]}</Text></View>
+                    <ContactAvatar displayName={contact.displayName} avatarUrl={contact.avatarUrl} presence={contact.presence} />
                     <View style={styles.flex}>
                       <View style={styles.nameRow}><Text style={styles.presence}>{presenceIcon[contact.presence]}</Text><Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text></View>
                       {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
