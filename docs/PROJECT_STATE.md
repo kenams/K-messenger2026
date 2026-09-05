@@ -39,7 +39,10 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `scripts/neon-account-delete-fk-integration-test.mjs` is restricted to localhost Postgres and proves those deletion semantics with a disposable synthetic identity; it is mandatory in CI.
 - The obsolete Better Auth `/delete-user` probe was removed because K-ssenger does not use that endpoint. K-ssenger deletes through its authenticated server route plus the official branch-scoped Neon Auth management API.
 - Remote V1 Smoke #28 is GREEN after that correction. The real Alice/Bob/Charlie remote suite passes 30/30 across auth/profile, contacts, presence, K-Pulse, encrypted message transport contracts, receipts, reconnect, groups/moderation, K-MAP, Moments, K-Feed and Signal prekey paths.
-- Current head before this state commit, `0275b2c3bb360ba09b8baaf259ccaef308241233`, is GREEN in CI #470; Android E2EE Runtime #115 is still in progress at this verification point.
+- `239aedc1700af5b7fd4e9b663a98feb5ae8f963b` is verified GREEN in CI #471 and Android E2EE Runtime #116.
+- `bcbec0296e24ede70134a379eff99f7894da9096` adds a mandatory mobile account-deletion safety contract: password reauthentication, exact `DELETE` confirmation, authenticated server delegation, and disconnect/sign-out only after a positive server acknowledgement.
+- `1078fc18ca9a54cd210871770cf770427fc0b01e` adds a read-only live Neon release-readiness gate. It refuses the wrong project, verifies the `kssenger` database, RLS/FORCE RLS, K-MAP revocation triggers/ACLs and the three account-deletion FK actions without mutating live data.
+- `4d94517dece78afe0f2264b4287626aec3af5fd5` exposes that gate as `npm run release:check-neon-live`.
 
 ## Live Neon surface
 
@@ -55,7 +58,7 @@ Direct inspection confirms:
 
 A disposable historical smoke identity was successfully removed with the current branch-scoped Neon Auth management API and verified absent from `neon_auth.user`. The old management-provider 404 is therefore not a current platform blocker.
 
-Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but is not silently applied to live Neon in this run. It must follow the controlled live migration path before the in-app deletion release proof.
+Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but is not silently applied to live Neon. A fresh read-only inspection on 2026-09-06 confirms all three targeted live foreign keys are still `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, and `group_bans_banned_by_fkey`. The live release-readiness command is intentionally expected to fail this gate until the controlled migration is applied.
 
 ## Operational V1 modules
 
@@ -70,7 +73,7 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 - K-MAP with explicit foreground permission, approximate/precise sharing, recipient controls, revoke, Ghost Mode, block-time revocation and contact-removal revocation.
 - Native push registration and metadata-only server push payloads.
 - Account export v3.
-- Account deletion UI/server route with password reauthentication, fresh Neon token and provider scope hard-coded to the dedicated K-ssenger project/branch. Repository deletion semantics are now FK-safe; controlled live migration + disposable in-app proof remain open.
+- Account deletion UI/server route with password reauthentication, fresh Neon token and provider scope hard-coded to the dedicated K-ssenger project/branch. Repository deletion semantics are FK-safe; controlled live migration + disposable in-app proof remain open.
 - Release candidate metadata is `1.0.0` and an Android internal release APK can be produced by CI.
 
 ## E2EE
