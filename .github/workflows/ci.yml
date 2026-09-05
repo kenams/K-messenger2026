@@ -17,6 +17,8 @@ jobs:
       - run: npm ci
       - name: Gate Neon-only runtime assumptions
         run: node scripts/no-supabase-runtime-gate.mjs
+      - name: Gate mobile secret surface
+        run: node scripts/mobile-secret-surface-gate.mjs
       - name: Gate high-severity runtime dependency advisories
         run: node scripts/runtime-audit-gate.mjs
       - run: npm run typecheck
