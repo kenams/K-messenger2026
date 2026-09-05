@@ -4,6 +4,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.util.UUID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -126,10 +127,6 @@ class SignalRuntimeInstrumentedTest {
       ),
     )
 
-    // Alice may continue emitting PreKeySignalMessage envelopes until she has
-    // received Bob's acknowledgement path. Complete one Bob -> Alice ratchet
-    // turn before simulating process recreation so the persisted test measures
-    // an acknowledged steady-state session rather than an unacknowledged prekey.
     val acknowledgementPlaintext = "K-ssenger persisted session acknowledgement"
     val acknowledgement = bob.encrypt(
       bobUser,
@@ -151,10 +148,6 @@ class SignalRuntimeInstrumentedTest {
       ),
     )
 
-    // Recreate both protocol objects using the exact same installation UUIDs.
-    // This simulates app/process reconstruction and proves that identity + session
-    // state is recovered from Android-Keystore-backed encrypted persistence rather
-    // than an in-memory test store.
     alice = SignalDeviceProtocol(context, aliceDevice)
     bob = SignalDeviceProtocol(context, bobDevice)
     assertTrue(alice.hasSession(bobUser, bobDeviceNumber))
@@ -195,5 +188,23 @@ class SignalRuntimeInstrumentedTest {
         reply["ciphertext"] as String,
       ),
     )
+  }
+
+  @Test
+  fun localSentMessageCachePersistsEncryptedAtRestAcrossStoreRecreation() {
+    val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    val userId = "55555555-5555-4555-8555-555555555555"
+    val messageId = UUID.randomUUID().toString()
+    val plaintext = "K-ssenger sender-visible history survives restart"
+
+    var store = LocalMessageStore(KeystoreBlobStore(context, "local-message-instrumentation"))
+    store.put(userId, messageId, plaintext)
+    assertEquals(plaintext, store.get(userId, messageId))
+
+    store = LocalMessageStore(KeystoreBlobStore(context, "local-message-instrumentation"))
+    assertEquals(plaintext, store.get(userId, messageId))
+
+    store.remove(userId, messageId)
+    assertNull(store.get(userId, messageId))
   }
 }
