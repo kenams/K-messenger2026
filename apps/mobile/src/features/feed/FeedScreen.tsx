@@ -20,6 +20,15 @@ const { height } = Dimensions.get('window');
 const ITEM_HEIGHT = Math.max(520, height - 190);
 const VIDEO_MIMES = new Set<SupportedMediaMime>(['video/mp4', 'video/quicktime']);
 
+function inferVideoMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime | null {
+  const normalized = asset.mimeType?.toLowerCase();
+  if (normalized && VIDEO_MIMES.has(normalized as SupportedMediaMime)) return normalized as SupportedMediaMime;
+  const uri = asset.uri.toLowerCase();
+  if (uri.endsWith('.mp4')) return 'video/mp4';
+  if (uri.endsWith('.mov')) return 'video/quicktime';
+  return null;
+}
+
 export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
   const [videos, setVideos] = useState<FeedVideo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,9 +73,10 @@ export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
       const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], quality: 1, allowsEditing: false });
       if (picked.canceled) return;
       const asset = picked.assets[0];
-      const mime = asset.mimeType as SupportedMediaMime | undefined;
-      if (!asset.fileSize || !mime || !VIDEO_MIMES.has(mime)) throw new Error('UNSUPPORTED_KCLIP');
-      const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType: mime, byteSize: asset.fileSize, purpose: 'kfeed' });
+      if (!asset?.uri) throw new Error('UNSUPPORTED_KCLIP');
+      const mime = inferVideoMime(asset);
+      if (!mime) throw new Error('UNSUPPORTED_KCLIP');
+      const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType: mime, byteSize: asset.fileSize ?? undefined, purpose: 'kfeed' });
       const ownerId = await getAuthenticatedUserId();
       const { error } = await getBackend().from('public_videos').insert({
         owner_id: ownerId, media_object_id: mediaId, storage_path: `media:${mediaId}`, caption: '', age_rating: 13,
