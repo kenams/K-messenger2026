@@ -8,7 +8,13 @@
 - Keep PR #2 draft until database, security, multi-device, media/push and release gates are proven.
 
 ## Latest verified GitHub state
-Verified 2026-09-04:
+Verified 2026-09-05:
+- Current remote head before this fix: `5b1f7ae727ee7ea80894ed44dfafe1943a1db6a6`.
+- CI run `33972123248` on that head succeeded: `test` and `rls-integration` passed.
+- Android E2EE Runtime run `33972123233` succeeded.
+- Android Debug APK run `33972121430` succeeded and uploaded an APK artifact.
+- Remote Social Smoke run `33972121474` failed at K-Feed with `INVALID_KFEED_MEDIA`: the smoke script still inserted a `public_videos` row without a ready `media_object_id` after migration `0013_media_content_bindings.sql` made verified media mandatory.
+- This workspace fix updates `remote-social-smoke-v2.mjs` and `remote-v1-smoke.mjs` to prepare/upload/complete media through the authenticated realtime media handlers before creating K-Feed rows.
 - Head `40b987e167b796a294d2369254a7b05ea9090bfe` passed CI run #256: triaged dependency audit, TypeScript, server tests, core RLS integration and social/K-MAP RLS integration all succeeded.
 - Account export TypeScript failures from runs #241/#242 were fixed by `ec00b8a595d1986537b31054d37c65efe2bd4698`; later CI is green.
 - Production EAS configuration points only at the dedicated public K-ssenger Neon Auth/Data API and K-ssenger realtime endpoints (`43a277ad977d65f8518dd45915e8481d0984ec3e`). No secret credential is embedded.
@@ -16,7 +22,7 @@ Verified 2026-09-04:
 - Mobile Neon configuration fails closed unless both public Neon URLs exactly match the dedicated K-ssenger backend (`9cfcd603f1bcad86b49bdffd888123a96127680a`).
 - Auth UI catches offline/backend login and signup failures without leaking provider details (`6d07868e60380ec7991ed37ed7796cddbd798be0`).
 - Dependency audit is now a strict triage gate: known Expo/Metro build-tool advisories are allowlisted by exact GHSA id; any new high/critical advisory fails CI (`565e39db5a5d15fd200bb3010f30db022f3a7424`, `40b987e167b796a294d2369254a7b05ea9090bfe`). No `npm audit fix --force` or breaking Expo jump was used.
-- Remote Social Smoke run #20 passed against the real K-ssenger Neon/Auth/Data API/realtime backend. The workflow is now scoped to backend/migration/smoke changes so mobile/docs commits no longer create unnecessary temporary Auth users (`459fa19ef0117d46cdcf7a51d670ccc57db6445a`).
+- Remote Social Smoke run #20 previously passed against the real K-ssenger Neon/Auth/Data API/realtime backend. The 2026-09-05 head exposed the expected media-binding regression above; do not mark the smoke green again until the fixed script passes on GitHub.
 - Android debug run #52 produced and uploaded an APK, but it was not accepted as a V1 artifact because the old workflow did not inject the public backend endpoints and debug builds can depend on Metro.
 - `f7d2c4fdaf70b4074f11abd9b34bc5521380d2e8` replaces that workflow with a standalone internal `assembleRelease` APK build, embeds only the three public K-ssenger endpoints, validates them before build, and uses no distribution secret. Run #53 is compiling; it is not considered verified until artifact upload succeeds.
 - No force-push was used.

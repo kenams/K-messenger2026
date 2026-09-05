@@ -136,6 +136,31 @@ function waitEvent(socket, event, predicate = () => true, timeout = 15_000) {
   });
 }
 
+async function uploadSmokeMedia(socket, purpose, mimeType, conversationId = undefined) {
+  const body = Buffer.concat([
+    Buffer.from('00000018667479706d703432000000006d70343269736f6d', 'hex'),
+    crypto.randomBytes(256),
+  ]);
+  const prepared = await ack(socket, 'media:prepare-upload', {
+    purpose,
+    mimeType,
+    byteSize: body.length,
+    ...(conversationId ? { conversationId } : {}),
+  });
+  assert(prepared?.ok && prepared?.mediaId && prepared?.upload?.url, `${purpose} media prepare failed`);
+  const headers = { ...(prepared.upload.headers ?? {}) };
+  if (!Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')) headers['content-type'] = mimeType;
+  const uploaded = await fetch(prepared.upload.url, {
+    method: prepared.upload.method ?? 'PUT',
+    headers,
+    body,
+  });
+  if (!uploaded.ok) throw new Error(`${purpose} media upload failed: ${uploaded.status}`);
+  const completed = await ack(socket, 'media:complete-upload', { mediaId: prepared.mediaId });
+  assert(completed?.ok && completed?.status === 'ready', `${purpose} media complete failed`);
+  return prepared.mediaId;
+}
+
 async function makeContacts(sender, senderSocket, recipient, recipientSocket) {
   const incoming = waitEvent(recipientSocket, 'contact:request', (payload) => payload?.senderId === sender.userId);
   const request = await ack(senderSocket, 'contact:request', { userId: recipient.userId });
@@ -307,16 +332,19 @@ async function main() {
     assert(!bobPendingMoment.error && (bobPendingMoment.data?.length ?? 0) === 0, 'pending Moment leaked to contact');
     ok('Moments RLS pending isolation');
 
+    const videoMediaId = await uploadSmokeMedia(aliceSocket, 'kfeed', 'video/mp4');
     const video = await alice.client.from('public_videos').insert({
       owner_id: alice.userId,
-      storage_path: `smoke/${stamp}/video.mp4`,
+      media_object_id: videoMediaId,
+      storage_path: `media:${videoMediaId}`,
       thumbnail_path: null,
       caption: 'remote smoke K-Feed',
       age_rating: 18,
       violence_level: 'none',
       visibility: 'public',
-    }).select('id').single();
+    }).select('id,media_object_id,storage_path').single();
     if (video.error || !video.data?.id) throw new Error(`K-Feed metadata create failed: ${video.error?.message ?? 'missing id'}`);
+    assert(video.data.media_object_id === videoMediaId && video.data.storage_path === `media:${videoMediaId}`, 'K-Feed media binding mismatch');
     const bobPendingVideo = await bob.client.from('public_videos').select('id').eq('id', video.data.id);
     assert(!bobPendingVideo.error && (bobPendingVideo.data?.length ?? 0) === 0, 'pending K-Feed video leaked before moderation');
     ok('K-Feed age/moderation RLS pending isolation');
