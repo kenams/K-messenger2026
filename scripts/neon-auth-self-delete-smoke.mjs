@@ -5,8 +5,14 @@ const AUTH_URL = process.env.KSSENGER_AUTH_URL;
 const DATA_API_URL = process.env.KSSENGER_DATA_API_URL;
 if (!AUTH_URL || !DATA_API_URL) throw new Error('KSSENGER_AUTH_URL and KSSENGER_DATA_API_URL are required');
 
+const AUTH_ORIGIN = new URL(AUTH_URL).origin;
 const auth = createClient({
-  auth: { adapter: BetterAuthVanillaAdapter(), url: AUTH_URL },
+  auth: {
+    adapter: BetterAuthVanillaAdapter({
+      fetchOptions: { headers: { Origin: AUTH_ORIGIN } },
+    }),
+    url: AUTH_URL,
+  },
   dataApi: { url: DATA_API_URL },
 });
 
