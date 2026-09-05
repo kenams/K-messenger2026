@@ -7,6 +7,7 @@ on:
       - 'apps/server/**'
       - 'neon/migrations/**'
       - 'scripts/remote-social-smoke*.mjs'
+      - 'scripts/remote-auth-delete-smoke*.mjs'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/remote-social-smoke.yml'
@@ -30,3 +31,7 @@ jobs:
           KSSENGER_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
           KSSENGER_SOCKET_URL: https://kssenger-server.onrender.com
         run: node scripts/remote-social-smoke-runner.mjs
+      - name: Verify self-service Neon Auth account deletion
+        env:
+          KSSENGER_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
+        run: node scripts/remote-auth-delete-smoke-runner.mjs
