@@ -2,8 +2,12 @@ package com.kahdigital.kssenger.signal
 
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import org.signal.libsignal.protocol.SignalProtocolAddress
+import org.signal.libsignal.protocol.state.SessionRecord
 
 private const val STORE_PROBE_KEY = "__probe__"
+private const val SESSION_PROBE_NAME = "00000000-0000-4000-8000-000000000001"
+private const val SESSION_PROBE_DEVICE = 1
 
 class KssengerSignalModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -19,20 +23,21 @@ class KssengerSignalModule : Module() {
       }.getOrDefault(false)
 
       val context = appContext.reactContext
-      val nativeStoreReady = context != null && runCatching {
-        verifyPersistentEncryptedStore(KeystoreBlobStore(context))
+      val nativeStore = context?.let { KeystoreBlobStore(it) }
+      val nativeStoreReady = nativeStore != null && runCatching {
+        verifyPersistentEncryptedStore(nativeStore)
+      }.getOrDefault(false)
+      val sessionStoreReady = libsignalLoaded && nativeStoreReady && nativeStore != null && runCatching {
+        verifyOfficialSessionStore(SignalSessionStore(nativeStore))
       }.getOrDefault(false)
 
       mapOf(
         "libsignalLoaded" to libsignalLoaded,
         "secureStorageReady" to nativeStoreReady,
-        // The opaque encrypted native store is now ready to hold private
-        // libsignal identity/prekey material without crossing into JavaScript.
         "deviceKeyStoreReady" to nativeStoreReady,
-        // Deliberately false until the official libsignal SessionStore,
-        // IdentityKeyStore, PreKeyStore, SignedPreKeyStore and KyberPreKeyStore
-        // adapters are wired to KeystoreBlobStore and exercised end-to-end.
-        "sessionStoreReady" to false,
+        "sessionStoreReady" to sessionStoreReady,
+        // This remains false until identity/prekey/PQ stores are wired and a
+        // real Alice/Bob libsignal session performs encrypt/decrypt natively.
         "selfTestPassed" to false,
       )
     }
@@ -44,5 +49,24 @@ class KssengerSignalModule : Module() {
     val roundTrip = store.get(STORE_PROBE_KEY)
     store.remove(STORE_PROBE_KEY)
     return roundTrip?.contentEquals(clear) == true && !store.contains(STORE_PROBE_KEY)
+  }
+
+  private fun verifyOfficialSessionStore(store: SignalSessionStore): Boolean {
+    val address = SignalProtocolAddress(SESSION_PROBE_NAME, SESSION_PROBE_DEVICE)
+    store.deleteSession(address)
+
+    val original = SessionRecord()
+    val serialized = original.serialize()
+    store.storeSession(address, original)
+
+    val loaded = store.loadSession(address).serialize()
+    val contains = store.containsSession(address)
+    val indexed = store.getSubDeviceSessions(SESSION_PROBE_NAME).contains(SESSION_PROBE_DEVICE)
+
+    store.deleteSession(address)
+    val cleaned = !store.containsSession(address) &&
+      !store.getSubDeviceSessions(SESSION_PROBE_NAME).contains(SESSION_PROBE_DEVICE)
+
+    return contains && indexed && serialized.contentEquals(loaded) && cleaned
   }
 }
