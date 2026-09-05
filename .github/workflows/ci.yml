@@ -55,3 +55,7 @@ jobs:
         env:
           DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
         run: node scripts/neon-push-rls-integration-test.mjs
+      - name: Run private media metadata RLS isolation suite
+        env:
+          DB_URL: postgresql://postgres:postgres@127.0.0.1:55432/kssenger_test
+        run: node scripts/neon-media-rls-integration-test.mjs
