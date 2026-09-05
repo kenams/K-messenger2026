@@ -29,6 +29,8 @@ class KssengerSignalModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KssengerSignalBridge")
 
+    AsyncFunction("randomUuid") { UUID.randomUUID().toString() }
+
     AsyncFunction("getInstallationId") {
       val context = appContext.reactContext ?: throw IllegalStateException("ANDROID_CONTEXT_UNAVAILABLE")
       val store = KeystoreBlobStore(context, "installation-v1")
