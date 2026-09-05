@@ -38,8 +38,8 @@ Verified live security/data surfaces include profiles/privacy, contacts/blocks, 
 - K-MAP uses explicit foreground GPS, approximate/precise sharing, recipient selection, revoke and Ghost Mode; no hidden background tracking.
 - Native Expo push registration on physical devices plus metadata-only server push payloads.
 - Private media handlers are registered in the real Socket.IO connection path. The nested Neon Object Storage presign key bug is fixed and regression-covered.
-- Conversation and K-Pulse push triggers are now actually invoked by the running server; push delivery failure is fire-and-forget and cannot fail the underlying message/K-Pulse action. Payloads remain metadata-only.
-- CI now contains a production Socket.IO wiring guard covering extracted media/account/moderation handlers, push trigger invocation, and the critical realtime V1 event surface. This specifically prevents the previously observed class of bugs where a complete handler exists but is never registered by `server.ts`.
+- Conversation and K-Pulse push triggers are actually invoked by the running server; push delivery failure is fire-and-forget and cannot fail the underlying message/K-Pulse action. Payloads remain metadata-only.
+- CI contains a production Socket.IO wiring guard covering extracted media/account/moderation handlers, push trigger invocation, and the critical realtime V1 event surface. This prevents the previously observed class of bugs where a complete handler exists but is never registered by `server.ts`.
 
 ## Real production-path smoke verified
 
@@ -60,13 +60,20 @@ These are server/live-backend proofs, not substitutes for the remaining real phy
 - Android E2EE runtime proof is GREEN and covers real libsignal EC + signed + Kyber provisioning, `PreKeyBundle`, first `PreKeySignalMessage`, one-time EC/PQ consumption, Bob reply as normal `SignalMessage`, Alice decrypt and ratchet sessions.
 - Persistence/recreation instrumentation completes the acknowledgement path before requiring normal post-restart Signal messages.
 - K-ssenger must not claim production E2EE until real two-physical-device server-mediated proof passes.
+- The local Expo libsignal module remains Android-only; iOS must stay fail-closed until vetted native Swift parity is implemented and proven.
+
+## Android release hardening
+
+- The internal APK build uses the dedicated public K-ssenger Neon Auth/Data API endpoints and K-ssenger Render socket endpoint only.
+- Expo prebuild injects the official Signal Maven repository, exact libsignal `0.100.0` dependencies and core-library desugaring.
+- R8/ProGuard keep rules protect `org.signal.libsignal.**` and `com.kahdigital.kssenger.signal.**` so JNI/native module classes are not stripped or renamed in release builds.
+- The Android APK workflow now fails before Gradle assembly unless those libsignal dependencies, desugaring configuration and ProGuard keep rules are visibly present in the generated Android project. This prevents publishing another apparently successful but launch-crashing release APK.
 
 ## Validation state
 
-- Current head before this state sync: `b0c89e4ac3ff907e788aa37cdc2bb400473c7915`.
-- Previous head `7126504454a41d4efb46e309c4a1281dbfa54864`: CI #401 GREEN; Android E2EE Runtime #42 was executing native instrumentation when this pass inspected it.
-- New server-wiring regression test is committed and awaiting the workflow run created by the new head.
-- Dedicated Neon `late-flower-65059830` was re-verified directly; `neon_auth.user` uses UUID IDs and the branch remains Better Auth-backed.
+- Verified head `fda782567693d53c39d0419a9b1946db7d26b545`: CI #407 GREEN and Android E2EE Runtime #48 GREEN.
+- Release-hardening guard committed as `4dd4d4033936e6db98c695119049df4d9bf04c89`; its new workflow run is the next validation target.
+- Dedicated Neon project `late-flower-65059830` was re-verified directly on 2026-09-05: project name `K-ssenger`, PostgreSQL 17, free_v3, region `aws-eu-central-1`; branch `br-falling-sea-b1k36u32` remains backed by Better Auth for database `kssenger`.
 - PR #2 remains draft by design.
 
 ## Security invariants
@@ -84,7 +91,7 @@ These are server/live-backend proofs, not substitutes for the remaining real phy
 ## Remaining premium V1 release gates
 
 1. Complete the real two-physical-device server-mediated Signal proof covering device discovery/prekey claim, identity continuity, one-time/PQ prekeys, ratchet continuity, device revocation and offline/reconnect.
-2. Resolve the Neon provider `ACCOUNT_DELETE_PROVIDER_404` issue, then validate full in-app self-delete with a disposable password-authenticated account, including fresh-token enforcement/stale-session rejection. The branch-scoped deletion route currently matches Neon's documented API and the live auth table uses UUID IDs, so do not weaken auth or switch projects as a workaround.
+2. Resolve the Neon provider `ACCOUNT_DELETE_PROVIDER_404` issue, then validate full in-app self-delete with a disposable password-authenticated account, including fresh-token enforcement/stale-session rejection. Do not weaken auth or switch projects as a workaround.
 3. Validate private media end-to-end on physical Android/iOS: avatar/chat/K-Feed/Moments upload, playback/download authorization and recovery paths.
 4. Validate real-device Android/iOS push delivery and K-MAP GPS permission flows.
 5. Run the final two-device smoke across offline/reconnect, receipts, groups, media, push and E2EE.
