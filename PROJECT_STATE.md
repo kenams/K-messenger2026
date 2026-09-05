@@ -41,7 +41,8 @@ Repository migrations currently run from `0001_v1_core.sql` through `0009_push_s
 - Account export through authenticated Data API/RLS without decrypting encrypted messages server-side.
 - K-Feed, Moments and K-MAP have real database/RLS-backed application surfaces on the active branch; media storage/upload remains an explicit release gate.
 - Push subscription schema/RLS exists; native push token registration/delivery is not yet release-complete.
-- Blocked-user lifecycle is now exposed through authenticated, rate-limited realtime operations: owner-scoped `contacts:blocked` listing and explicit `contact:unblock`. Unblocking only removes the caller-owned block row and never recreates contacts automatically. Mobile management UI remains to be completed before this is counted as finished moderation UX.
+- Blocked-user lifecycle is exposed through authenticated, rate-limited realtime operations: owner-scoped `contacts:blocked` listing and explicit `contact:unblock`. Unblocking only removes the caller-owned block row and never recreates contacts automatically. Mobile management UI remains to be completed before this is counted as finished moderation UX.
+- Server regression coverage now explicitly verifies that blocked-user listing is caller-owner scoped and that unblock deletes only the authenticated caller's `(blocker_id, blocked_id)` edge, fails closed when no edge exists, and rejects self-unblock without touching the database.
 
 ## Security invariants
 
@@ -55,9 +56,9 @@ Repository migrations currently run from `0001_v1_core.sql` through `0009_push_s
 
 ## Validation status
 
-- PR head `7b3951bab3e99934328b422aaade5667613418ff`: CI run #267 succeeded.
-- Realtime blocked-user management commit `54aec173dae7b085defba9f49a4d554d10544f6c` adds authenticated/rate-limited blocked listing and unblock handlers. CI for the latest documentation head must be green before this PR leaves draft.
-- Neon project `late-flower-65059830` was re-verified on 2026-09-05 as the dedicated K-ssenger project; live `kssenger` contains the expected V1 schema families including Neon Auth, contacts/safety, chat, groups, K-Feed, Moments, K-MAP and push subscriptions.
+- PR head `82796a1a2087bf5edfe527c0dbd1d64ad578ba08`: CI run #269 completed successfully.
+- Commit `d41fdb3ee09e8c5d0f306fb261485532679f6bf8` adds explicit server regression tests for caller-scoped blocked-user listing and unblock ownership semantics; CI for the new documentation head must remain green before this PR leaves draft.
+- Neon project `late-flower-65059830` was re-verified on 2026-09-05 as the dedicated K-ssenger project (`aws-eu-central-1`, PostgreSQL 17, free_v3). No other project was touched.
 
 ## Critical V1 release gates
 
