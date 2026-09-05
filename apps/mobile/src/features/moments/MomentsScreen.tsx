@@ -13,6 +13,22 @@ type Moment = MomentRow & { author: string; isMine: boolean };
 const IMAGE_MIMES = new Set<SupportedMediaMime>(['image/jpeg','image/png','image/webp']);
 const VIDEO_MIMES = new Set<SupportedMediaMime>(['video/mp4','video/quicktime']);
 
+function inferMomentMime(asset: ImagePicker.ImagePickerAsset, kind: 'photo' | 'video'): SupportedMediaMime | null {
+  const normalized = asset.mimeType?.toLowerCase();
+  const allowed = kind === 'photo' ? IMAGE_MIMES : VIDEO_MIMES;
+  if (normalized && allowed.has(normalized as SupportedMediaMime)) return normalized as SupportedMediaMime;
+  const uri = asset.uri.toLowerCase();
+  if (kind === 'photo') {
+    if (uri.endsWith('.jpg') || uri.endsWith('.jpeg')) return 'image/jpeg';
+    if (uri.endsWith('.png')) return 'image/png';
+    if (uri.endsWith('.webp')) return 'image/webp';
+  } else {
+    if (uri.endsWith('.mp4')) return 'video/mp4';
+    if (uri.endsWith('.mov')) return 'video/quicktime';
+  }
+  return null;
+}
+
 export function MomentsScreen() {
   const [moments, setMoments] = useState<Moment[]>([]);
   const [caption, setCaption] = useState('');
@@ -76,10 +92,10 @@ export function MomentsScreen() {
       const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kind === 'photo' ? ['images'] : ['videos'], quality: 1, allowsEditing: false });
       if (picked.canceled) return;
       const asset = picked.assets[0];
-      const mime = asset.mimeType as SupportedMediaMime | undefined;
-      const allowed = kind === 'photo' ? IMAGE_MIMES : VIDEO_MIMES;
-      if (!asset.fileSize || !mime || !allowed.has(mime)) throw new Error('UNSUPPORTED_MOMENT_MEDIA');
-      const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType: mime, byteSize: asset.fileSize, purpose: 'moment' });
+      if (!asset?.uri) throw new Error('UNSUPPORTED_MOMENT_MEDIA');
+      const mime = inferMomentMime(asset, kind);
+      if (!mime) throw new Error('UNSUPPORTED_MOMENT_MEDIA');
+      const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType: mime, byteSize: asset.fileSize ?? undefined, purpose: 'moment' });
       const me = userId || await getAuthenticatedUserId();
       await insertMoment(me, kind, mediaId);
       setCaption('');
