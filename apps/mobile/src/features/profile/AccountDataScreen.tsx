@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
-import { getNeonAuth } from '../../lib/neonAuth';
+import { changeNeonPassword } from '../../lib/neonAuth';
 import type { MyProfile } from './useMyProfile';
 
 type ExportRow = Record<string, unknown>;
@@ -133,7 +133,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
 
     setPasswordBusy(true);
     try {
-      const result = await getNeonAuth().changePassword({
+      const result = await changeNeonPassword({
         currentPassword,
         newPassword,
         revokeOtherSessions: true,
