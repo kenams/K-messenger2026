@@ -25,7 +25,8 @@
           "photosPermission": "K-ssenger accède uniquement aux photos et vidéos que vous choisissez de partager.",
           "cameraPermission": "K-ssenger utilise la caméra uniquement lorsque vous choisissez de créer un média."
         }
-      ]
+      ],
+      "./plugins/withKssengerLibsignal.js"
     ],
     "ios": {
       "supportsTablet": true,
