@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, SafeAreaView, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
+import { getNeonAuth } from '../../lib/neonAuth';
 import type { MyProfile } from './useMyProfile';
 
 type ExportRow = Record<string, unknown>;
@@ -27,7 +28,12 @@ async function readRowsForIds(table: string, column: string, ids: string[], sele
 
 export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onBack: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [notice, setNotice] = useState('');
+  const [passwordNotice, setPasswordNotice] = useState('');
 
   const exportData = async () => {
     setBusy(true);
@@ -105,29 +111,79 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
     }
   };
 
+  const changePassword = async () => {
+    if (passwordBusy) return;
+    setPasswordNotice('');
+    if (currentPassword.length < 8) {
+      setPasswordNotice('Entre ton mot de passe actuel.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordNotice('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordNotice('La confirmation du nouveau mot de passe ne correspond pas.');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPasswordNotice('Choisis un nouveau mot de passe différent de l’ancien.');
+      return;
+    }
+
+    setPasswordBusy(true);
+    try {
+      const result = await getNeonAuth().changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: true,
+      });
+      if (result.error) throw result.error;
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordNotice('Mot de passe modifié. Les autres sessions ont été révoquées.');
+    } catch {
+      setPasswordNotice('Modification refusée. Vérifie ton mot de passe actuel et réessaie.');
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack}><Text style={styles.back}>‹</Text></TouchableOpacity>
-        <View><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.title}>Mes données</Text></View>
+        <View><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.title}>Compte & données</Text></View>
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>🔑 Changer mon mot de passe</Text>
+          <Text style={styles.copy}>Le changement est vérifié par Neon Auth. Les autres sessions sont révoquées après succès.</Text>
+          <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={currentPassword} onChangeText={setCurrentPassword} placeholder="Mot de passe actuel" style={styles.input} />
+          <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={newPassword} onChangeText={setNewPassword} placeholder="Nouveau mot de passe" style={styles.input} />
+          <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirmer le nouveau mot de passe" style={styles.input} onSubmitEditing={() => void changePassword()} />
+          <TouchableOpacity style={[styles.primary, passwordBusy && styles.buttonDisabled]} disabled={passwordBusy} onPress={() => void changePassword()}>
+            {passwordBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Modifier mon mot de passe</Text>}
+          </TouchableOpacity>
+          {!!passwordNotice && <Text style={styles.notice}>{passwordNotice}</Text>}
+        </View>
+
+        <View style={[styles.card, styles.sectionGap]}>
           <Text style={styles.cardTitle}>📦 Exporter mon compte</Text>
           <Text style={styles.copy}>Génère un export JSON de ton profil, paramètres, relations, conversations autorisées, appareils, K-Feed, Moments et partages K-MAP. Les messages privés restent chiffrés et les jetons push ne sont jamais exportés.</Text>
-          <TouchableOpacity style={styles.primary} disabled={busy} onPress={() => void exportData()}>
+          <TouchableOpacity style={[styles.primary, busy && styles.buttonDisabled]} disabled={busy} onPress={() => void exportData()}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Créer mon export</Text>}
           </TouchableOpacity>
+          {!!notice && <Text style={styles.notice}>{notice}</Text>}
         </View>
 
         <View style={styles.warningCard}>
           <Text style={styles.cardTitle}>🗑️ Supprimer mon compte</Text>
-          <Text style={styles.copy}>La suppression totale n’est pas proposée tant que le self-delete Neon Auth avec vérification de mot de passe/session récente n’est pas activé. K-ssenger ne supprimera jamais seulement le profil en laissant l’identité Auth active.</Text>
-          <View style={styles.disabled}><Text style={styles.disabledText}>Suppression sécurisée en attente de configuration Auth</Text></View>
+          <Text style={styles.copy}>Le Neon Auth géré de K-ssenger ne fournit pas encore l’endpoint self-delete nécessaire. K-ssenger ne simulera jamais une suppression en effaçant seulement le profil tout en laissant l’identité Auth active.</Text>
+          <View style={styles.disabled}><Text style={styles.disabledText}>Suppression sécurisée indisponible chez le fournisseur Auth actuel</Text></View>
         </View>
-
-        {!!notice && <Text style={styles.notice}>{notice}</Text>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -135,5 +191,5 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#edf7fc' }, header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, back: { fontSize: 39, color: '#2189c5' }, brand: { color: '#3784b5', fontSize: 9, letterSpacing: 2, fontWeight: '900' }, title: { color: '#173448', fontSize: 18, fontWeight: '900' },
-  content: { padding: 18, paddingBottom: 40 }, card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 18, padding: 16 }, warningCard: { marginTop: 14, backgroundColor: '#fffaf0', borderWidth: 1, borderColor: '#ead9ad', borderRadius: 18, padding: 16 }, cardTitle: { color: '#173448', fontSize: 16, fontWeight: '900' }, copy: { color: '#6e8796', lineHeight: 19, marginTop: 8 }, primary: { minHeight: 48, marginTop: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 15 }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { marginTop: 14, padding: 12, borderRadius: 14, backgroundColor: '#ede9df', alignItems: 'center' }, disabledText: { color: '#8b8067', fontSize: 11, fontWeight: '800', textAlign: 'center' }, notice: { marginTop: 16, color: '#326e94', fontWeight: '700' },
+  content: { padding: 18, paddingBottom: 40 }, card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 18, padding: 16 }, sectionGap: { marginTop: 14 }, warningCard: { marginTop: 14, backgroundColor: '#fffaf0', borderWidth: 1, borderColor: '#ead9ad', borderRadius: 18, padding: 16 }, cardTitle: { color: '#173448', fontSize: 16, fontWeight: '900' }, copy: { color: '#6e8796', lineHeight: 19, marginTop: 8 }, input: { minHeight: 48, marginTop: 10, paddingHorizontal: 13, backgroundColor: '#f7fafc', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 13 }, primary: { minHeight: 48, marginTop: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 15 }, buttonDisabled: { opacity: 0.55 }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { marginTop: 14, padding: 12, borderRadius: 14, backgroundColor: '#ede9df', alignItems: 'center' }, disabledText: { color: '#8b8067', fontSize: 11, fontWeight: '800', textAlign: 'center' }, notice: { marginTop: 12, color: '#326e94', fontWeight: '700' },
 });
