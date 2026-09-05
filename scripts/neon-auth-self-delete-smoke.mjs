@@ -18,6 +18,7 @@ const signup = await auth.auth.signUp.email({
   email,
   password,
   name: 'K-ssenger Self Delete Probe',
+  callbackURL: AUTH_URL,
 });
 if (signup.error) throw new Error(`SELF_DELETE_SIGNUP_FAILED:${signup.error.message}`);
 
@@ -29,7 +30,7 @@ console.log(`SELF_DELETE_PROBE_USER=${userId}`);
 const deleted = await auth.auth.deleteUser({ password });
 if (deleted.error) throw new Error(`SELF_DELETE_FAILED:${deleted.error.message}`);
 
-const signinAfterDelete = await auth.auth.signIn.email({ email, password });
+const signinAfterDelete = await auth.auth.signIn.email({ email, password, callbackURL: AUTH_URL });
 if (!signinAfterDelete.error) throw new Error('SELF_DELETE_ACCOUNT_STILL_AUTHENTICATES');
 
 console.log('NEON_AUTH_SELF_DELETE_PASS=true');
