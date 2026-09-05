@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import { canUnlockPrivateComposer, getKssengerE2eeStatus } from '../../lib/e2ee';
+import { loadLocalMessage, storeLocalMessage } from '../../lib/localMessageStore';
 import {
   decryptSignalEnvelope,
   encryptForUsers,
@@ -56,25 +57,19 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, memberIds, 
   useEffect(() => {
     if (!ready) return;
     let active = true;
-    const pending = messages.filter((message) => (
-      message.senderUserId !== currentUserId
-      && message.algorithm === 'signal-libsignal-multidevice-v1'
-      && !!message.ciphertext
-      && !!message.senderDeviceId
-      && plain[message.id] === undefined
-      && !failed[message.id]
-    ));
+    const pending = messages.filter((message) => plain[message.id] === undefined && !failed[message.id]);
     void Promise.all(pending.map(async (message) => {
       try {
-        const body = await decryptSignalEnvelope(
-          currentUserId,
-          message.senderUserId,
-          message.senderDeviceId!,
-          message.ciphertext!,
-        );
-        if (active) setPlain((current) => ({ ...current, [message.id]: body }));
+        const body = message.senderUserId === currentUserId
+          ? await loadLocalMessage(currentUserId, message.id)
+          : (
+            message.algorithm === 'signal-libsignal-multidevice-v1' && message.ciphertext && message.senderDeviceId
+              ? await decryptSignalEnvelope(currentUserId, message.senderUserId, message.senderDeviceId, message.ciphertext)
+              : null
+          );
+        if (active && body !== null) setPlain((current) => ({ ...current, [message.id]: body }));
       } catch {
-        if (active) setFailed((current) => ({ ...current, [message.id]: true }));
+        if (active && message.senderUserId !== currentUserId) setFailed((current) => ({ ...current, [message.id]: true }));
       }
     }));
     return () => { active = false; };
@@ -99,6 +94,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, memberIds, 
         createdAt,
       });
       if (!response.ok || !response.id) throw new Error(response.error ?? 'GROUP_SEND_FAILED');
+      await storeLocalMessage(currentUserId, response.id, body).catch(() => undefined);
       setPlain((current) => ({ ...current, [response.id!]: body }));
       setComposer('');
       setNotice('🔐 Message de groupe chiffré et envoyé.');
