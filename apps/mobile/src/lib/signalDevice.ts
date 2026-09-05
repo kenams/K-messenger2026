@@ -16,13 +16,7 @@ type NativeSignalBridge = {
   getInstallationId: () => Promise<string>;
   provisionDevice: (deviceUuid: string, count: number) => Promise<ProvisionedBundle>;
   hasSession: (deviceUuid: string, remoteUserId: string, remoteSignalDeviceId: number) => Promise<boolean>;
-  processRemoteBundle: (
-    deviceUuid: string, localUserId: string, localSignalDeviceId: number,
-    remoteUserId: string, remoteSignalDeviceId: number, registrationId: number,
-    identityKey: string, signedPreKeyId: number, signedPreKeyPublic: string,
-    signedPreKeySignature: string, oneTimePreKeyId: number | null, oneTimePreKeyPublic: string | null,
-    pqPreKeyId: number, pqPreKeyPublic: string, pqPreKeySignature: string,
-  ) => Promise<boolean>;
+  processRemoteBundle: (payloadJson: string) => Promise<boolean>;
   encrypt: (
     deviceUuid: string, localUserId: string, localSignalDeviceId: number,
     remoteUserId: string, remoteSignalDeviceId: number, plaintext: string,
@@ -127,12 +121,23 @@ async function ensureRemoteSession(local: LocalSignalDevice, remote: RemoteDevic
   if (claim.error) throw claim.error;
   const bundle = ((((claim.data ?? []) as unknown) as ClaimedBundle[])[0]);
   if (!bundle || bundle.device_id !== remote.id || bundle.user_id !== remote.user_id) throw new Error('REMOTE_PREKEY_BUNDLE_INVALID');
-  await native.processRemoteBundle(
-    local.deviceId, local.userId, local.signalDeviceId, remote.user_id, remoteSignalDeviceId,
-    bundle.registration_id, bundle.identity_key, bundle.signed_prekey_id, bundle.signed_prekey_public,
-    bundle.signed_prekey_signature, bundle.one_time_prekey_id, bundle.one_time_prekey_public,
-    bundle.pq_prekey_id, bundle.pq_prekey_public, bundle.pq_prekey_signature,
-  );
+  await native.processRemoteBundle(JSON.stringify({
+    deviceUuid: local.deviceId,
+    localUserId: local.userId,
+    localSignalDeviceId: local.signalDeviceId,
+    remoteUserId: remote.user_id,
+    remoteSignalDeviceId,
+    registrationId: bundle.registration_id,
+    identityKey: bundle.identity_key,
+    signedPreKeyId: bundle.signed_prekey_id,
+    signedPreKeyPublic: bundle.signed_prekey_public,
+    signedPreKeySignature: bundle.signed_prekey_signature,
+    oneTimePreKeyId: bundle.one_time_prekey_id,
+    oneTimePreKeyPublic: bundle.one_time_prekey_public,
+    pqPreKeyId: bundle.pq_prekey_id,
+    pqPreKeyPublic: bundle.pq_prekey_public,
+    pqPreKeySignature: bundle.pq_prekey_signature,
+  }));
 }
 
 export async function encryptForUsers(userId: string, recipientUserIds: string[], plaintext: string) {
