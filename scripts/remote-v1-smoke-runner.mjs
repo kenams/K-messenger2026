@@ -5,6 +5,8 @@ const authOrigin = new URL(authUrl).origin;
 const nativeFetch = globalThis.fetch.bind(globalThis);
 const cookieJar = new Map();
 
+globalThis.__resetKssengerSmokeCookies = () => cookieJar.clear();
+
 function absorbSetCookies(response) {
   const values = typeof response.headers.getSetCookie === 'function'
     ? response.headers.getSetCookie()
