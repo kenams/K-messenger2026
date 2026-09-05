@@ -101,11 +101,11 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
       const asset = picked.assets[0];
       if (!asset?.uri) throw new Error('UNSUPPORTED_AVATAR');
       const mimeType = inferAvatarMime(asset);
-      if (!asset.fileSize || !mimeType || asset.fileSize > AVATAR_MAX_BYTES) throw new Error('UNSUPPORTED_AVATAR');
+      if (!mimeType || (asset.fileSize !== undefined && asset.fileSize > AVATAR_MAX_BYTES)) throw new Error('UNSUPPORTED_AVATAR');
       const { mediaId } = await uploadLocalMedia({
         uri: asset.uri,
         mimeType,
-        byteSize: asset.fileSize,
+        byteSize: asset.fileSize ?? undefined,
         purpose: 'avatar',
       });
       setAvatarUrl('');
