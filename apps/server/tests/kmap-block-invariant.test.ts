@@ -9,12 +9,20 @@ const migration = readFileSync(
 describe('K-MAP block invariant', () => {
   it('revokes active location shares in both directions after a block', () => {
     expect(migration).toContain('after insert on public.blocks');
-    expect(migration).toContain('user_id = new.blocker_id and visible_to = new.blocked_id');
-    expect(migration).toContain('user_id = new.blocked_id and visible_to = new.blocker_id');
+    expect(migration).toContain('owner_id = new.blocker_id and recipient_user_id = new.blocked_id');
+    expect(migration).toContain('owner_id = new.blocked_id and recipient_user_id = new.blocker_id');
+    expect(migration).toContain('set revoked_at = coalesce(revoked_at, now())');
+  });
+
+  it('matches the live schema and never hard-deletes historical K-MAP shares', () => {
+    expect(migration).not.toContain('user_id = new.blocker_id');
+    expect(migration).not.toContain('visible_to = new.blocked_id');
+    expect(migration).not.toContain('delete from public.location_shares');
   });
 
   it('keeps the trigger helper non-invokable by public callers', () => {
     expect(migration).toContain('security definer');
-    expect(migration).toContain('revoke all on function public.revoke_kmap_shares_on_block() from public');
+    expect(migration).toContain('set search_path = pg_catalog, public');
+    expect(migration).toContain('revoke all on function public.revoke_location_shares_on_block() from public');
   });
 });
