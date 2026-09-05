@@ -16,6 +16,10 @@ on:
       - 'apps/mobile/src/lib/signalDevice.ts'
       - '.github/workflows/android-e2ee-runtime.yml'
 
+concurrency:
+  group: android-e2ee-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
   android-runtime-e2ee:
     runs-on: ubuntu-latest
@@ -122,7 +126,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace --console=plain 2>&1 | tee "$RUNNER_TEMP/kssenger-gradle-e2ee.log"
+          ./gradlew :kssenger-signal:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain 2>&1 | tee "$RUNNER_TEMP/kssenger-gradle-e2ee.log"
       - name: Upload instrumentation reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
