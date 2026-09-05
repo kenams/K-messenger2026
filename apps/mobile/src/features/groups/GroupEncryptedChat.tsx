@@ -207,13 +207,14 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, memberIds, 
       const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.9, videoMaxDuration: 120 });
       if (picked.canceled) return;
       const asset = picked.assets[0];
-      const mimeType = asset ? inferGroupMime(asset) : null;
-      if (!asset?.uri || !asset.fileSize || !mimeType || asset.fileSize > GROUP_MEDIA_MAX_BYTES) throw new Error('GROUP_MEDIA_UNSUPPORTED');
+      if (!asset?.uri) throw new Error('GROUP_MEDIA_UNSUPPORTED');
+      const mimeType = inferGroupMime(asset);
+      if (!mimeType || (asset.fileSize !== undefined && asset.fileSize > GROUP_MEDIA_MAX_BYTES)) throw new Error('GROUP_MEDIA_UNSUPPORTED');
       setNotice('Upload privé du média du groupe…');
       const { mediaId } = await uploadLocalMedia({
         uri: asset.uri,
         mimeType,
-        byteSize: asset.fileSize,
+        byteSize: asset.fileSize ?? undefined,
         purpose: 'chat',
         conversationId: groupId,
       });
