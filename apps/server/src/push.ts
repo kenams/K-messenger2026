@@ -100,23 +100,30 @@ export async function sendConversationPush(
   senderId: string,
   messageId: string,
 ) {
-  const { rows } = await query<{ user_id: string }>(
-    `select user_id
-       from public.conversation_members
-      where conversation_id = $1
-        and user_id <> $2`,
-    [conversationId, senderId],
-  );
+  try {
+    const { rows } = await query<{ user_id: string }>(
+      `select user_id
+         from public.conversation_members
+        where conversation_id = $1
+          and user_id <> $2`,
+      [conversationId, senderId],
+    );
 
-  await sendPushToUsers(rows.map((row) => row.user_id), {
-    title: 'K-ssenger',
-    body: '💬 Nouveau message',
-    data: {
-      type: 'message',
+    await sendPushToUsers(rows.map((row) => row.user_id), {
+      title: 'K-ssenger',
+      body: '💬 Nouveau message',
+      data: {
+        type: 'message',
+        conversationId,
+        messageId,
+      },
+    });
+  } catch (error) {
+    logger.warn('conversation_push_recipient_lookup_failed', {
       conversationId,
-      messageId,
-    },
-  });
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+  }
 }
 
 export async function sendKPulsePush(recipientId: string, senderId: string) {
