@@ -32,6 +32,7 @@ async function blocked(fn) {
 async function main() {
   await client.connect();
   await client.query(await fs.readFile('neon/migrations/0011_signal_prekeys.sql', 'utf8'));
+  await client.query(await fs.readFile('neon/migrations/0012_signal_prekey_claim_fix.sql', 'utf8'));
 
   await client.query(
     `insert into public.devices(id,user_id,name) values
