@@ -18,6 +18,8 @@ class KssengerSignalModule : Module() {
         Class.forName("org.signal.libsignal.protocol.IdentityKeyPair")
         Class.forName("org.signal.libsignal.protocol.state.SessionStore")
         Class.forName("org.signal.libsignal.protocol.state.IdentityKeyStore")
+        Class.forName("org.signal.libsignal.protocol.state.PreKeyStore")
+        Class.forName("org.signal.libsignal.protocol.state.SignedPreKeyStore")
         Class.forName("org.signal.libsignal.protocol.state.KyberPreKeyStore")
         true
       }.getOrDefault(false)
@@ -30,14 +32,17 @@ class KssengerSignalModule : Module() {
       val sessionStoreReady = libsignalLoaded && nativeStoreReady && nativeStore != null && runCatching {
         verifyOfficialSessionStore(SignalSessionStore(nativeStore))
       }.getOrDefault(false)
+      val deviceKeyStoreReady = libsignalLoaded && nativeStoreReady && nativeStore != null && runCatching {
+        verifyDeviceStores(nativeStore)
+      }.getOrDefault(false)
 
       mapOf(
         "libsignalLoaded" to libsignalLoaded,
         "secureStorageReady" to nativeStoreReady,
-        "deviceKeyStoreReady" to nativeStoreReady,
+        "deviceKeyStoreReady" to deviceKeyStoreReady,
         "sessionStoreReady" to sessionStoreReady,
-        // This remains false until identity/prekey/PQ stores are wired and a
-        // real Alice/Bob libsignal session performs encrypt/decrypt natively.
+        // Deliberately remains false until an actual Alice/Bob libsignal
+        // session encrypts/decrypts and that flow is proven on real devices.
         "selfTestPassed" to false,
       )
     }
@@ -68,5 +73,23 @@ class KssengerSignalModule : Module() {
       !store.getSubDeviceSessions(SESSION_PROBE_NAME).contains(SESSION_PROBE_DEVICE)
 
     return contains && indexed && serialized.contentEquals(loaded) && cleaned
+  }
+
+  private fun verifyDeviceStores(store: KeystoreBlobStore): Boolean {
+    val identity = SignalIdentityKeyStore(store)
+    val firstPair = identity.identityKeyPair.serialize()
+    val firstRegistration = identity.localRegistrationId
+    val secondPair = SignalIdentityKeyStore(store).identityKeyPair.serialize()
+    val secondRegistration = SignalIdentityKeyStore(store).localRegistrationId
+
+    // Construction itself proves the adapters satisfy the exact libsignal
+    // interfaces available in the pinned native dependency at compile time.
+    SignalPreKeyStore(store)
+    SignalSignedPreKeyStore(store)
+    SignalKyberPreKeyStore(store)
+
+    return firstPair.contentEquals(secondPair) &&
+      firstRegistration == secondRegistration &&
+      firstRegistration in 1..16380
   }
 }
