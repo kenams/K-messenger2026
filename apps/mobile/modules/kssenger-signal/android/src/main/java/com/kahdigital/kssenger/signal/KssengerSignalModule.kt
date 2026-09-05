@@ -3,6 +3,7 @@ package com.kahdigital.kssenger.signal
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.util.UUID
+import org.json.JSONObject
 import org.signal.libsignal.protocol.IdentityKeyPair
 import org.signal.libsignal.protocol.SessionBuilder
 import org.signal.libsignal.protocol.SessionCipher
@@ -82,18 +83,25 @@ class KssengerSignalModule : Module() {
       protocol(deviceUuid).provision(oneTimeCount)
     }
 
-    AsyncFunction("processRemoteBundle") {
-        deviceUuid: String, localUserId: String, localSignalDeviceId: Int,
-        remoteUserId: String, remoteSignalDeviceId: Int, registrationId: Int,
-        identityKey: String, signedPreKeyId: Int, signedPreKeyPublic: String,
-        signedPreKeySignature: String, oneTimePreKeyId: Int?, oneTimePreKeyPublic: String?,
-        pqPreKeyId: Int, pqPreKeyPublic: String, pqPreKeySignature: String,
-      ->
-      protocol(deviceUuid).processRemoteBundle(
-        localUserId, localSignalDeviceId, remoteUserId, remoteSignalDeviceId,
-        registrationId, identityKey, signedPreKeyId, signedPreKeyPublic,
-        signedPreKeySignature, oneTimePreKeyId, oneTimePreKeyPublic,
-        pqPreKeyId, pqPreKeyPublic, pqPreKeySignature,
+    AsyncFunction("processRemoteBundle") { payloadJson: String ->
+      val payload = JSONObject(payloadJson)
+      val oneTimePreKeyId = if (payload.isNull("oneTimePreKeyId")) null else payload.getInt("oneTimePreKeyId")
+      val oneTimePreKeyPublic = if (payload.isNull("oneTimePreKeyPublic")) null else payload.getString("oneTimePreKeyPublic")
+      protocol(payload.getString("deviceUuid")).processRemoteBundle(
+        payload.getString("localUserId"),
+        payload.getInt("localSignalDeviceId"),
+        payload.getString("remoteUserId"),
+        payload.getInt("remoteSignalDeviceId"),
+        payload.getInt("registrationId"),
+        payload.getString("identityKey"),
+        payload.getInt("signedPreKeyId"),
+        payload.getString("signedPreKeyPublic"),
+        payload.getString("signedPreKeySignature"),
+        oneTimePreKeyId,
+        oneTimePreKeyPublic,
+        payload.getInt("pqPreKeyId"),
+        payload.getString("pqPreKeyPublic"),
+        payload.getString("pqPreKeySignature"),
       )
       true
     }
