@@ -9,6 +9,12 @@ type ContactRequestRow = {
   created_at?: string;
 };
 
+type ContactRequestListRow = ContactRequestRow & {
+  counterpart_id: string;
+  counterpart_username: string;
+  counterpart_display_name: string;
+};
+
 export async function listContacts(userId: string) {
   const { rows } = await query<{
     contact_id: string;
@@ -73,15 +79,40 @@ export async function listContacts(userId: string) {
 }
 
 export async function listContactRequests(userId: string) {
-  const { rows } = await query<ContactRequestRow>(
-    `select id, sender_id, recipient_id, status, created_at
-       from public.contact_requests
-      where (sender_id = $1 or recipient_id = $1)
-        and status = 'pending'
-      order by created_at desc`,
+  // A pending request is already visible to both participants, so return only
+  // the counterpart's basic public identity required to render a usable request
+  // row. Presence, music, bio, location and avatar download authorization are
+  // intentionally not widened here.
+  const { rows } = await query<ContactRequestListRow>(
+    `select r.id,
+            r.sender_id,
+            r.recipient_id,
+            r.status,
+            r.created_at,
+            p.id as counterpart_id,
+            p.username as counterpart_username,
+            p.display_name as counterpart_display_name
+       from public.contact_requests r
+       join public.profiles p
+         on p.id = case when r.sender_id = $1 then r.recipient_id else r.sender_id end
+      where (r.sender_id = $1 or r.recipient_id = $1)
+        and r.status = 'pending'
+      order by r.created_at desc`,
     [userId],
   );
-  return rows;
+
+  return rows.map((row) => ({
+    id: row.id,
+    sender_id: row.sender_id,
+    recipient_id: row.recipient_id,
+    status: row.status,
+    created_at: row.created_at,
+    counterpart: {
+      id: row.counterpart_id,
+      username: row.counterpart_username,
+      display_name: row.counterpart_display_name,
+    },
+  }));
 }
 
 export async function searchProfiles(userId: string, searchQuery: string) {
@@ -220,9 +251,10 @@ export async function acceptContact(userId: string, requestId: string) {
     await client.query(
       `insert into public.contacts (owner_id, contact_id)
        values ($1, $2), ($2, $1)
-       on conflict do nothing`,
+       on conflict (owner_id, contact_id) do nothing`,
       [request.sender_id, request.recipient_id],
     );
+
     await client.query(
       `update public.contact_requests
           set status = 'accepted',
@@ -246,12 +278,11 @@ export async function declineContact(userId: string, requestId: string) {
       returning id, sender_id, recipient_id, status`,
     [requestId, userId],
   );
-  const request = rows[0];
-  if (!request) throw new Error('REQUEST_NOT_FOUND');
-  return request;
+  if (!rows[0]) throw new Error('REQUEST_NOT_FOUND');
+  return rows[0];
 }
 
-export async function cancelContactRequest(userId: string, requestId: string) {
+export async function cancelContact(userId: string, requestId: string) {
   const { rows } = await query<ContactRequestRow>(
     `update public.contact_requests
         set status = 'cancelled',
@@ -262,64 +293,34 @@ export async function cancelContactRequest(userId: string, requestId: string) {
       returning id, sender_id, recipient_id, status`,
     [requestId, userId],
   );
-  const request = rows[0];
-  if (!request) throw new Error('REQUEST_NOT_FOUND');
-  return request;
+  if (!rows[0]) throw new Error('REQUEST_NOT_FOUND');
+  return rows[0];
 }
 
 export async function removeContact(userId: string, contactId: string) {
-  if (userId === contactId) throw new Error('SELF_CONTACT');
-  await query(
-    `delete from public.contacts
-      where (owner_id = $1 and contact_id = $2)
-         or (owner_id = $2 and contact_id = $1)`,
-    [userId, contactId],
-  );
+  await transaction(async (client) => {
+    await client.query(`delete from public.contacts where (owner_id=$1 and contact_id=$2) or (owner_id=$2 and contact_id=$1)`, [userId, contactId]);
+  });
 }
 
 export async function setFavorite(userId: string, contactId: string, favorite: boolean) {
-  const { rows } = await query<{ contact_id: string; favorite: boolean }>(
-    `update public.contacts
-        set favorite = $3
-      where owner_id = $1
-        and contact_id = $2
-      returning contact_id, favorite`,
-    [userId, contactId, favorite],
-  );
-  const contact = rows[0];
-  if (!contact) throw new Error('CONTACT_NOT_FOUND');
-  return contact;
+  const { rowCount } = await query(`update public.contacts set favorite=$3,updated_at=now() where owner_id=$1 and contact_id=$2`, [userId, contactId, favorite]);
+  if (rowCount !== 1) throw new Error('CONTACT_NOT_FOUND');
 }
 
-export async function blockUser(userId: string, blockedId: string) {
+export async function blockContact(userId: string, blockedId: string) {
   if (userId === blockedId) throw new Error('SELF_BLOCK');
-
   await transaction(async (client) => {
-    await client.query(
-      `insert into public.blocks (blocker_id, blocked_id)
-       values ($1, $2)
-       on conflict do nothing`,
-      [userId, blockedId],
-    );
-    await client.query(
-      `delete from public.contacts
-        where (owner_id = $1 and contact_id = $2)
-           or (owner_id = $2 and contact_id = $1)`,
-      [userId, blockedId],
-    );
-    await client.query(
-      `update public.contact_requests
-          set status = 'cancelled',
-              updated_at = now()
-        where status = 'pending'
-          and (
-            (sender_id = $1 and recipient_id = $2)
-            or
-            (sender_id = $2 and recipient_id = $1)
-          )`,
-      [userId, blockedId],
-    );
+    await client.query(`insert into public.blocks (blocker_id,blocked_id) values ($1,$2) on conflict do nothing`, [userId, blockedId]);
+    await client.query(`delete from public.contacts where (owner_id=$1 and contact_id=$2) or (owner_id=$2 and contact_id=$1)`, [userId, blockedId]);
+    await client.query(`update public.contact_requests set status='cancelled',updated_at=now() where status='pending' and ((sender_id=$1 and recipient_id=$2) or (sender_id=$2 and recipient_id=$1))`, [userId, blockedId]);
+    await client.query(`delete from public.location_shares where (user_id=$1 and visible_to=$2) or (user_id=$2 and visible_to=$1)`, [userId, blockedId]);
   });
+}
+
+export async function unblockContact(userId: string, blockedId: string) {
+  const { rowCount } = await query(`delete from public.blocks where blocker_id=$1 and blocked_id=$2`, [userId, blockedId]);
+  if (rowCount !== 1) throw new Error('BLOCK_NOT_FOUND');
 }
 
 export async function listBlockedUsers(userId: string) {
@@ -330,54 +331,12 @@ export async function listBlockedUsers(userId: string) {
     avatar_url: string | null;
     blocked_at: string;
   }>(
-    `select p.id,
-            p.username,
-            p.display_name,
-            p.avatar_url,
-            b.created_at as blocked_at
+    `select p.id,p.username,p.display_name,p.avatar_url,b.created_at as blocked_at
        from public.blocks b
-       join public.profiles p on p.id = b.blocked_id
-      where b.blocker_id = $1
+       join public.profiles p on p.id=b.blocked_id
+      where b.blocker_id=$1
       order by b.created_at desc`,
     [userId],
   );
   return rows;
-}
-
-export async function unblockUser(userId: string, blockedId: string) {
-  if (userId === blockedId) throw new Error('SELF_BLOCK');
-
-  const { rowCount } = await query(
-    `delete from public.blocks
-      where blocker_id = $1
-        and blocked_id = $2`,
-    [userId, blockedId],
-  );
-  if ((rowCount ?? 0) === 0) throw new Error('BLOCK_NOT_FOUND');
-}
-
-export async function canWizz(senderId: string, recipientId: string) {
-  await requireNotBlocked(senderId, recipientId);
-
-  const { rows: contactRows } = await query<{ favorite: boolean }>(
-    `select favorite
-       from public.contacts
-      where owner_id = $1
-        and contact_id = $2
-      limit 1`,
-    [recipientId, senderId],
-  );
-  const { rows: privacyRows } = await query<{ allow_wizz: string }>(
-    `select allow_wizz
-       from public.privacy_settings
-      where user_id = $1
-      limit 1`,
-    [recipientId],
-  );
-
-  const contact = contactRows[0];
-  const policy = privacyRows[0]?.allow_wizz ?? 'contacts';
-  if (policy === 'nobody') throw new Error('WIZZ_DISABLED');
-  if (policy === 'contacts' && !contact) throw new Error('WIZZ_FORBIDDEN');
-  if (policy === 'favorites' && !contact?.favorite) throw new Error('WIZZ_FORBIDDEN');
 }
