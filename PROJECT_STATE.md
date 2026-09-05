@@ -2,76 +2,78 @@
 
 Last verified: 2026-09-05
 Active delivery branch: `fix/feed-kmap-contact-security`
-Active PR: #2 (`Security hardening + messaging reliability`) — intentionally kept as draft while release/security gates remain open.
+Active PR: #2 (`Security hardening + messaging reliability`) — intentionally kept as draft while critical native/security gates remain open.
 
 ## Backend isolation
 
 - Dedicated Neon project only: `late-flower-65059830` (`K-ssenger`).
 - Region: `aws-eu-central-1`.
 - Primary database: `kssenger`.
-- Default Neon branch: `main` (`br-falling-sea-b1k36u32`).
-- Do not connect this repository to any Supabase project or any non-K-ssenger database.
-- Public mobile configuration is pinned to the dedicated Neon Auth/Data API endpoints and the K-ssenger realtime service. Secrets must remain in provider/CI secret stores.
+- Default Neon branch: `main` (`br-falling-sea-b1k36u32`), READY.
+- Managed Neon Auth / Better Auth and the Neon Data API are the only identity/data backend for the active V1.
+- Retired `supabase/` project configuration and migrations have been removed from the active branch.
+- The insecure legacy plaintext `apps/web` beta path and its beta smoke workflow have also been removed from the active V1 branch.
+- No non-K-ssenger database/project was touched during this run.
 
-## Verified Neon schema on main
+## Live Neon V1 surface
 
-The live `kssenger` database currently exposes the K-ssenger V1 tables required for the implemented backend surface, including:
+The dedicated live database contains the V1 tables used by the active implementation, including:
 
-- identity/profile/privacy: `profiles`, `devices`, `privacy_settings`, `user_age_profile`
+- profile/privacy: `profiles`, `devices`, `privacy_settings`, `user_age_profile`
 - contacts/safety: `contact_requests`, `contacts`, `blocks`
-- chat: `conversations`, `conversation_members`, `messages`, `message_receipts`
-- group moderation: `group_bans`
+- messaging: `conversations`, `conversation_members`, `messages`, `message_receipts`
+- moderation: `group_bans`
 - social: `public_videos`, `video_reports`, `moments`, `moment_views`, `moment_reactions`, `moment_reports`
 - K-MAP: `location_shares`, `location_points`
-- push registration: `push_subscriptions`
+- push: `push_subscriptions`
 
-Repository migrations currently run from `0001_v1_core.sql` through `0009_push_subscriptions.sql`. Schema changes must continue to be tested branch-first and applied only to this dedicated Neon project.
+`push_subscriptions` is verified with both RLS and FORCE RLS enabled. Repository Neon migrations currently run through `0009_push_subscriptions.sql`.
 
-## Operational today
+## Operational / implemented
 
-- Neon Auth-backed login/session identity.
-- Profile bootstrap/edit surface for handle, display identity, avatar/status fields supported by the current profile model.
-- Contacts lifecycle with requests, acceptance, blocking and presence-aware contact UI.
-- Realtime presence.
-- K-Pulse attention interaction.
-- Direct conversation creation/join/history with ciphertext-envelope storage only.
-- Delivery/read receipt flow with privacy setting support.
-- Automatic direct-chat reconnect plus conversation/history resynchronization after Socket.IO reconnect.
-- Group creation/membership and group moderation backend, including mute/ban/unban and moderator-only ban listing.
-- Account export through authenticated Data API/RLS without decrypting encrypted messages server-side.
-- K-Feed, Moments and K-MAP have real database/RLS-backed application surfaces on the active branch; media storage/upload remains an explicit release gate.
-- Push subscription schema/RLS exists; native push token registration/delivery is not yet release-complete.
-- Blocked-user lifecycle is exposed through authenticated, rate-limited realtime operations: owner-scoped `contacts:blocked` listing and explicit `contact:unblock`. Unblocking only removes the caller-owned block row and never recreates contacts automatically.
-- The mobile MSN-style contacts surface now loads the caller-owned blocked-user list, keeps it synchronized across reconnect/block/unblock events, exposes an accessible collapsed `PERSONNES BLOQUÉES` section, and allows explicit unblock without silently re-adding the user as a contact.
-- Server regression coverage explicitly verifies that blocked-user listing is caller-owner scoped and that unblock deletes only the authenticated caller's `(blocker_id, blocked_id)` edge, fails closed when no edge exists, and rejects self-unblock without touching the database.
+- Real Neon Auth email/password login/session.
+- Username, display name, avatar/status/bio/music profile surfaces.
+- Explicit logout from the mobile account surface.
+- Contacts lifecycle: search/request/accept/decline/cancel/remove/favorite/block/unblock plus blocked-user UI.
+- Presence plus reconnect-safe realtime session authentication.
+- K-Pulse/Wizz realtime attention interaction.
+- Direct conversations with membership/block authorization, ciphertext-envelope history, delivery/read receipts and reconnect resynchronization.
+- Groups with create/invite/remove/roles/leave/ownership transfer plus mute/ban/unban/moderator ban listing.
+- Privacy-safe account export v3, including push-subscription metadata but explicitly excluding provider push tokens; private messages remain encrypted envelopes.
+- K-Feed backed by real Neon/RLS metadata and reporting; demo rows removed.
+- Moments backed by real 24-hour Neon rows for text moments, visibility/delete/report; demo rows removed.
+- K-MAP backed by authorized Neon rows, recipient-safe coordinate coarsening, revoke and Ghost Mode.
+- Server-side Expo push delivery for new messages: generic metadata-only notifications, no plaintext/ciphertext in push payloads, provider failure isolation, invalid-token disable handling and regression tests.
+
+## Validation
+
+- Latest cleanup/state lineage is based on CI-green source commits; CI run #286 is green on head `0a7d8e383c333cdfd327f84eded877778d5b8e38`.
+- Real Neon social smoke passed 9/9 checks for auth/profile/age, contacts, K-MAP privacy/revoke, Moments isolation/reaction authorization, K-Feed moderation isolation and anti-forgery RLS.
+- Managed Neon Auth self-service deletion was tested with a disposable account and the public delete endpoint returned HTTP 404. The disposable test accounts from that run were deleted through the K-ssenger Neon management integration. The mobile app must therefore keep self-delete unavailable until Neon exposes a supported secure path; do not fake deletion by deleting only profile rows.
+- Android Internal APK workflow run #56 completed successfully. Artifact `k-ssenger-android-internal-release` was produced (~25 MB, SHA-256 digest recorded by GitHub Actions). It uses a CI-generated validation keystore and is for device validation, not Play Store trust/signing.
 
 ## Security invariants
 
-- Never accept a client-supplied user id as authenticated identity; realtime identity comes from verified Neon Auth JWT `sub`.
-- Never weaken RLS/authorization to unblock a UI.
+- Authenticated realtime identity comes only from verified Neon Auth JWT `sub`.
+- Never accept a caller-supplied user ID as authenticated identity.
+- Never weaken RLS/authorization to unblock UX.
+- Never expose database/provider secrets in mobile builds.
 - Never log private plaintext, tokens or encryption keys.
 - Never invent custom cryptography.
 - Do not claim production E2EE until a vetted native device-key protocol is integrated and proven on real devices.
-- The private/group plaintext composer remains locked until that E2EE gate is satisfied.
-- K-MAP remains opt-in and privacy-controlled; no hidden or permanent tracking.
+- Private/group plaintext composition remains locked until that E2EE gate is satisfied.
+- K-MAP remains explicit opt-in; no background/permanent hidden tracking.
 
-## Validation status
+## Remaining premium V1 release gates
 
-- PR head `bd33c8b62f90c68b7444b232e0117cdffeb30cb8`: CI run #271 completed successfully before the current mobile moderation increment.
-- Commit `52358d773a0f278260b00c42b62302f0bcc5b9b2` completes mobile blocked-user listing/unblock UX on the active branch; the new head must pass CI before the PR can leave draft.
-- Neon project `late-flower-65059830` was re-verified on 2026-09-05 as the dedicated K-ssenger project (`aws-eu-central-1`, PostgreSQL 17, free_v3). Neon Auth is active with the dedicated K-ssenger Better Auth integration, and the `kssenger` Data API is active on the `public` schema with JWT role claims. No other project was touched.
-
-## Critical V1 release gates
-
-1. Green CI/security/RLS validation on the latest PR head.
-2. Real two-account/two-device remote flow, including offline/reconnect and receipt behavior.
-3. Vetted native E2EE/device-key protocol with device proof before enabling private/group plaintext composition.
-4. Approved K-ssenger media storage/upload path for avatars, chat media, K-Feed and Moments; no reuse of another project's storage.
-5. Native push token registration and delivery validation.
-6. Complete report/moderation UX plus secure Neon Auth account deletion flow. Blocked-user mobile management is now implemented.
-7. Final accessibility/error/retry polish and release-mode smoke tests.
-8. Installable Android/iOS release builds; signed distribution only when signing credentials/tooling are available.
+1. Vetted native E2EE/device-key protocol and real device proof before enabling private/group plaintext composition.
+2. Native push token registration on Android/iOS and real-device delivery validation; server delivery is implemented.
+3. Dedicated K-ssenger media upload/storage integration plus in-app playback for chat/K-Feed and photo/video Moments.
+4. Native GPS permission/capture for creation of K-MAP shares; backend privacy/revoke/coarsening is implemented.
+5. Supported secure Neon Auth self-service account deletion. Current managed Auth returns 404 for self-delete.
+6. Full real two-device smoke covering offline/reconnect, push and receipt behavior.
+7. Store-signed Android and iOS builds when signing credentials/tooling are available.
 
 ## Release rule
 
-Keep PR #2 as a draft while any critical security/database validation gate above is incomplete. Do not merge merely to obtain a build. A release branch is appropriate only after the critical gates are demonstrably green.
+Keep PR #2 draft while any critical security/native gate above remains incomplete. Do not merge or call this production E2EE merely to obtain a release build.
