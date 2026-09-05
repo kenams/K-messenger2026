@@ -27,13 +27,17 @@ type PreparedDownload = {
 export type UploadLocalMediaInput = {
   uri: string;
   mimeType: SupportedMediaMime;
-  byteSize: number;
+  /** Picker metadata is optional on real devices. The actual Blob size is authoritative. */
+  byteSize?: number;
   purpose: MediaPurpose;
   conversationId?: string;
 };
 
+const MAX_MEDIA_BYTES = 104_857_600;
+
 function assertLocalMediaInput(input: UploadLocalMediaInput) {
-  if (!input.uri || !Number.isSafeInteger(input.byteSize) || input.byteSize <= 0 || input.byteSize > 104_857_600) {
+  if (!input.uri) throw new Error('KSSENGER_MEDIA_INVALID_LOCAL_ASSET');
+  if (input.byteSize !== undefined && (!Number.isSafeInteger(input.byteSize) || input.byteSize <= 0 || input.byteSize > MAX_MEDIA_BYTES)) {
     throw new Error('KSSENGER_MEDIA_INVALID_LOCAL_ASSET');
   }
   if (input.purpose === 'chat' && !input.conversationId) throw new Error('KSSENGER_MEDIA_CHAT_CONVERSATION_REQUIRED');
@@ -42,21 +46,27 @@ function assertLocalMediaInput(input: UploadLocalMediaInput) {
 
 export async function uploadLocalMedia(input: UploadLocalMediaInput): Promise<{ mediaId: string }> {
   assertLocalMediaInput(input);
+
+  // Expo's picker does not guarantee fileSize on every Android/iOS provider.
+  // Read the selected local asset first and use its real Blob size as the only
+  // size sent to the server. The server still independently verifies the
+  // uploaded object's MIME/size before promoting it to ready.
+  const localResponse = await fetch(input.uri);
+  if (!localResponse.ok) throw new Error('KSSENGER_MEDIA_LOCAL_READ_FAILED');
+  const blob = await localResponse.blob();
+  const actualByteSize = blob.size;
+  if (!Number.isSafeInteger(actualByteSize) || actualByteSize <= 0 || actualByteSize > MAX_MEDIA_BYTES) {
+    throw new Error('KSSENGER_MEDIA_INVALID_LOCAL_ASSET');
+  }
+
   const socket = await getRealtimeSocket();
   const prepared = await emitAck<PreparedUpload>(socket, 'media:prepare-upload', {
     purpose: input.purpose,
     mimeType: input.mimeType,
-    byteSize: input.byteSize,
+    byteSize: actualByteSize,
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
   });
   if (!prepared.ok || !prepared.mediaId || !prepared.upload) throw new Error(prepared.error ?? 'KSSENGER_MEDIA_PREPARE_FAILED');
-
-  // React Native's fetch can materialize the local file/content URI as a Blob.
-  // The object-store URL is short-lived and never persisted as application data.
-  const localResponse = await fetch(input.uri);
-  if (!localResponse.ok) throw new Error('KSSENGER_MEDIA_LOCAL_READ_FAILED');
-  const blob = await localResponse.blob();
-  if (blob.size !== input.byteSize) throw new Error('KSSENGER_MEDIA_LOCAL_SIZE_CHANGED');
 
   const uploaded = await fetch(prepared.upload.url, {
     method: 'PUT',
