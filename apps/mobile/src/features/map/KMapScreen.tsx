@@ -60,7 +60,6 @@ export function KMapScreen() {
       if (contactResponse.error) throw contactResponse.error;
 
       const shares = ((shareResponse.data ?? []) as unknown) as LocationShare[];
-      const owned = shares.filter((share) => share.owner_id === me);
       const incoming = shares.filter((share) => share.owner_id !== me);
       const hydrated = await Promise.all(incoming.map(async (share) => {
         try {
@@ -85,7 +84,7 @@ export function KMapScreen() {
         }
       }
 
-      setMine(owned);
+      setMine(shares.filter((share) => share.owner_id === me));
       setReceived(hydrated);
       setContacts(options);
       if (!selectedRecipient && options[0]?.id) setSelectedRecipient(options[0].id);
@@ -133,15 +132,9 @@ export function KMapScreen() {
       if (share.error || !share.data?.id) throw share.error ?? new Error('KMAP_SHARE_ID_MISSING');
       shareId = String(share.data.id);
 
-      const latitude = precision === 'approximate'
-        ? Math.round(position.coords.latitude * 1000) / 1000
-        : position.coords.latitude;
-      const longitude = precision === 'approximate'
-        ? Math.round(position.coords.longitude * 1000) / 1000
-        : position.coords.longitude;
-      const accuracy = precision === 'approximate'
-        ? Math.max(position.coords.accuracy ?? 0, 150)
-        : position.coords.accuracy;
+      const latitude = precision === 'approximate' ? Math.round(position.coords.latitude * 1000) / 1000 : position.coords.latitude;
+      const longitude = precision === 'approximate' ? Math.round(position.coords.longitude * 1000) / 1000 : position.coords.longitude;
+      const accuracy = precision === 'approximate' ? Math.max(position.coords.accuracy ?? 0, 150) : position.coords.accuracy;
 
       const point = await getBackend().from('location_points').insert({
         share_id: shareId,
@@ -158,7 +151,11 @@ export function KMapScreen() {
       await load();
     } catch {
       if (shareId) {
-        await getBackend().from('location_shares').delete().eq('id', shareId).catch(() => undefined);
+        try {
+          await getBackend().from('location_shares').delete().eq('id', shareId);
+        } catch {
+          // Best-effort cleanup: RLS/expiry still protects an incomplete share.
+        }
       }
       setNotice('Impossible de créer ce partage. Aucune position incomplète n’est conservée.');
     } finally {
@@ -221,9 +218,7 @@ export function KMapScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>NOUVEAU PARTAGE PONCTUEL</Text>
-        {!contacts.length ? (
-          <Text style={styles.empty}>Ajoute d’abord un contact pour partager ta position.</Text>
-        ) : (
+        {!contacts.length ? <Text style={styles.empty}>Ajoute d’abord un contact pour partager ta position.</Text> : (
           <View style={styles.shareComposer}>
             <Text style={styles.composerLabel}>Destinataire</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -238,7 +233,7 @@ export function KMapScreen() {
               <TouchableOpacity onPress={() => setPrecision('approximate')} style={[styles.chip, precision === 'approximate' && styles.chipActive]}><Text style={[styles.chipText, precision === 'approximate' && styles.chipTextActive]}>⭕ Approximative</Text></TouchableOpacity>
               <TouchableOpacity onPress={() => setPrecision('precise')} style={[styles.chip, precision === 'precise' && styles.chipPrecise]}><Text style={[styles.chipText, precision === 'precise' && styles.chipTextActive]}>📍 Précise</Text></TouchableOpacity>
             </View>
-            <Text style={styles.privacyCopy}>{precision === 'approximate' ? 'Recommandé : K-ssenger réduit déjà la précision avant stockage, puis Neon la dégrade encore pour le destinataire.' : 'La position exacte sera stockée pour ce partage. Utilise-la seulement avec une personne de confiance.'}</Text>
+            <Text style={styles.privacyCopy}>{precision === 'approximate' ? 'Recommandé : précision réduite avant stockage puis encore dégradée par Neon pour le destinataire.' : 'La position exacte sera stockée pour ce partage. Utilise-la seulement avec une personne de confiance.'}</Text>
             <TouchableOpacity disabled={mutating || !selectedRecipient} onPress={() => void createOneTimeShare()} style={[styles.shareButton, (mutating || !selectedRecipient) && styles.disabled]}>
               {mutating ? <ActivityIndicator color="#fff" /> : <Text style={styles.shareButtonText}>Partager ma position · 30 min</Text>}
             </TouchableOpacity>
@@ -268,12 +263,10 @@ export function KMapScreen() {
           <View key={share.id} style={styles.card}>
             <View style={styles.flex}>
               <Text style={styles.cardTitle}>{share.precision === 'precise' ? '📍 Position précise' : '⭕ Zone approximative'}</Text>
-              {share.point ? (
-                <>
-                  <Text style={styles.coords}>{share.point.latitude.toFixed(share.point.precision_level === 'precise' ? 5 : 2)}, {share.point.longitude.toFixed(share.point.precision_level === 'precise' ? 5 : 2)}</Text>
-                  <Text style={styles.meta}>{share.point.precision_level === 'approximate' ? 'Coordonnées volontairement dégradées par Neon avant lecture.' : `Précision déclarée : ${Math.round(share.point.accuracy_meters ?? 0)} m`}</Text>
-                </>
-              ) : <Text style={styles.meta}>Point indisponible ou partage expiré/révoqué.</Text>}
+              {share.point ? <>
+                <Text style={styles.coords}>{share.point.latitude.toFixed(share.point.precision_level === 'precise' ? 5 : 2)}, {share.point.longitude.toFixed(share.point.precision_level === 'precise' ? 5 : 2)}</Text>
+                <Text style={styles.meta}>{share.point.precision_level === 'approximate' ? 'Coordonnées volontairement dégradées par Neon avant lecture.' : `Précision déclarée : ${Math.round(share.point.accuracy_meters ?? 0)} m`}</Text>
+              </> : <Text style={styles.meta}>Point indisponible ou partage expiré/révoqué.</Text>}
               <Text style={styles.meta}>Expire {new Date(share.expires_at).toLocaleString()}</Text>
             </View>
           </View>
