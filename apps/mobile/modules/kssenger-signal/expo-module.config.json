@@ -1,6 +1,9 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["com.kahdigital.kssenger.signal.KssengerSignalModule"]
+    "modules": [
+      "com.kahdigital.kssenger.signal.KssengerSignalModule",
+      "com.kahdigital.kssenger.signal.KssengerLocalMessageModule"
+    ]
   }
 }
