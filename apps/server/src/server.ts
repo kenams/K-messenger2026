@@ -38,6 +38,7 @@ import {
 } from './groupStore.js';
 import { banGroupMember, setGroupMute, unbanGroupMember } from './groupModerationStore.js';
 import { registerGroupBanListHandler } from './groupModerationSocket.js';
+import { registerMediaHandlers } from './mediaSocket.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -140,6 +141,17 @@ io.on('connection', (socket) => {
     socket,
     userId,
     consumeRateLimit: () => socialLimiter.consume(`${userId}:group:bans-list`),
+  });
+
+  // CRITICAL FIX (2026-09-05): mediaSocket.ts's handlers (media:prepare-upload,
+  // media:complete-upload, media:prepare-download) were fully implemented but
+  // never registered here -- avatar/chat/K-Feed/Moments media upload and
+  // download were completely non-functional despite the schema/service layer
+  // being ready.
+  registerMediaHandlers({
+    socket,
+    userId,
+    consumeRateLimit: (action) => socialLimiter.consume(`${userId}:media:${action}`),
   });
 
   socket.on('conversation:direct', async (raw, ack) => {
