@@ -13,6 +13,13 @@ android {
     versionName "1.0.0"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
   }
+
+  // libsignal-android uses newer Java library APIs. Keep desugaring explicit on
+  // the native module itself so standalone instrumentation does not depend on
+  // unrelated Expo modules inheriting app-level Gradle configuration.
+  compileOptions {
+    coreLibraryDesugaringEnabled true
+  }
 }
 
 repositories {
@@ -21,6 +28,7 @@ repositories {
 }
 
 dependencies {
+  coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
   implementation "org.signal:libsignal-client:0.100.0"
   implementation "org.signal:libsignal-android:0.100.0"
 
