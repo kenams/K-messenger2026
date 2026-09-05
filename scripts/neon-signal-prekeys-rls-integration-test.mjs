@@ -18,11 +18,28 @@ function check(name, ok) {
   else { fail += 1; console.log(`FAIL  ${name}`); }
 }
 
-async function asUser(userId, fn) {
-  await client.query('begin');
+async function setAuthenticatedUser(userId) {
   await client.query('set local role authenticated');
   await client.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: userId, role: 'authenticated' })]);
+}
+
+async function asUser(userId, fn) {
+  await client.query('begin');
+  await setAuthenticatedUser(userId);
   try { return await fn(); } finally { await client.query('rollback'); }
+}
+
+async function asUserCommit(userId, fn) {
+  await client.query('begin');
+  await setAuthenticatedUser(userId);
+  try {
+    const result = await fn();
+    await client.query('commit');
+    return result;
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  }
 }
 
 async function blocked(fn) {
@@ -64,7 +81,7 @@ async function main() {
   );
   await client.query('delete from public.device_prekey_claims where target_device_id=$1', [ALICE_DEVICE]);
 
-  await asUser(BOB, async () => {
+  await asUserCommit(BOB, async () => {
     const bundle = await client.query('select * from public.claim_signal_prekey_bundle($1)', [ALICE_DEVICE]);
     check('contact can atomically claim target bundle', bundle.rows.length === 1);
     check('claim consumes EC one-time prekey', bundle.rows[0]?.one_time_prekey_id === 31);
