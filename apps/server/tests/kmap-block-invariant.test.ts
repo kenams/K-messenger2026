@@ -15,9 +15,9 @@ describe('K-MAP block invariant', () => {
   });
 
   it('matches the live schema and never hard-deletes historical K-MAP shares', () => {
-    expect(migration).not.toContain('user_id = new.blocker_id');
-    expect(migration).not.toContain('visible_to = new.blocked_id');
-    expect(migration).not.toContain('delete from public.location_shares');
+    expect(migration).not.toMatch(/(^|[^a-z_])user_id\s*=\s*new\.blocker_id/im);
+    expect(migration).not.toMatch(/(^|[^a-z_])visible_to\s*=\s*new\.blocked_id/im);
+    expect(migration).not.toMatch(/delete\s+from\s+public\.location_shares/i);
   });
 
   it('keeps the trigger helper non-invokable by public callers', () => {
