@@ -62,6 +62,15 @@ internal class KeystoreBlobStore(
     check(preferences.edit().remove(recordKey).commit()) { "STORE_DELETE_FAILED" }
   }
 
+  fun removePrefix(prefix: String) {
+    require(prefix.matches(Regex("^[A-Za-z0-9._:-]{1,180}$"))) { "INVALID_RECORD_PREFIX" }
+    val keys = preferences.all.keys.filter { it.startsWith(prefix) }
+    if (keys.isEmpty()) return
+    val editor = preferences.edit()
+    keys.forEach(editor::remove)
+    check(editor.commit()) { "STORE_PREFIX_DELETE_FAILED" }
+  }
+
   fun contains(recordKey: String): Boolean = preferences.contains(recordKey)
 
   private fun getOrCreateKey(): SecretKey {
