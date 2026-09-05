@@ -41,8 +41,9 @@ Repository migrations currently run from `0001_v1_core.sql` through `0009_push_s
 - Account export through authenticated Data API/RLS without decrypting encrypted messages server-side.
 - K-Feed, Moments and K-MAP have real database/RLS-backed application surfaces on the active branch; media storage/upload remains an explicit release gate.
 - Push subscription schema/RLS exists; native push token registration/delivery is not yet release-complete.
-- Blocked-user lifecycle is exposed through authenticated, rate-limited realtime operations: owner-scoped `contacts:blocked` listing and explicit `contact:unblock`. Unblocking only removes the caller-owned block row and never recreates contacts automatically. Mobile management UI remains to be completed before this is counted as finished moderation UX.
-- Server regression coverage now explicitly verifies that blocked-user listing is caller-owner scoped and that unblock deletes only the authenticated caller's `(blocker_id, blocked_id)` edge, fails closed when no edge exists, and rejects self-unblock without touching the database.
+- Blocked-user lifecycle is exposed through authenticated, rate-limited realtime operations: owner-scoped `contacts:blocked` listing and explicit `contact:unblock`. Unblocking only removes the caller-owned block row and never recreates contacts automatically.
+- The mobile MSN-style contacts surface now loads the caller-owned blocked-user list, keeps it synchronized across reconnect/block/unblock events, exposes an accessible collapsed `PERSONNES BLOQUÉES` section, and allows explicit unblock without silently re-adding the user as a contact.
+- Server regression coverage explicitly verifies that blocked-user listing is caller-owner scoped and that unblock deletes only the authenticated caller's `(blocker_id, blocked_id)` edge, fails closed when no edge exists, and rejects self-unblock without touching the database.
 
 ## Security invariants
 
@@ -56,9 +57,9 @@ Repository migrations currently run from `0001_v1_core.sql` through `0009_push_s
 
 ## Validation status
 
-- PR head `82796a1a2087bf5edfe527c0dbd1d64ad578ba08`: CI run #269 completed successfully.
-- Commit `d41fdb3ee09e8c5d0f306fb261485532679f6bf8` adds explicit server regression tests for caller-scoped blocked-user listing and unblock ownership semantics; CI for the new documentation head must remain green before this PR leaves draft.
-- Neon project `late-flower-65059830` was re-verified on 2026-09-05 as the dedicated K-ssenger project (`aws-eu-central-1`, PostgreSQL 17, free_v3). No other project was touched.
+- PR head `bd33c8b62f90c68b7444b232e0117cdffeb30cb8`: CI run #271 completed successfully before the current mobile moderation increment.
+- Commit `52358d773a0f278260b00c42b62302f0bcc5b9b2` completes mobile blocked-user listing/unblock UX on the active branch; the new head must pass CI before the PR can leave draft.
+- Neon project `late-flower-65059830` was re-verified on 2026-09-05 as the dedicated K-ssenger project (`aws-eu-central-1`, PostgreSQL 17, free_v3). Neon Auth is active with the dedicated K-ssenger Better Auth integration, and the `kssenger` Data API is active on the `public` schema with JWT role claims. No other project was touched.
 
 ## Critical V1 release gates
 
@@ -67,7 +68,7 @@ Repository migrations currently run from `0001_v1_core.sql` through `0009_push_s
 3. Vetted native E2EE/device-key protocol with device proof before enabling private/group plaintext composition.
 4. Approved K-ssenger media storage/upload path for avatars, chat media, K-Feed and Moments; no reuse of another project's storage.
 5. Native push token registration and delivery validation.
-6. Complete report/block/moderation UX, including mobile blocked-user management, plus secure Neon Auth account deletion flow.
+6. Complete report/moderation UX plus secure Neon Auth account deletion flow. Blocked-user mobile management is now implemented.
 7. Final accessibility/error/retry polish and release-mode smoke tests.
 8. Installable Android/iOS release builds; signed distribution only when signing credentials/tooling are available.
 
