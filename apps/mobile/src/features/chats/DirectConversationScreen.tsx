@@ -267,9 +267,9 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       if (picked.canceled) return;
       const asset = picked.assets[0];
       const mimeType = asset ? inferChatMime(asset) : null;
-      if (!asset?.uri || !asset.fileSize || !mimeType || asset.fileSize > CHAT_MAX_BYTES) throw new Error('CHAT_MEDIA_UNSUPPORTED');
+      if (!asset?.uri || !mimeType || (asset.fileSize !== undefined && asset.fileSize > CHAT_MAX_BYTES)) throw new Error('CHAT_MEDIA_UNSUPPORTED');
       setNotice('Upload privé du média…');
-      const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType, byteSize: asset.fileSize, purpose: 'chat', conversationId });
+      const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType, byteSize: asset.fileSize ?? undefined, purpose: 'chat', conversationId });
       setSending(false);
       await sendContent({ v: 1, type: 'media', mediaId, mimeType, ...(composer.trim() ? { caption: composer.trim().slice(0, 500) } : {}) });
     } catch {
