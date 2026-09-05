@@ -1,5 +1,5 @@
 import type { Socket } from 'socket.io';
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { z } from 'zod';
 import { config } from './config.js';
 
@@ -59,6 +59,19 @@ function getDefaultVerifier(): AccessTokenVerifier {
     audience: config.NEON_AUTH_AUDIENCE,
   });
   return defaultVerifier;
+}
+
+export async function authenticateFreshAccessToken(
+  token: string,
+  maxAgeSeconds = 300,
+  verifyToken: AccessTokenVerifier = getDefaultVerifier(),
+): Promise<string> {
+  const userId = await verifyToken(token);
+  const payload = decodeJwt(token);
+  if (typeof payload.iat !== 'number') throw new Error('FRESH_AUTH_REQUIRED');
+  const ageSeconds = Math.floor(Date.now() / 1000) - payload.iat;
+  if (ageSeconds < -10 || ageSeconds > maxAgeSeconds) throw new Error('FRESH_AUTH_REQUIRED');
+  return userId;
 }
 
 export async function authenticateSocket(
