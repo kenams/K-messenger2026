@@ -5,6 +5,7 @@ import App from '../App';
 import { AuthScreen } from './features/auth/AuthScreen';
 import { useAuthSession } from './features/auth/useAuthSession';
 import { useRealtimePresence } from './features/presence/useRealtimePresence';
+import { usePushRegistration } from './features/push/usePushRegistration';
 import { ProfileBootstrapScreen } from './features/profile/ProfileBootstrapScreen';
 import { useMyProfile } from './features/profile/useMyProfile';
 
@@ -20,6 +21,7 @@ export function Root() {
 
 function AuthenticatedRoot({ userId }: { userId: string }) {
   useRealtimePresence();
+  usePushRegistration(userId);
   const profile = useMyProfile(userId);
 
   if (profile.loading) return <Loading label="Chargement de ton profil K-ssenger…" />;
