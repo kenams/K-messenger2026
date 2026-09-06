@@ -13,11 +13,10 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `56a6069ec851af329f05caeec4d6e102a1d40941` was fully GREEN: CI #543, Android E2EE Runtime #191 and iOS Native Prebuild #62 all completed successfully.
-- Later server hard-pinning changes correctly restricted `NEON_AUTH_BASE_URL` and `NEON_AUTH_JWKS_URL` to the exact public K-ssenger Neon Auth endpoints, but CI #547 exposed stale test fixtures that still injected legacy/fake Auth endpoints. Static release gates, typecheck and RLS integration remained green; the failure was isolated to server tests importing the stricter config.
-- `289786c1eec5d9b18b9387f9c7c0723e17aa6aac` aligns JWT auth tests with the exact dedicated K-ssenger Neon Auth endpoint while preserving wrong-issuer, wrong-audience, malformed-token, invalid-signature, non-UUID-subject and non-HTTPS rejection coverage.
-- `738cbed121b3f8e49b8316443a0821a91436aec1` aligns account-deletion provider tests with the same pinned public Auth/JWKS endpoints without weakening the hard-scoped Neon project/branch deletion route or fail-closed provider behavior.
-- `24c36bbbee81a42228a8b259b072719ebdb00f33` aligns private-media service test setup with the pinned Auth/JWKS endpoints so config parsing remains representative of production while DB/provider values stay test-only placeholders.
+- Head `4ccf41e41f5688db7a9bc3ac1e9c1498f9828532` is fully GREEN: CI #551, Android E2EE Runtime #199 and iOS Native Prebuild #70 all completed successfully.
+- `289786c1eec5d9b18b9387f9c7c0723e17aa6aac`, `738cbed121b3f8e49b8316443a0821a91436aec1` and `24c36bbbee81a42228a8b259b072719ebdb00f33` aligned JWT, account-deletion and private-media tests with the exact dedicated K-ssenger Neon Auth/JWKS endpoints after stricter runtime pinning exposed stale fixtures.
+- `f84b95cc3a50cc7491de3d5ca998a9d90d2c4518` pins `NEON_AUTH_AUDIENCE` to the exact public audience of the dedicated K-ssenger Neon Auth branch while retaining a safe default to that same value.
+- `6de7ab08ec62c6792007eede4ff921fdf35c5001` makes the dedicated Neon Auth audience pin a mandatory static release-gate invariant.
 - `f469f1b7e2ab9ef5f78fff97a253fdf669835414` adds managed Neon Auth session revalidation whenever the mobile app returns to the foreground, with refresh sequencing so an older async `getSession()` result cannot overwrite a newer auth event.
 - `98db71fa40d88bda52cf01766d98498e430fb099` makes that foreground revalidation offline-safe: transient transport failure preserves the existing persisted session instead of falsely logging the user out, while confirmed no-session/revocation still clears it.
 - `3d55f3d168a5a5a48ceaeecc8637e62d22b6dd71` locks foreground revalidation, stale-refresh race protection, offline-session preservation and listener cleanup in CI.
@@ -42,7 +41,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Managed Neon Better Auth + Neon Data API are the active backend. Runtime Supabase assumptions are retired and CI rejects their reintroduction.
 - Realtime identity comes only from verified Neon Auth JWT `sub`.
 - Mobile builds contain only public K-ssenger service endpoints; server/database/provider secrets are forbidden from the mobile surface.
-- Server startup is pinned to the exact public Auth/JWKS endpoints of the dedicated K-ssenger Neon branch and fails closed on backend drift.
+- Server startup is pinned to the exact public Auth, JWKS and audience values of the dedicated K-ssenger Neon branch and fails closed on backend drift.
 - No other Neon project/database may be modified.
 
 ## Live Neon security state
@@ -93,7 +92,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Android platform backup must remain disabled and cleartext network traffic must remain forbidden for the release candidate.
 - Internal Android release artifacts must include a verified SHA-256 checksum generated from the final APK.
 - iOS App Transport Security must not allow arbitrary loads or local-network exemptions in the release candidate.
-- The server must reject any Neon Auth/JWKS endpoint other than the dedicated K-ssenger branch endpoints; tests must exercise security behavior without weakening this startup pinning.
+- The server must reject any Neon Auth base/JWKS/audience value other than the dedicated K-ssenger branch values; tests must exercise security behavior without weakening this startup pinning.
 - K-MAP is explicit opt-in; no hidden permanent/background tracking.
 - Push data is allow-listed metadata only.
 - Blocking must not be bypassable through direct chat, initial group creation, later group invitation, presence, K-Pulse or K-MAP.
