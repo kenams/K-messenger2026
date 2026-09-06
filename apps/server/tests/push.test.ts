@@ -49,6 +49,42 @@ describe('push delivery', () => {
     expect(body).not.toContain('plaintext');
   });
 
+  it('rejects sensitive or unapproved push metadata before recipient lookup', async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(sendPushToUsers(['00000000-0000-0000-0000-000000000002'], {
+      title: 'K-ssenger',
+      body: 'Nouveau message',
+      data: {
+        type: 'message',
+        plaintext: 'contenu privé',
+      },
+    })).resolves.toBeUndefined();
+
+    expect(queryMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warnMock).toHaveBeenCalledWith('push_delivery_failed', expect.objectContaining({
+      error: 'PUSH_DATA_KEY_NOT_ALLOWED:plaintext',
+    }));
+  });
+
+  it('rejects sensitive markers even when placed in otherwise generic text', async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await sendPushToUsers(['00000000-0000-0000-0000-000000000002'], {
+      title: 'K-ssenger',
+      body: 'authorization token updated',
+    });
+
+    expect(queryMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warnMock).toHaveBeenCalledWith('push_delivery_failed', expect.objectContaining({
+      error: 'PUSH_SENSITIVE_CONTENT_REJECTED',
+    }));
+  });
+
   it('disables a token rejected as DeviceNotRegistered', async () => {
     queryMock
       .mockResolvedValueOnce({ rows: [{ user_id: '00000000-0000-0000-0000-000000000002', expo_push_token: 'ExponentPushToken[dead_token]' }] })
