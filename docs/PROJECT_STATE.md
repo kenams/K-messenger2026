@@ -50,7 +50,8 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - A fresh live FK inventory confirms 29 public foreign keys reference `neon_auth.user`; there is no hidden fourth deletion blocker. Exactly the three `0019` targets remain `NO ACTION`, while every other public reference is already `CASCADE` or `SET NULL`.
 - `e5d3460326911ca8bfbb6df1d9bf39de67a66ecd` hardens the live release-readiness gate to inspect the complete public FK surface pointing at Neon Auth users and fail on any future deletion-blocking action, while still asserting the exact intended semantics for conversations, encrypted messages and moderation history.
 - `59b081645c1e3c0c0e1bdc1ad08b5d789c9668ac` makes CI syntax-check the live release-readiness tooling; CI #481 is GREEN while Android E2EE Runtime #126 is still running at this verification point.
-- `35a9daa7f9be1773b0715d2a960d234e84b06133` adds the first macOS iOS native-prebuild gate. It generates the iOS project from the exact V1 configuration, verifies the production bundle identifier/Xcode project, and explicitly keeps iOS E2EE fail-closed until vetted native libsignal parity is actually integrated.
+- `35a9daa7f9be1773b0715d2a960d234e84b06133` adds the first macOS iOS native-prebuild gate. iOS Native Prebuild #1 is GREEN: Expo generated the native iOS project, the stable production bundle identifier/Xcode project were verified, and the job confirmed that iOS E2EE still fails closed because vetted native libsignal parity is not yet integrated.
+- `693754c9d2f1d8936b0041c3326ab823502108a3` extends the mandatory static release gate so an unvalidated iOS Signal bridge or an `ios` platform claim cannot silently ship before the native parity work is real and reviewed.
 
 ## Live Neon surface
 
@@ -84,7 +85,7 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 - Account deletion UI/server route with password reauthentication, fresh Neon token and provider scope hard-coded to the dedicated K-ssenger project/branch. Repository deletion semantics are FK-safe; controlled live migration + disposable in-app proof remain open.
 - Release candidate metadata is `1.0.0` and an Android internal release APK can be produced by CI.
 - Static release configuration is CI-gated so production metadata/endpoints cannot silently drift away from the dedicated K-ssenger V1 surface.
-- iOS native project generation is now CI-gated on macOS; this is a build-readiness step only and does not weaken the E2EE fail-closed rule.
+- iOS native project generation is now green and CI-gated on macOS; this is a build-readiness step only and does not weaken the E2EE fail-closed rule.
 
 ## E2EE
 
@@ -108,6 +109,7 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 - Blocking or removing a contact revokes active direct K-MAP shares at the database boundary.
 - Trigger-only `SECURITY DEFINER` functions must not be directly executable by API roles.
 - Account deletion readiness must audit the full public FK surface targeting `neon_auth.user`, not only a hand-picked constraint list.
+- iOS E2EE remains fail-closed until the native module actually uses vetted Signal `LibSignalClient` and passes parity/runtime/device proofs; a generated iOS project alone is never enough.
 - K-ssenger is independent from Microsoft and must not use Microsoft branding/assets/sounds or affiliation language.
 
 ## Remaining Premium V1 release gates
@@ -116,7 +118,7 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 2. Real two-physical-device Android Signal proof through the production server: discovery/prekey claim, identity continuity, ratchet continuity, revocation and reconnect.
 3. Physical Android validation of avatar/chat/K-Feed/Moments media, push delivery and K-MAP GPS permission flows; repeat on iOS once native parity exists.
 4. Final Alice/Bob/Charlie physical smoke: contacts, presence, K-Pulse, direct chat, offline/reconnect, receipts, groups, media, push, K-Feed, Moments, K-MAP, block/export/delete.
-5. Implement and prove vetted native iOS libsignal parity. The iOS prebuild gate may progress independently but must not be treated as E2EE proof.
+5. Implement and prove vetted native iOS libsignal parity. The iOS prebuild gate is green but must not be treated as E2EE proof.
 6. Produce store-signed Android/iOS builds when signing credentials/tooling are available.
 
 ## Release rule
