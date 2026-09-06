@@ -3,6 +3,8 @@ import fs from 'node:fs';
 const app = JSON.parse(fs.readFileSync(new URL('../apps/mobile/app.json', import.meta.url), 'utf8'));
 const eas = JSON.parse(fs.readFileSync(new URL('../apps/mobile/eas.json', import.meta.url), 'utf8'));
 const envExample = fs.readFileSync(new URL('../apps/mobile/.env.example', import.meta.url), 'utf8');
+const signalModule = JSON.parse(fs.readFileSync(new URL('../apps/mobile/modules/kssenger-signal/expo-module.config.json', import.meta.url), 'utf8'));
+const iosSignalModuleUrl = new URL('../apps/mobile/modules/kssenger-signal/ios', import.meta.url);
 
 const EXPECTED = Object.freeze({
   appName: 'K-ssenger',
@@ -59,6 +61,10 @@ for (const [key, value] of Object.entries(productionEnv)) {
   try { parsed = new URL(String(value)); } catch { parsed = null; }
   check(`${key} is HTTPS without URL credentials`, !!parsed && parsed.protocol === 'https:' && !parsed.username && !parsed.password, String(value));
 }
+
+const signalPlatforms = Array.isArray(signalModule?.platforms) ? signalModule.platforms : [];
+check('native Signal module remains Android-only until vetted iOS parity lands', signalPlatforms.length === 1 && signalPlatforms[0] === 'android', JSON.stringify(signalPlatforms));
+check('no unvalidated iOS Signal bridge is shipped', !fs.existsSync(iosSignalModuleUrl));
 
 if (failed) throw new Error(`KSSENGER_RELEASE_CANDIDATE_STATIC_GATE_FAILED:${failed}`);
 console.log('KSSENGER_RELEASE_CANDIDATE_STATIC_GATE_PASS=true');
