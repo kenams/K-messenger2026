@@ -49,9 +49,12 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `60ec7e3cf3725f4f4c665d984207ba6c0b254d5a` is verified GREEN in CI #479 and Android E2EE Runtime #124.
 - A fresh live FK inventory confirms 29 public foreign keys reference `neon_auth.user`; there is no hidden fourth deletion blocker. Exactly the three `0019` targets remain `NO ACTION`, while every other public reference is already `CASCADE` or `SET NULL`.
 - `e5d3460326911ca8bfbb6df1d9bf39de67a66ecd` hardens the live release-readiness gate to inspect the complete public FK surface pointing at Neon Auth users and fail on any future deletion-blocking action, while still asserting the exact intended semantics for conversations, encrypted messages and moderation history.
-- `59b081645c1e3c0c0e1bdc1ad08b5d789c9668ac` makes CI syntax-check the live release-readiness tooling; CI #481 is GREEN while Android E2EE Runtime #126 is still running at this verification point.
+- `59b081645c1e3c0c0e1bdc1ad08b5d789c9668ac` makes CI syntax-check the live release-readiness tooling.
 - `35a9daa7f9be1773b0715d2a960d234e84b06133` adds the first macOS iOS native-prebuild gate. iOS Native Prebuild #1 is GREEN: Expo generated the native iOS project, the stable production bundle identifier/Xcode project were verified, and the job confirmed that iOS E2EE still fails closed because vetted native libsignal parity is not yet integrated.
 - `693754c9d2f1d8936b0041c3326ab823502108a3` extends the mandatory static release gate so an unvalidated iOS Signal bridge or an `ios` platform claim cannot silently ship before the native parity work is real and reviewed.
+- `ceb1c63885f3ea07bfcf3f9b59dacf2ad8255d90` is fully GREEN in CI #485, Android E2EE Runtime #130 and iOS Native Prebuild #4.
+- `f4d9c4ddd50b01c491ffa303dfb2361a5f67c4f4` aligns Android release packaging with upstream libsignal guidance by excluding the macOS `libsignal_jni*.dylib` and Windows `signal_jni*.dll` resources from the generated Android app while retaining the official `0.100.0` Android runtime.
+- `f1bc73c0e470e299d9d5aa9ad3549bf806e7b9b5` makes the Android internal-release workflow verify those exclusions survive Expo prebuild before APK assembly; `d6f94878a34da0e0f1cb1008b61556bd650a9483` adds a mandatory regression contract for the packaging rule.
 
 ## Live Neon surface
 
@@ -91,6 +94,7 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 
 - No custom cryptographic protocol.
 - Official `org.signal:libsignal-client:0.100.0` and `org.signal:libsignal-android:0.100.0` are pinned.
+- Android packaging follows upstream libsignal guidance and strips non-Android desktop JNI resources before release assembly.
 - Native Android Session/Identity/PreKey/SignedPreKey/KyberPreKey stores persist behind Android Keystore protected storage.
 - Android runtime proof is GREEN for real libsignal PQXDH/prekey establishment, one-time EC/PQ consumption, first PreKeySignalMessage, normal SignalMessage reply, Double Ratchet continuity and native-store recreation.
 - Direct and group composers stay fail-closed if native E2EE readiness is not proven.
