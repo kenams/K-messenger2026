@@ -33,6 +33,15 @@ function check(name, ok, detail = '') {
   }
 }
 
+function pluginOptions(name) {
+  const entry = (app?.expo?.plugins ?? []).find((plugin) => Array.isArray(plugin) && plugin[0] === name);
+  return Array.isArray(entry) && entry[1] && typeof entry[1] === 'object' ? entry[1] : {};
+}
+
+function meaningfulPermission(value) {
+  return typeof value === 'string' && value.trim().length >= 24 && /K-ssenger/.test(value);
+}
+
 const expo = app?.expo ?? {};
 check('release app name is K-ssenger', expo.name === EXPECTED.appName, String(expo.name ?? 'missing'));
 check('release slug is stable', expo.slug === EXPECTED.slug, String(expo.slug ?? 'missing'));
@@ -46,6 +55,14 @@ check('iOS bundle identifier is stable', expo.ios?.bundleIdentifier === EXPECTED
 check('iOS build number exists', /^\d+$/.test(String(expo.ios?.buildNumber ?? '')) && Number(expo.ios.buildNumber) >= 1, String(expo.ios?.buildNumber ?? 'missing'));
 check('iOS ATS forbids arbitrary loads', expo.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsArbitraryLoads === false, JSON.stringify(expo.ios?.infoPlist?.NSAppTransportSecurity ?? null));
 check('iOS ATS does not exempt local networking', expo.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsLocalNetworking === false, JSON.stringify(expo.ios?.infoPlist?.NSAppTransportSecurity ?? null));
+
+const locationPermissions = pluginOptions('expo-location');
+const mediaPermissions = pluginOptions('expo-image-picker');
+check('foreground location disclosure is explicit and K-ssenger-specific', meaningfulPermission(locationPermissions.locationWhenInUsePermission), String(locationPermissions.locationWhenInUsePermission ?? 'missing'));
+check('photo library disclosure is explicit and K-ssenger-specific', meaningfulPermission(mediaPermissions.photosPermission), String(mediaPermissions.photosPermission ?? 'missing'));
+check('camera disclosure is explicit and K-ssenger-specific', meaningfulPermission(mediaPermissions.cameraPermission), String(mediaPermissions.cameraPermission ?? 'missing'));
+check('microphone disclosure is explicit and K-ssenger-specific', meaningfulPermission(mediaPermissions.microphonePermission), String(mediaPermissions.microphonePermission ?? 'missing'));
+
 check('Android package identifier is stable', expo.android?.package === EXPECTED.androidPackage, String(expo.android?.package ?? 'missing'));
 check('Android versionCode exists', Number.isInteger(expo.android?.versionCode) && expo.android.versionCode >= 1, String(expo.android?.versionCode ?? 'missing'));
 check('Android release backups are disabled', expo.android?.allowBackup === false, String(expo.android?.allowBackup ?? 'missing'));
