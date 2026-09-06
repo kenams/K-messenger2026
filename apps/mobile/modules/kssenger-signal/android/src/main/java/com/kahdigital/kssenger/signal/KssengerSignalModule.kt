@@ -83,6 +83,13 @@ class KssengerSignalModule : Module() {
       protocol(deviceUuid).provision(oneTimeCount)
     }
 
+    AsyncFunction("clearDeviceState") { deviceUuid: String ->
+      val context = appContext.reactContext ?: throw IllegalStateException("ANDROID_CONTEXT_UNAVAILABLE")
+      val normalized = UUID.fromString(deviceUuid).toString()
+      KeystoreBlobStore(context, "signal-device-$normalized").clearAndDestroyKey()
+      true
+    }
+
     AsyncFunction("processRemoteBundle") { payloadJson: String ->
       val payload = JSONObject(payloadJson)
       val oneTimePreKeyId = if (payload.isNull("oneTimePreKeyId")) null else payload.getInt("oneTimePreKeyId")
