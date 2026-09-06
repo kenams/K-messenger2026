@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "workspaces": ["apps/*", "packages/*"],
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
   "scripts": {
     "dev:server": "npm --workspace @kssenger/server run dev",
     "test:server": "npm --workspace @kssenger/server test",
