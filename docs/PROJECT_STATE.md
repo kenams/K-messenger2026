@@ -13,9 +13,8 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `9453f97a44c814350a4c58ee7ccd005b9a8d0150` completed CI #501 and Android E2EE Runtime #146 successfully. iOS Native Prebuild #20 failed only in its final fail-closed assertion because the workflow depended on an exact sentence in this state document; iOS native generation and V1 identity verification themselves succeeded.
-- `c39d1838078dc98c2d43246ef570d7e9347be97f` removes that brittle documentation-string dependency. The iOS gate now verifies the actual runtime contract: no iOS bridge directory/platform declaration exists, the optional native `KssengerSignalBridge` is required for readiness, a missing bridge returns `NATIVE_LIBSIGNAL_BRIDGE_MISSING`, and protocol status remains unavailable until native readiness passes.
-- CI #502, Android E2EE Runtime #147 and iOS Native Prebuild #21 are running on `c39d1838078dc98c2d43246ef570d7e9347be97f` at this verification point.
+- Head `acf650f6be815891469b3dfdc1419576246c428d` is fully GREEN: CI #503, Android E2EE Runtime #148 and iOS Native Prebuild #22 all completed successfully.
+- `d2cfb8fde430e4e1f637a4954caa76d80bde157b` adds a mandatory server regression contract tying repository migration `0019` and the live release-readiness gate to the exact account-deletion FK semantics required for V1.
 
 ## Dedicated backend only
 
@@ -34,7 +33,8 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - K-MAP block and contact-removal revocation triggers are installed live. The contact-removal `SECURITY DEFINER` function has a fixed search path and owner-only execution ACL.
 - Fresh inspection on 2026-09-06 previously confirmed exactly 29 public foreign keys target `neon_auth.user`. Internal `neon_auth` tables are provider-owned and are not part of the application FK release surface.
 - Exactly three public FKs remain deletion-blocking `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, `group_bans_banned_by_fkey`. Every other public reference is already `CASCADE` or `SET NULL`.
-- Repository migration `0019_account_delete_fk_semantics.sql` changes those three to the intended deletion-safe semantics and is CI-proven, but controlled live application is still pending.
+- Repository migration `0019_account_delete_fk_semantics.sql` changes those three to the intended deletion-safe semantics.
+- A controlled Neon temporary-branch dry-run on 2026-09-06 verified the migration schema diff exactly: `conversations.created_by` and `group_bans.banned_by` become nullable with `ON DELETE SET NULL`; `messages.sender_user_id` stays non-null and becomes `ON DELETE CASCADE`. The temporary validation branches were deleted afterward and production remained unchanged.
 - `npm run release:check-neon-live` intentionally fails until `0019` is applied live.
 
 ## Operational Premium V1 surface
@@ -64,7 +64,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Direct/group composers fail closed if native E2EE readiness is not proven.
 - Production E2EE is NOT claimed until a real two-physical-device server-mediated proof passes.
 - iOS native project generation and V1 identity generation work, but vetted native LibSignalClient parity is not implemented; iOS E2EE remains deliberately fail-closed.
-- iOS CI fail-closed validation is code-based rather than documentation-string-based as of `c39d1838`.
+- iOS CI fail-closed validation is code-based rather than documentation-string-based.
 
 ## Security invariants
 
