@@ -13,7 +13,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `430a3bdd8b05ba1bc4b7e42b948e0d0636159f29` is fully GREEN: CI #534, Android E2EE Runtime #181 and iOS Native Prebuild #53 all completed successfully.
+- Head `fa0b6f2e14261b0d81780cea8dea7a09a1079bf3` is fully GREEN: CI #541, Android E2EE Runtime #189 and iOS Native Prebuild #60 all completed successfully.
 - `f469f1b7e2ab9ef5f78fff97a253fdf669835414` adds managed Neon Auth session revalidation whenever the mobile app returns to the foreground, with refresh sequencing so an older async `getSession()` result cannot overwrite a newer auth event.
 - `98db71fa40d88bda52cf01766d98498e430fb099` makes that foreground revalidation offline-safe: transient transport failure preserves the existing persisted session instead of falsely logging the user out, while confirmed no-session/revocation still clears it.
 - `3d55f3d168a5a5a48ceaeecc8637e62d22b6dd71` locks foreground revalidation, stale-refresh race protection, offline-session preservation and listener cleanup in CI.
@@ -25,6 +25,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - `414a0789a3777020715fdb52a845f7653c41a796` removes an unsupported direct Expo config shortcut so the policy is applied only through the native manifest plugin rather than relying on an ignored field.
 - `540f30112dbe94a743a5b98fb8a3aa3156c4e399` makes the no-cleartext native policy part of the static release gate.
 - `a48a1ca0fe8d987815bed51fec0faf3640940aa9` extends Android CI to trigger on app/plugin release-security changes and verifies the generated AndroidManifest contains `usesCleartextTraffic="false"` before running libsignal instrumentation.
+- `aa4bcceebd4dcf1e85086367f646c78929f0fde2` hardens the Android Internal APK delivery workflow: it verifies the generated manifest contains both `allowBackup="false"` and `usesCleartextTraffic="false"`, generates a SHA-256 checksum for the final release APK, verifies that checksum immediately, and uploads the APK plus checksum together as one artifact.
 
 ## Dedicated backend only
 
@@ -61,7 +62,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Native push registration with metadata-only server payloads. Sensitive push fields are rejected before recipient lookup/provider delivery; sign-out revokes push state before ending auth session.
 - Account export v3.
 - Account deletion UI/server path requires password reauthentication, exact confirmation, fresh Neon token and hard-scoped Neon K-ssenger management deletion. Full in-app disposable proof waits on live `0019`. Android additionally purges deleted-account native Signal material and destroys its Keystore key after server success.
-- Android release configuration disables platform backup and explicitly forbids cleartext network traffic; both are enforced by release/Android CI gates.
+- Android release configuration disables platform backup and explicitly forbids cleartext network traffic; both are enforced by release/Android CI gates. Internal APK artifacts now ship with a verified SHA-256 manifest for integrity checks.
 - iOS release configuration explicitly forbids arbitrary ATS loads and local-network exemptions; the static release gate enforces both settings.
 
 ## E2EE
@@ -82,6 +83,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Never invent cryptography or advertise production E2EE without device proof.
 - Never expose database/provider secrets in mobile builds.
 - Android platform backup must remain disabled and cleartext network traffic must remain forbidden for the release candidate.
+- Internal Android release artifacts must include a verified SHA-256 checksum generated from the final APK.
 - iOS App Transport Security must not allow arbitrary loads or local-network exemptions in the release candidate.
 - K-MAP is explicit opt-in; no hidden permanent/background tracking.
 - Push data is allow-listed metadata only.
