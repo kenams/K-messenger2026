@@ -13,8 +13,9 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `acf650f6be815891469b3dfdc1419576246c428d` is fully GREEN: CI #503, Android E2EE Runtime #148 and iOS Native Prebuild #22 all completed successfully.
+- Head `7218702a9cc8906cf46dfa107585a7c202b0ec1f` is fully GREEN: CI #506, Android E2EE Runtime #151 and iOS Native Prebuild #25 all completed successfully.
 - `d2cfb8fde430e4e1f637a4954caa76d80bde157b` adds a mandatory server regression contract tying repository migration `0019` and the live release-readiness gate to the exact account-deletion FK semantics required for V1.
+- `f9e5e61765c55612bfb374eb7e359f568d6d8e5e` through `9de1a47bf2284f7c8eb89b9685fd8e7f029bbcea` close a local account-deletion privacy gap on Android: after a successful server deletion acknowledgement, K-ssenger now irreversibly clears the deleted account's native libsignal records and destroys their Android Keystore wrapping keys. Android fails closed before deletion if the device inventory/native purge path cannot be prepared, and CI regression coverage locks the ordering and Keystore-erasure contract.
 
 ## Dedicated backend only
 
@@ -32,7 +33,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - FORCE RLS remains enabled on `device_key_bundles`, `device_one_time_prekeys`, `device_pq_one_time_prekeys`, `device_prekey_claims`, `media_objects` and `push_subscriptions`.
 - K-MAP block and contact-removal revocation triggers are installed live. The contact-removal `SECURITY DEFINER` function has a fixed search path and owner-only execution ACL.
 - Fresh inspection on 2026-09-06 previously confirmed exactly 29 public foreign keys target `neon_auth.user`. Internal `neon_auth` tables are provider-owned and are not part of the application FK release surface.
-- Exactly three public FKs remain deletion-blocking `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, `group_bans_banned_by_fkey`. Every other public reference is already `CASCADE` or `SET NULL`.
+- Fresh live recheck on 2026-09-06 confirms the same three public FKs remain deletion-blocking `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, `group_bans_banned_by_fkey`. Every other public reference is already `CASCADE` or `SET NULL`.
 - Repository migration `0019_account_delete_fk_semantics.sql` changes those three to the intended deletion-safe semantics.
 - A controlled Neon temporary-branch dry-run on 2026-09-06 verified the migration schema diff exactly: `conversations.created_by` and `group_bans.banned_by` become nullable with `ON DELETE SET NULL`; `messages.sender_user_id` stays non-null and becomes `ON DELETE CASCADE`. The temporary validation branches were deleted afterward and production remained unchanged.
 - `npm run release:check-neon-live` intentionally fails until `0019` is applied live.
@@ -51,7 +52,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - K-MAP with explicit foreground permission, approximate/precise modes, recipient controls, revoke/Ghost Mode and database-boundary revocation on block/contact removal.
 - Native push registration with metadata-only server payloads. Sensitive push fields are rejected before recipient lookup/provider delivery; sign-out revokes push state before ending auth session.
 - Account export v3.
-- Account deletion UI/server path requires password reauthentication, exact confirmation, fresh Neon token and hard-scoped Neon K-ssenger management deletion. A historical disposable account has been successfully deleted via the current management API; full in-app disposable proof waits on live `0019`.
+- Account deletion UI/server path requires password reauthentication, exact confirmation, fresh Neon token and hard-scoped Neon K-ssenger management deletion. A historical disposable account has been successfully deleted via the current management API; full in-app disposable proof waits on live `0019`. Android now additionally purges the deleted account's native Signal identity/session/prekey material and destroys its Keystore key after server success.
 - Static release gate locks version/store identifiers, dedicated Neon endpoints, HTTPS-only public URLs, no Supabase/secret markers and iOS E2EE fail-closed status.
 
 ## E2EE
@@ -61,6 +62,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Android native Session/Identity/PreKey/SignedPreKey/KyberPreKey stores persist behind Android Keystore protected storage.
 - Android emulator runtime proof is GREEN for PQXDH/prekey establishment, one-time EC/PQ consumption, first PreKeySignalMessage, SignalMessage reply, Double Ratchet continuity and native-store recreation.
 - Android release packaging strips desktop JNI artifacts and verifies the real Android `libsignal_jni.so` is present in the assembled APK.
+- Account deletion now destroys account-scoped native libsignal records and their non-exportable Android Keystore wrapping keys after confirmed server deletion.
 - Direct/group composers fail closed if native E2EE readiness is not proven.
 - Production E2EE is NOT claimed until a real two-physical-device server-mediated proof passes.
 - iOS native project generation and V1 identity generation work, but vetted native LibSignalClient parity is not implemented; iOS E2EE remains deliberately fail-closed.
@@ -74,7 +76,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Never expose database/provider secrets in mobile builds.
 - K-MAP is explicit opt-in; no hidden permanent/background tracking.
 - Push data is allow-listed metadata only.
-- Account deletion readiness audits the full public FK surface targeting `neon_auth.user`.
+- Account deletion readiness audits the full public FK surface targeting `neon_auth.user` and must not leave account-scoped Signal secrets recoverable on the deleting Android device.
 - K-ssenger is independent from Microsoft and must not ship Microsoft branding/assets/sounds or affiliation language; retain the MSN-era social feel using original K-ssenger identity.
 
 ## Remaining Premium V1 release gates
