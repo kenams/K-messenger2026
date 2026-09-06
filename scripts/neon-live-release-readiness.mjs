@@ -3,6 +3,7 @@ import pg from 'pg';
 const DB_URL = process.env.DB_URL;
 const PROJECT_ID = process.env.KSSENGER_PROJECT_ID;
 const EXPECTED_PROJECT_ID = 'late-flower-65059830';
+const EXPECTED_PUBLIC_AUTH_FK_COUNT = 29;
 
 if (!DB_URL) throw new Error('DB_URL is required');
 if (PROJECT_ID !== EXPECTED_PROJECT_ID) {
@@ -81,7 +82,22 @@ try {
        and n.nspname = 'public'
      order by r.relname, c.conname
   `);
-  check('public account-deletion FK surface is present', fks.rows.length > 0, `count=${fks.rows.length}`);
+  check(
+    'public account-deletion FK inventory matches the reviewed V1 schema',
+    fks.rows.length === EXPECTED_PUBLIC_AUTH_FK_COUNT,
+    `count=${fks.rows.length},expected=${EXPECTED_PUBLIC_AUTH_FK_COUNT}`,
+  );
+
+  const duplicateConstraintNames = [...new Set(
+    fks.rows
+      .map((row) => row.conname)
+      .filter((name, index, all) => all.indexOf(name) !== index),
+  )];
+  check(
+    'public account-deletion FK constraint names are unique',
+    duplicateConstraintNames.length === 0,
+    duplicateConstraintNames.join(','),
+  );
 
   const blockingFks = fks.rows.filter((row) => row.confdeltype !== 'c' && row.confdeltype !== 'n');
   check(

@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - bootstrap/platform
-      - fix/feed-kmap-contact-security
+      - release/v1-hardening
     paths:
       - 'apps/mobile/**'
       - 'package.json'

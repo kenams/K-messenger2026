@@ -11,7 +11,7 @@ on:
       - '.github/workflows/android-e2ee-runtime.yml'
   push:
     branches:
-      - fix/feed-kmap-contact-security
+      - release/v1-hardening
     paths:
       - 'apps/mobile/app.json'
       - 'apps/mobile/plugins/withKssengerLibsignal.js'
