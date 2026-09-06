@@ -34,6 +34,7 @@ function withKssengerLibsignalProguard(config) {
 const SIGNAL_VERSION = '0.100.0';
 const SIGNAL_MAVEN = 'https://build-artifacts.signal.org/libraries/maven/';
 const DESUGAR_VERSION = '2.1.5';
+const SIGNAL_NON_ANDROID_RESOURCES = ['libsignal_jni*.dylib', 'signal_jni*.dll'];
 
 function addSignalRepository(contents) {
   if (contents.includes(SIGNAL_MAVEN)) return contents;
@@ -94,6 +95,37 @@ function addSignalDependencies(contents) {
   return `${contents.slice(0, insertAt)}${lines}${contents.slice(insertAt)}`;
 }
 
+function addSignalPackagingExcludes(contents) {
+  if (SIGNAL_NON_ANDROID_RESOURCES.every((resource) => contents.includes(resource))) return contents;
+
+  const resourcesBlock = [
+    '',
+    '        // libsignal-client also publishes desktop JNI resources; never package them into Android.',
+    `        resources { excludes += ${JSON.stringify(SIGNAL_NON_ANDROID_RESOURCES)} }`,
+  ].join('\n');
+
+  const packagingOptions = contents.match(/packagingOptions\s*\{/m);
+  if (packagingOptions && packagingOptions.index != null) {
+    const insertAt = packagingOptions.index + packagingOptions[0].length;
+    return `${contents.slice(0, insertAt)}${resourcesBlock}${contents.slice(insertAt)}`;
+  }
+
+  const android = contents.match(/android\s*\{/m);
+  if (!android || android.index == null) {
+    throw new Error('KSSENGER_LIBSIGNAL_ANDROID_BLOCK_NOT_FOUND');
+  }
+
+  const insertAt = android.index + android[0].length;
+  const packagingBlock = [
+    '',
+    '    packagingOptions {',
+    '        // libsignal-client also publishes desktop JNI resources; never package them into Android.',
+    `        resources { excludes += ${JSON.stringify(SIGNAL_NON_ANDROID_RESOURCES)} }`,
+    '    }',
+  ].join('\n');
+  return `${contents.slice(0, insertAt)}${packagingBlock}${contents.slice(insertAt)}`;
+}
+
 module.exports = function withKssengerLibsignal(config) {
   config = withProjectBuildGradle(config, (projectConfig) => {
     if (projectConfig.modResults.language !== 'groovy') {
@@ -109,6 +141,7 @@ module.exports = function withKssengerLibsignal(config) {
     }
     appConfig.modResults.contents = enableCoreLibraryDesugaring(appConfig.modResults.contents);
     appConfig.modResults.contents = addSignalDependencies(appConfig.modResults.contents);
+    appConfig.modResults.contents = addSignalPackagingExcludes(appConfig.modResults.contents);
     return appConfig;
   });
 
@@ -119,3 +152,4 @@ module.exports = function withKssengerLibsignal(config) {
 
 module.exports.SIGNAL_VERSION = SIGNAL_VERSION;
 module.exports.DESUGAR_VERSION = DESUGAR_VERSION;
+module.exports.SIGNAL_NON_ANDROID_RESOURCES = SIGNAL_NON_ANDROID_RESOURCES;
