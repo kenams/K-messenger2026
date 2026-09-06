@@ -7,6 +7,14 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/ios-prebuild.yml'
+  push:
+    branches:
+      - release/v1-hardening
+    paths:
+      - 'apps/mobile/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ios-prebuild.yml'
   workflow_dispatch:
 
 jobs:
