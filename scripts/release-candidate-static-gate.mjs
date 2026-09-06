@@ -6,6 +6,7 @@ const rootPackage = JSON.parse(fs.readFileSync(new URL('../package.json', import
 const mobilePackage = JSON.parse(fs.readFileSync(new URL('../apps/mobile/package.json', import.meta.url), 'utf8'));
 const serverPackage = JSON.parse(fs.readFileSync(new URL('../apps/server/package.json', import.meta.url), 'utf8'));
 const envExample = fs.readFileSync(new URL('../apps/mobile/.env.example', import.meta.url), 'utf8');
+const androidConfigPlugin = fs.readFileSync(new URL('../apps/mobile/plugins/withKssengerLibsignal.js', import.meta.url), 'utf8');
 const signalModule = JSON.parse(fs.readFileSync(new URL('../apps/mobile/modules/kssenger-signal/expo-module.config.json', import.meta.url), 'utf8'));
 const iosSignalModuleUrl = new URL('../apps/mobile/modules/kssenger-signal/ios', import.meta.url);
 
@@ -46,7 +47,7 @@ check('iOS ATS does not exempt local networking', expo.ios?.infoPlist?.NSAppTran
 check('Android package identifier is stable', expo.android?.package === EXPECTED.androidPackage, String(expo.android?.package ?? 'missing'));
 check('Android versionCode exists', Number.isInteger(expo.android?.versionCode) && expo.android.versionCode >= 1, String(expo.android?.versionCode ?? 'missing'));
 check('Android release backups are disabled', expo.android?.allowBackup === false, String(expo.android?.allowBackup ?? 'missing'));
-check('Android cleartext traffic is disabled', expo.android?.usesCleartextTraffic === false, String(expo.android?.usesCleartextTraffic ?? 'missing'));
+check('Android native plugin forbids cleartext traffic', androidConfigPlugin.includes("application.$['android:usesCleartextTraffic'] = 'false'"));
 
 const productionEnv = eas?.build?.production?.env ?? {};
 check('production Neon Auth endpoint is dedicated K-ssenger', productionEnv.EXPO_PUBLIC_NEON_AUTH_URL === EXPECTED.authUrl, String(productionEnv.EXPO_PUBLIC_NEON_AUTH_URL ?? 'missing'));
