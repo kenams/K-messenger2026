@@ -8,11 +8,13 @@ vi.mock('../src/db.js', () => ({
   query: mocks.query,
 }));
 
+const authBaseUrl = 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth';
+const authJwksUrl = `${authBaseUrl}/.well-known/jwks.json`;
+
 // mediaService.js transitively imports config.js, which parses process.env
-// eagerly at module load (schema.parse(process.env)) -- a static top-level
-// import here crashed both locally and in CI with zero env vars configured
-// (this test job sets none). Other test files avoid this by importing the
-// module under test dynamically after presetting the env; mirrored here.
+// eagerly at module load. Keep these fixtures aligned with the exact public
+// Neon Auth endpoint that production is fail-closed to, while DB/provider
+// values remain isolated test-only placeholders.
 let buildMediaPresignUrl: (objectKey: string) => string;
 let prepareMediaDownload: (
   userId: string,
@@ -22,8 +24,8 @@ let prepareMediaDownload: (
 
 beforeAll(async () => {
   process.env.DATABASE_URL ??= 'postgres://user:pass@localhost:5432/db';
-  process.env.NEON_AUTH_BASE_URL ??= 'https://example.invalid/auth';
-  process.env.NEON_AUTH_JWKS_URL ??= 'https://example.invalid/auth/.well-known/jwks.json';
+  process.env.NEON_AUTH_BASE_URL ??= authBaseUrl;
+  process.env.NEON_AUTH_JWKS_URL ??= authJwksUrl;
   process.env.CORS_ORIGIN ??= 'https://example.invalid';
   process.env.NEON_API_KEY ??= 'test-neon-api-key-0000000000';
   ({ buildMediaPresignUrl, prepareMediaDownload } = await import('../src/mediaService.js'));
