@@ -19,18 +19,21 @@ describe('mobile account deletion safety contract', () => {
     expect(accountDataSource).not.toMatch(/from\(['\"]neon_auth|delete\(\).*neon_auth/i);
   });
 
-  it('signs out and disconnects only after the server positively acknowledges deletion', () => {
+  it('purges local Signal state and signs out only after the server positively acknowledges deletion', () => {
     const ackIndex = accountDataSource.indexOf("if (!response.ok) throw new Error");
+    const purgeIndex = accountDataSource.indexOf('await purgeLocalSignalState();');
     const disconnectIndex = accountDataSource.indexOf('disconnectRealtimeSocket();');
     const signOutIndex = accountDataSource.indexOf('await getBackend().auth.signOut();');
 
     expect(ackIndex).toBeGreaterThan(-1);
-    expect(disconnectIndex).toBeGreaterThan(ackIndex);
+    expect(purgeIndex).toBeGreaterThan(ackIndex);
+    expect(disconnectIndex).toBeGreaterThan(purgeIndex);
     expect(signOutIndex).toBeGreaterThan(disconnectIndex);
   });
 
-  it('never treats a rejected provider operation as a local deletion success', () => {
+  it('fails closed when provider deletion or local protection preparation is rejected', () => {
     expect(accountDataSource).toContain('Suppression refusée.');
-    expect(accountDataSource).toContain('aucune donnée n’est effacée');
+    expect(accountDataSource).toContain('K-ssenger refuse la suppression');
+    expect(accountDataSource).toContain('plutôt que de laisser un état sensible incomplet');
   });
 });
