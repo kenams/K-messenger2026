@@ -10,11 +10,12 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - PR #2 `Security hardening + messaging reliability` is OPEN, DRAFT and mergeable. Never force-push.
 - Keep the PR draft until critical database/physical-device/E2EE gates below are proven.
 - Product release candidate is V1 `1.0.0`: Expo app version `1.0.0`, iOS build `1`, Android versionCode `1`, stable `com.kahdigital.kssenger` identifiers.
-- Root, mobile and server npm package manifests are now also aligned to `1.0.0` (`9f60bb42`, `688e44b2`, `dc198017`). `8fff12d2` makes this manifest parity mandatory in the static release gate so the repository cannot silently drift back to pre-V1 package metadata.
+- Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Previous head `1100405f1233d55b70ee512cc656dbef133cfab0` is fully GREEN in CI #496, Android E2EE Runtime #141 and iOS Native Prebuild #15.
-- On current code head `8fff12d221fa0631fc973b3a7885b3e609222565`, CI #500, Android E2EE Runtime #145 and iOS Native Prebuild #19 are running at this verification point.
+- Head `9453f97a44c814350a4c58ee7ccd005b9a8d0150` completed CI #501 and Android E2EE Runtime #146 successfully. iOS Native Prebuild #20 failed only in its final fail-closed assertion because the workflow depended on an exact sentence in this state document; iOS native generation and V1 identity verification themselves succeeded.
+- `c39d1838078dc98c2d43246ef570d7e9347be97f` removes that brittle documentation-string dependency. The iOS gate now verifies the actual runtime contract: no iOS bridge directory/platform declaration exists, the optional native `KssengerSignalBridge` is required for readiness, a missing bridge returns `NATIVE_LIBSIGNAL_BRIDGE_MISSING`, and protocol status remains unavailable until native readiness passes.
+- CI #502, Android E2EE Runtime #147 and iOS Native Prebuild #21 are running on `c39d1838078dc98c2d43246ef570d7e9347be97f` at this verification point.
 
 ## Dedicated backend only
 
@@ -31,8 +32,8 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - All 26 public tables have RLS enabled.
 - FORCE RLS remains enabled on `device_key_bundles`, `device_one_time_prekeys`, `device_pq_one_time_prekeys`, `device_prekey_claims`, `media_objects` and `push_subscriptions`.
 - K-MAP block and contact-removal revocation triggers are installed live. The contact-removal `SECURITY DEFINER` function has a fixed search path and owner-only execution ACL.
-- Fresh inspection on 2026-09-06 confirms exactly 29 **public** foreign keys target `neon_auth.user`. Internal `neon_auth` tables add separate provider-owned references and are not part of the application FK release surface.
-- Exactly three public FKs are still deletion-blocking `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, `group_bans_banned_by_fkey`. Every other public reference is already `CASCADE` or `SET NULL`.
+- Fresh inspection on 2026-09-06 previously confirmed exactly 29 public foreign keys target `neon_auth.user`. Internal `neon_auth` tables are provider-owned and are not part of the application FK release surface.
+- Exactly three public FKs remain deletion-blocking `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, `group_bans_banned_by_fkey`. Every other public reference is already `CASCADE` or `SET NULL`.
 - Repository migration `0019_account_delete_fk_semantics.sql` changes those three to the intended deletion-safe semantics and is CI-proven, but controlled live application is still pending.
 - `npm run release:check-neon-live` intentionally fails until `0019` is applied live.
 
@@ -62,7 +63,8 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Android release packaging strips desktop JNI artifacts and verifies the real Android `libsignal_jni.so` is present in the assembled APK.
 - Direct/group composers fail closed if native E2EE readiness is not proven.
 - Production E2EE is NOT claimed until a real two-physical-device server-mediated proof passes.
-- iOS native project generation is green, but vetted native LibSignalClient parity is not implemented; iOS E2EE remains deliberately fail-closed.
+- iOS native project generation and V1 identity generation work, but vetted native LibSignalClient parity is not implemented; iOS E2EE remains deliberately fail-closed.
+- iOS CI fail-closed validation is code-based rather than documentation-string-based as of `c39d1838`.
 
 ## Security invariants
 
