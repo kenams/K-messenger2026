@@ -13,15 +13,17 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `b8ed8faecadb89ed418295d4c92abb3322e5300f` is fully GREEN: CI #517, Android E2EE Runtime #164 and iOS Native Prebuild #36 all completed successfully.
+- Head `8bd0ceaf7107918dabf16ad0d4c74a40fb1c1e9a` is fully GREEN: CI #522, Android E2EE Runtime #169 and iOS Native Prebuild #41 all completed successfully.
 - `3c9a99e574f4fc8d0efb68f9c950b6ebd46d22b0` closes a group privacy bypass at creation time: block checks now cover every proposed participant pair, not only owner-versus-invitee pairs, so two users who blocked each other cannot be placed together through initial group creation.
 - `9b669054441703aeb59a56036e3460f5cab52d6d` adds a mandatory regression contract for the all-participant group-block invariant and preserves the existing post-creation invite block protection.
 - `27b9818b5c8a171c2d55b12899a8a87be240eb7e` bounds the in-memory rate-limiter key space, periodically reclaims expired buckets and fails closed when live capacity is exhausted; this prevents unbounded key growth on a long-lived realtime server without relaxing any V1 quota.
 - `55d636baaad8398c7a162c3b3f903785c6c4afde` adds regression tests for quota enforcement, expired-capacity reclamation and fail-closed capacity exhaustion. CI #520 exposed that this file incorrectly used Node's test runner under Vitest even though all three assertions themselves passed.
-- `a9a5ecd513656b31c2948d87b4451779ad99982e` fixes that test-runner mismatch by expressing the rate-limiter lifecycle contract as a native Vitest suite. CI #521, Android E2EE Runtime #168 and iOS Native Prebuild #40 are running on this correction.
+- `a9a5ecd513656b31c2948d87b4451779ad99982e` fixes that test-runner mismatch by expressing the rate-limiter lifecycle contract as a native Vitest suite.
 - `f7ca62ad71da29bc7d43d84488562e4c55019094` fixes the account-deletion client regression contract without weakening deletion behavior. The test proves the actual invariant: positive server ACK precedes local Signal purge, disconnect and sign-out, while any provider/local-protection rejection remains fail-closed.
 - `d2cfb8fde430e4e1f637a4954caa76d80bde157b` adds a mandatory server regression contract tying repository migration `0019` and the live release-readiness gate to the exact account-deletion FK semantics required for V1.
 - `f9e5e61765c55612bfb374eb7e359f568d6d8e5e` through `9de1a47bf2284f7c8eb89b9685fd8e7f029bbcea` close a local account-deletion privacy gap on Android: after a successful server deletion acknowledgement, K-ssenger irreversibly clears the deleted account's native libsignal records and destroys their Android Keystore wrapping keys. Android fails closed before deletion if the device inventory/native purge path cannot be prepared, and CI regression coverage locks the ordering and Keystore-erasure contract.
+- `f469f1b7e2ab9ef5f78fff97a253fdf669835414` hardens persisted mobile auth: K-ssenger re-checks the managed Neon Auth session whenever the app returns to the foreground, so a stale in-memory login cannot silently survive remote revocation or long suspension. Refresh sequencing prevents an older async `getSession()` result from overwriting a newer auth event.
+- `81c34aa679aba0b056a9e5ea65c96a73a73ff72b` adds a mandatory client contract for foreground session revalidation, stale-refresh race protection and listener cleanup. CI #524, Android E2EE Runtime #171 and iOS Native Prebuild #43 are running on this head at this verification point.
 
 ## Dedicated backend only
 
@@ -46,7 +48,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 
 ## Operational Premium V1 surface
 
-- Real email/password Neon Auth registration, login and persisted session.
+- Real email/password Neon Auth registration, login and persisted session. Persisted mobile auth is revalidated against Neon Auth on app foreground rather than trusting a stale suspended-session snapshot.
 - Username, display name, status, bio/music and authorization-aware private avatar media.
 - Contacts search/request/accept/decline/cancel/remove/favorite/block/unblock.
 - Authenticated presence and K-Pulse/Wizz behavior.
@@ -84,6 +86,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Push data is allow-listed metadata only.
 - Blocking must not be bypassable through direct chat, initial group creation, later group invitation, presence, K-Pulse or K-MAP.
 - Realtime rate limiting must remain bounded in memory and fail closed if live key capacity is exhausted.
+- Persisted mobile authentication must be revalidated on foreground and stale refreshes must never overwrite a newer auth event.
 - Account deletion readiness audits the full public FK surface targeting `neon_auth.user` and must not leave account-scoped Signal secrets recoverable on the deleting Android device.
 - K-ssenger is independent from Microsoft and must not ship Microsoft branding/assets/sounds or affiliation language; retain the MSN-era social feel using original K-ssenger identity.
 
