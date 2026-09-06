@@ -1,0 +1,56 @@
+name: iOS Native Prebuild
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ios-prebuild.yml'
+  workflow_dispatch:
+
+jobs:
+  prebuild-ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      CI: '1'
+      NODE_ENV: production
+      EXPO_PUBLIC_NEON_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
+      EXPO_PUBLIC_NEON_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
+      EXPO_PUBLIC_KSSENGER_SOCKET_URL: https://kssenger-server.onrender.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Gate release candidate configuration
+        run: npm run release:check-static
+
+      - name: Generate iOS native project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform ios --clean --non-interactive
+
+      - name: Verify generated iOS V1 identity
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          test -f ios/Podfile
+          test -d ios/*.xcodeproj
+          grep -R -F 'com.kahdigital.kssenger' ios --include='project.pbxproj'
+          xcodebuild -list -project ios/*.xcodeproj >/tmp/kssenger-ios-project.txt
+
+      - name: Enforce iOS E2EE fail-closed until vetted native parity exists
+        run: |
+          set -euo pipefail
+          test ! -d apps/mobile/modules/kssenger-signal/ios
+          node -e "const c=require('./apps/mobile/modules/kssenger-signal/expo-module.config.json'); if ((c.platforms||[]).includes('ios')) process.exit(1)"
+          grep -F 'iOS native libsignal parity is still absent; iOS remains fail-closed.' docs/PROJECT_STATE.md
