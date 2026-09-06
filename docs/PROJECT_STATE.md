@@ -22,8 +22,9 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - `f7ca62ad71da29bc7d43d84488562e4c55019094` fixes the account-deletion client regression contract without weakening deletion behavior. The test proves the actual invariant: positive server ACK precedes local Signal purge, disconnect and sign-out, while any provider/local-protection rejection remains fail-closed.
 - `d2cfb8fde430e4e1f637a4954caa76d80bde157b` adds a mandatory server regression contract tying repository migration `0019` and the live release-readiness gate to the exact account-deletion FK semantics required for V1.
 - `f9e5e61765c55612bfb374eb7e359f568d6d8e5e` through `9de1a47bf2284f7c8eb89b9685fd8e7f029bbcea` close a local account-deletion privacy gap on Android: after a successful server deletion acknowledgement, K-ssenger irreversibly clears the deleted account's native libsignal records and destroys their Android Keystore wrapping keys. Android fails closed before deletion if the device inventory/native purge path cannot be prepared, and CI regression coverage locks the ordering and Keystore-erasure contract.
-- `f469f1b7e2ab9ef5f78fff97a253fdf669835414` hardens persisted mobile auth: K-ssenger re-checks the managed Neon Auth session whenever the app returns to the foreground, so a stale in-memory login cannot silently survive remote revocation or long suspension. Refresh sequencing prevents an older async `getSession()` result from overwriting a newer auth event.
-- `81c34aa679aba0b056a9e5ea65c96a73a73ff72b` adds a mandatory client contract for foreground session revalidation, stale-refresh race protection and listener cleanup. CI #524, Android E2EE Runtime #171 and iOS Native Prebuild #43 are running on this head at this verification point.
+- `f469f1b7e2ab9ef5f78fff97a253fdf669835414` adds managed Neon Auth session revalidation whenever the mobile app returns to the foreground, with refresh sequencing so an older async `getSession()` result cannot overwrite a newer auth event.
+- `98db71fa40d88bda52cf01766d98498e430fb099` makes that foreground revalidation offline-safe: a transient network/auth transport failure preserves the existing persisted session instead of falsely logging the user out, while a successful authenticated response with no session or an explicit auth-state event still clears it.
+- `3d55f3d168a5a5a48ceaeecc8637e62d22b6dd71` updates the mandatory client regression contract for foreground revalidation, stale-refresh race protection, offline-session preservation and listener cleanup. CI #527 and Android E2EE Runtime #174 are in progress; iOS Native Prebuild #46 is queued at this verification point.
 
 ## Dedicated backend only
 
@@ -48,7 +49,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 
 ## Operational Premium V1 surface
 
-- Real email/password Neon Auth registration, login and persisted session. Persisted mobile auth is revalidated against Neon Auth on app foreground rather than trusting a stale suspended-session snapshot.
+- Real email/password Neon Auth registration, login and persisted session. Persisted mobile auth is revalidated against Neon Auth on app foreground; transient offline failures preserve the existing session while confirmed no-session/revocation events still clear it.
 - Username, display name, status, bio/music and authorization-aware private avatar media.
 - Contacts search/request/accept/decline/cancel/remove/favorite/block/unblock.
 - Authenticated presence and K-Pulse/Wizz behavior.
@@ -86,7 +87,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Push data is allow-listed metadata only.
 - Blocking must not be bypassable through direct chat, initial group creation, later group invitation, presence, K-Pulse or K-MAP.
 - Realtime rate limiting must remain bounded in memory and fail closed if live key capacity is exhausted.
-- Persisted mobile authentication must be revalidated on foreground and stale refreshes must never overwrite a newer auth event.
+- Persisted mobile authentication must be revalidated on foreground, stale refreshes must never overwrite a newer auth event, and transient offline failures must not falsely log the user out.
 - Account deletion readiness audits the full public FK surface targeting `neon_auth.user` and must not leave account-scoped Signal secrets recoverable on the deleting Android device.
 - K-ssenger is independent from Microsoft and must not ship Microsoft branding/assets/sounds or affiliation language; retain the MSN-era social feel using original K-ssenger identity.
 
