@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { withProjectBuildGradle, withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
+const { withProjectBuildGradle, withAppBuildGradle, withAndroidManifest, withDangerousMod } = require('expo/config-plugins');
 
 // CRITICAL FIX (2026-09-05): the release APK build (EAS "preview" profile)
 // runs R8/ProGuard minification with zero keep rules for libsignal or the
@@ -126,6 +126,16 @@ function addSignalPackagingExcludes(contents) {
   return `${contents.slice(0, insertAt)}${packagingBlock}${contents.slice(insertAt)}`;
 }
 
+function withKssengerNetworkSecurity(config) {
+  return withAndroidManifest(config, (manifestConfig) => {
+    const application = manifestConfig.modResults.manifest.application?.[0];
+    if (!application) throw new Error('KSSENGER_ANDROID_APPLICATION_MANIFEST_MISSING');
+    application.$ = application.$ || {};
+    application.$['android:usesCleartextTraffic'] = 'false';
+    return manifestConfig;
+  });
+}
+
 module.exports = function withKssengerLibsignal(config) {
   config = withProjectBuildGradle(config, (projectConfig) => {
     if (projectConfig.modResults.language !== 'groovy') {
@@ -145,6 +155,7 @@ module.exports = function withKssengerLibsignal(config) {
     return appConfig;
   });
 
+  config = withKssengerNetworkSecurity(config);
   config = withKssengerLibsignalProguard(config);
 
   return config;
