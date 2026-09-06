@@ -19,6 +19,8 @@ jobs:
         run: node scripts/no-supabase-runtime-gate.mjs
       - name: Gate mobile secret surface
         run: node scripts/mobile-secret-surface-gate.mjs
+      - name: Gate V1 release candidate static configuration
+        run: npm run release:check-static
       - name: Gate high-severity runtime dependency advisories
         run: node scripts/runtime-audit-gate.mjs
       - run: npm run typecheck
