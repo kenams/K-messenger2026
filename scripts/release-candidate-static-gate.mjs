@@ -41,6 +41,8 @@ check('server package version matches release', serverPackage.version === EXPECT
 check('runtime version follows app version', expo.runtimeVersion?.policy === 'appVersion', JSON.stringify(expo.runtimeVersion ?? null));
 check('iOS bundle identifier is stable', expo.ios?.bundleIdentifier === EXPECTED.bundleIdentifier, String(expo.ios?.bundleIdentifier ?? 'missing'));
 check('iOS build number exists', /^\d+$/.test(String(expo.ios?.buildNumber ?? '')) && Number(expo.ios.buildNumber) >= 1, String(expo.ios?.buildNumber ?? 'missing'));
+check('iOS ATS forbids arbitrary loads', expo.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsArbitraryLoads === false, JSON.stringify(expo.ios?.infoPlist?.NSAppTransportSecurity ?? null));
+check('iOS ATS does not exempt local networking', expo.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsLocalNetworking === false, JSON.stringify(expo.ios?.infoPlist?.NSAppTransportSecurity ?? null));
 check('Android package identifier is stable', expo.android?.package === EXPECTED.androidPackage, String(expo.android?.package ?? 'missing'));
 check('Android versionCode exists', Number.isInteger(expo.android?.versionCode) && expo.android.versionCode >= 1, String(expo.android?.versionCode ?? 'missing'));
 check('Android release backups are disabled', expo.android?.allowBackup === false, String(expo.android?.allowBackup ?? 'missing'));
