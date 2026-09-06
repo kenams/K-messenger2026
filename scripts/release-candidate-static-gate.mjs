@@ -6,6 +6,7 @@ const rootPackage = JSON.parse(fs.readFileSync(new URL('../package.json', import
 const mobilePackage = JSON.parse(fs.readFileSync(new URL('../apps/mobile/package.json', import.meta.url), 'utf8'));
 const serverPackage = JSON.parse(fs.readFileSync(new URL('../apps/server/package.json', import.meta.url), 'utf8'));
 const envExample = fs.readFileSync(new URL('../apps/mobile/.env.example', import.meta.url), 'utf8');
+const serverConfig = fs.readFileSync(new URL('../apps/server/src/config.ts', import.meta.url), 'utf8');
 const androidConfigPlugin = fs.readFileSync(new URL('../apps/mobile/plugins/withKssengerLibsignal.js', import.meta.url), 'utf8');
 const signalModule = JSON.parse(fs.readFileSync(new URL('../apps/mobile/modules/kssenger-signal/expo-module.config.json', import.meta.url), 'utf8'));
 const iosSignalModuleUrl = new URL('../apps/mobile/modules/kssenger-signal/ios', import.meta.url);
@@ -55,6 +56,13 @@ check('production Neon Data API endpoint is dedicated K-ssenger', productionEnv.
 check('production realtime endpoint is K-ssenger', productionEnv.EXPO_PUBLIC_KSSENGER_SOCKET_URL === EXPECTED.socketUrl, String(productionEnv.EXPO_PUBLIC_KSSENGER_SOCKET_URL ?? 'missing'));
 check('production build is not a development client', eas?.build?.production?.developmentClient !== true);
 check('production build does not request internal distribution', eas?.build?.production?.distribution !== 'internal');
+
+check('server pins dedicated K-ssenger Neon Auth base URL',
+  serverConfig.includes(`KSSENGER_NEON_AUTH_BASE_URL = '${EXPECTED.authUrl}'`)
+  && serverConfig.includes('NEON_AUTH_BASE_URL: z.literal(KSSENGER_NEON_AUTH_BASE_URL)'));
+check('server pins JWKS to the same dedicated K-ssenger Auth endpoint',
+  serverConfig.includes('KSSENGER_NEON_AUTH_JWKS_URL = `${KSSENGER_NEON_AUTH_BASE_URL}/.well-known/jwks.json`')
+  && serverConfig.includes('NEON_AUTH_JWKS_URL: z.literal(KSSENGER_NEON_AUTH_JWKS_URL)'));
 
 const forbidden = [
   /SUPABASE_/i,
