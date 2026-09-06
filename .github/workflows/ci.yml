@@ -21,6 +21,8 @@ jobs:
         run: node scripts/mobile-secret-surface-gate.mjs
       - name: Gate V1 release candidate static configuration
         run: npm run release:check-static
+      - name: Validate live release-readiness tooling syntax
+        run: node --check scripts/neon-live-release-readiness.mjs
       - name: Gate high-severity runtime dependency advisories
         run: node scripts/runtime-audit-gate.mjs
       - run: npm run typecheck
