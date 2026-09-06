@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const authBaseUrl = 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth';
+const authJwksUrl = `${authBaseUrl}/.well-known/jwks.json`;
+
 async function importModule() {
   vi.resetModules();
   vi.stubEnv('DATABASE_URL', 'postgresql://user:password@db.example/kssenger?sslmode=require');
-  vi.stubEnv('NEON_AUTH_BASE_URL', 'https://auth.example/kssenger/auth');
-  vi.stubEnv('NEON_AUTH_JWKS_URL', 'https://auth.example/kssenger/auth/.well-known/jwks.json');
+  vi.stubEnv('NEON_AUTH_BASE_URL', authBaseUrl);
+  vi.stubEnv('NEON_AUTH_JWKS_URL', authJwksUrl);
   vi.stubEnv('CORS_ORIGIN', 'http://localhost:8081');
   return import('../src/accountDeletion.js');
 }
