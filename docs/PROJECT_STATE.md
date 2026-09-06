@@ -56,6 +56,10 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `f4d9c4ddd50b01c491ffa303dfb2361a5f67c4f4` aligns Android release packaging with upstream libsignal guidance by excluding the macOS `libsignal_jni*.dylib` and Windows `signal_jni*.dll` resources from the generated Android app while retaining the official `0.100.0` Android runtime.
 - `f1bc73c0e470e299d9d5aa9ad3549bf806e7b9b5` makes the Android internal-release workflow verify those exclusions survive Expo prebuild before APK assembly; `d6f94878a34da0e0f1cb1008b61556bd650a9483` adds a mandatory regression contract for the packaging rule.
 - `b67538af501ed26c77e12332484f1f12baa3a631` extends the Android release workflow to inspect the assembled APK itself: desktop libsignal JNI artifacts fail the build and the Android `libsignal_jni.so` runtime must actually be present. `53443c117aa42ec7995f70f23bd3ed7c869ab5d1` locks that final-artifact inspection in the regression suite.
+- `3737985f90b147d8382087da1d515d56371a511d` is fully GREEN in CI #492, Android E2EE Runtime #137 and iOS Native Prebuild #11.
+- `08c034108a4d2d15929eab40120e8626808fb709` makes push privacy a runtime invariant rather than a convention: Expo payload metadata is allow-listed and bounded, and plaintext/ciphertext/auth-token/private-key/session markers are rejected before recipient lookup or provider delivery.
+- `7d74ea68d8044c75f231a5f2839824dc5a9cc69f` adds regression tests proving sensitive or unapproved push metadata never reaches the database lookup or Expo provider.
+- `6460d1ac6ce888ebae9b0092d24b6a6fd6d30dc9` adds a mobile sign-out privacy contract proving push subscription deletion/native unregister/dismissal happens before auth sign-out and fails closed if neither revocation route succeeds. CI #495, Android E2EE Runtime #140 and iOS Native Prebuild #14 are running at this verification point.
 
 ## Live Neon surface
 
@@ -81,10 +85,10 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 - Authenticated realtime presence and K-Pulse/Wizz behavior.
 - Direct conversations with native-libsignal encrypted multi-device envelopes, delivery/read receipts and reconnect history synchronization. No plaintext transport fallback.
 - Groups with create/invite/remove/roles/leave/ownership transfer plus mute/ban/unban and moderator ban listing.
-- K-Feed vertical video backed by real Neon rows and verified private media.
-- Moments backed by real expiring Neon rows and verified private photo/video media.
+- K-Feed vertical video backed by real Neon rows and verified private media, with server age gating, sensitive-content warning and user reporting into moderation.
+- Moments backed by real expiring Neon rows and verified private photo/video media, with visibility/moderation/reporting controls.
 - K-MAP with explicit foreground permission, approximate/precise sharing, recipient controls, revoke, Ghost Mode, block-time revocation and contact-removal revocation.
-- Native push registration and metadata-only server push payloads.
+- Native push registration plus server-enforced metadata-only push payloads; sign-out revokes account/native push state before ending the authenticated session.
 - Account export v3.
 - Account deletion UI/server route with password reauthentication, fresh Neon token and provider scope hard-coded to the dedicated K-ssenger project/branch. Repository deletion semantics are FK-safe; controlled live migration + disposable in-app proof remain open.
 - Release candidate metadata is `1.0.0` and an Android internal release APK can be produced by CI.
@@ -109,6 +113,8 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 - RLS/authorization must never be weakened to unblock UX.
 - Mobile builds must never contain database/provider secrets.
 - Plaintext, auth tokens, private keys and Signal session records must never be logged.
+- Push notifications are metadata-only: only approved routing identifiers may leave the server in Expo data payloads, with sensitive-content markers rejected before delivery.
+- Signing out must revoke the account push subscription or native notification token before the authenticated session is ended.
 - No invented cryptography.
 - K-MAP is explicit opt-in; no hidden background/permanent tracking.
 - Blocking or removing a contact revokes active direct K-MAP shares at the database boundary.
