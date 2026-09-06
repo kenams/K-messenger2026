@@ -1,18 +1,19 @@
-# K-ssenger — Architecture cible
+# K-ssenger - Target Architecture
 
-## Principe
-K-ssenger est une messagerie sociale mobile où l'identité MSN 2027 reste visible, mais où la sécurité, la fiabilité et la confidentialité sont modernes.
+## Principle
 
-## Monorepo cible
+K-ssenger is an independently branded social mobile messenger with nostalgic instant-messaging behavior, modern security and strong privacy controls. It must not imply affiliation with Microsoft or reuse Microsoft assets.
+
+## Monorepo
 
 ```text
 apps/
   mobile/              React Native + Expo Dev Build
   server/              Node.js + TypeScript + Socket.IO
 packages/
-  contracts/           DTO réseau partagés, ciphertext-only pour messages privés
-  config/              configuration non secrète partagée
-  ui/                   design tokens/composants partageables si utile
+  contracts/           shared network DTOs, ciphertext-only private messages
+  config/              shared non-secret configuration
+  ui/                  reusable tokens/components when useful
 docs/
   PRODUCT_VISION.md
   UX_SPEC.md
@@ -20,49 +21,56 @@ docs/
   SECURITY_MODEL.md
   ACCEPTANCE_TESTS.md
   PROJECT_STATE.md
-supabase/
+neon/
   migrations/
 ```
 
-Le code local existant d'Agent-Kah doit être importé plutôt que réécrit. Les historiques Git locaux peuvent être conservés via branches/imports avant fusion.
+Historical Supabase migrations remain in the repository only as legacy project history until they can be safely archived. They are not the target runtime backend.
 
 ## Mobile
 
-Domaines : auth, onboarding, profiles, contacts, presence, conversations, messages, crypto, realtime, notifications, media, calls, kmap, moments, communities, moderation, settings, storage.
+Domains: auth, onboarding, profiles, contacts, presence, conversations, messages, crypto, realtime, notifications, media, calls, K-MAP, Moments, moderation and settings.
 
-Secrets cryptographiques : Keychain/Keystore uniquement. AsyncStorage ne contient jamais de clé privée, recovery key ou secret de session E2EE.
+Cryptographic secrets: Keychain/Keystore only. AsyncStorage never stores a private key, recovery key or E2EE session secret.
 
 ## Backend
 
-Domaines : auth, users, devices, contacts, blocks, presence, conversations, messages, realtime, notifications, attachments, calls, location-sharing, moderation, security, jobs.
+Domains: auth, users, devices, contacts, blocks, presence, conversations, messages, realtime, notifications, attachments, calls, location-sharing, moderation, security and jobs.
 
-Le serveur connaît l'identité authentifiée, les autorisations et les métadonnées nécessaires au service. Il ne reçoit jamais le plaintext des messages E2EE.
+The server knows the authenticated identity, authorization state and service metadata needed to operate K-ssenger. It never receives private-message plaintext.
 
-## Supabase
+Socket.IO authentication verifies Neon Auth JWTs with JWKS. The server derives `userId` from the verified token and never trusts a client-provided identity.
 
-Tables principales : profiles, devices, contacts, contact_requests, blocks, conversations, conversation_members, messages, message_recipients, attachments, push_tokens, privacy_settings, user_settings, reports, moderation_actions.
+## Database
 
-K-MAP ajoute : location_shares, meetup_sessions, meetup_members. Les positions temps réel doivent être éphémères autant que possible. Pas d'historique de déplacement par défaut.
+Dedicated backend: Neon/Lakebase Postgres project `K-ssenger` only.
+
+Core tables: `profiles`, `privacy_settings`, `contacts`, `contact_requests`, `blocks`, `conversations`, `conversation_members`, `devices`, `messages`, `message_receipts`.
+
+Client-facing data access uses Neon Auth/Data API with RLS. Server-side runtime access uses parameterized SQL and server-side authorization checks before every sensitive operation.
 
 ## Realtime
 
-Chaque socket est authentifié. Le userId provient du JWT vérifié, jamais d'un payload client. Chaque action vérifie membership, device ownership, blocage et politique de confidentialité.
+Each socket is authenticated. Every action checks membership, device ownership, block state and privacy policy as applicable.
 
-## Environnements
+K-Pulse is the public attention feature. Legacy Wizz naming can remain temporarily only inside protocol compatibility code until migrated.
 
-local / development / staging / production séparés. HTTPS/WSS uniquement hors local. Aucun secret dans EXPO_PUBLIC_*.
+## Environments
 
-## Ordre d'intégration
+Local, development, staging and production must be separated. HTTPS/WSS only outside local development. No secret goes into `EXPO_PUBLIC_*`.
 
-1. Import code Agent-Kah
-2. Auth/AuthZ/RLS
-3. Contacts + présence
-4. E2EE 1:1 reconnu/auditable
-5. Chat fiable/offline
-6. Wizz
-7. Push
-8. Pièces jointes E2EE
-9. K-MAP sécurisé
-10. Groupes/appels
-11. Moments/Communautés
-12. Store hardening/release
+## Integration Order
+
+1. Neon Auth/AuthZ/RLS
+2. Contacts + presence
+3. K-Pulse
+4. reliable private chat and offline replay
+5. groups
+6. recognized/auditable E2EE on devices
+7. push
+8. encrypted attachments
+9. secure K-MAP
+10. K-Feed + Moments
+11. calls
+12. moderation/export/delete account
+13. store hardening/release

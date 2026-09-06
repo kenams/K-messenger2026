@@ -1,0 +1,119 @@
+import fs from 'node:fs';
+
+const app = JSON.parse(fs.readFileSync(new URL('../apps/mobile/app.json', import.meta.url), 'utf8'));
+const eas = JSON.parse(fs.readFileSync(new URL('../apps/mobile/eas.json', import.meta.url), 'utf8'));
+const rootPackage = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const mobilePackage = JSON.parse(fs.readFileSync(new URL('../apps/mobile/package.json', import.meta.url), 'utf8'));
+const serverPackage = JSON.parse(fs.readFileSync(new URL('../apps/server/package.json', import.meta.url), 'utf8'));
+const envExample = fs.readFileSync(new URL('../apps/mobile/.env.example', import.meta.url), 'utf8');
+const serverConfig = fs.readFileSync(new URL('../apps/server/src/config.ts', import.meta.url), 'utf8');
+const androidConfigPlugin = fs.readFileSync(new URL('../apps/mobile/plugins/withKssengerLibsignal.js', import.meta.url), 'utf8');
+const signalModule = JSON.parse(fs.readFileSync(new URL('../apps/mobile/modules/kssenger-signal/expo-module.config.json', import.meta.url), 'utf8'));
+const iosSignalModuleUrl = new URL('../apps/mobile/modules/kssenger-signal/ios', import.meta.url);
+
+const EXPECTED = Object.freeze({
+  appName: 'K-ssenger',
+  slug: 'k-ssenger',
+  scheme: 'kssenger',
+  version: '1.0.0',
+  bundleIdentifier: 'com.kahdigital.kssenger',
+  androidPackage: 'com.kahdigital.kssenger',
+  authUrl: 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth',
+  authAudience: 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech',
+  dataApiUrl: 'https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1',
+  socketUrl: 'https://kssenger-server.onrender.com',
+});
+
+let failed = 0;
+function check(name, ok, detail = '') {
+  if (ok) console.log(`PASS  ${name}`);
+  else {
+    failed += 1;
+    console.error(`FAIL  ${name}${detail ? `  ${detail}` : ''}`);
+  }
+}
+
+function pluginOptions(name) {
+  const entry = (app?.expo?.plugins ?? []).find((plugin) => Array.isArray(plugin) && plugin[0] === name);
+  return Array.isArray(entry) && entry[1] && typeof entry[1] === 'object' ? entry[1] : {};
+}
+
+function meaningfulPermission(value) {
+  return typeof value === 'string' && value.trim().length >= 24 && /K-ssenger/.test(value);
+}
+
+const expo = app?.expo ?? {};
+check('release app name is K-ssenger', expo.name === EXPECTED.appName, String(expo.name ?? 'missing'));
+check('release slug is stable', expo.slug === EXPECTED.slug, String(expo.slug ?? 'missing'));
+check('deep-link scheme is stable', expo.scheme === EXPECTED.scheme, String(expo.scheme ?? 'missing'));
+check('mobile release version is 1.0.0', expo.version === EXPECTED.version, String(expo.version ?? 'missing'));
+check('mobile release runtime is explicitly Hermes', expo.jsEngine === 'hermes', String(expo.jsEngine ?? 'missing'));
+check('root package version matches release', rootPackage.version === EXPECTED.version, String(rootPackage.version ?? 'missing'));
+check('mobile package version matches release', mobilePackage.version === EXPECTED.version, String(mobilePackage.version ?? 'missing'));
+check('server package version matches release', serverPackage.version === EXPECTED.version, String(serverPackage.version ?? 'missing'));
+check('runtime version follows app version', expo.runtimeVersion?.policy === 'appVersion', JSON.stringify(expo.runtimeVersion ?? null));
+check('iOS bundle identifier is stable', expo.ios?.bundleIdentifier === EXPECTED.bundleIdentifier, String(expo.ios?.bundleIdentifier ?? 'missing'));
+check('iOS build number exists', /^\d+$/.test(String(expo.ios?.buildNumber ?? '')) && Number(expo.ios.buildNumber) >= 1, String(expo.ios?.buildNumber ?? 'missing'));
+check('iOS ATS forbids arbitrary loads', expo.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsArbitraryLoads === false, JSON.stringify(expo.ios?.infoPlist?.NSAppTransportSecurity ?? null));
+check('iOS ATS does not exempt local networking', expo.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsLocalNetworking === false, JSON.stringify(expo.ios?.infoPlist?.NSAppTransportSecurity ?? null));
+check('iOS release does not request always-on location',
+  !('NSLocationAlwaysUsageDescription' in (expo.ios?.infoPlist ?? {}))
+  && !('NSLocationAlwaysAndWhenInUseUsageDescription' in (expo.ios?.infoPlist ?? {})),
+  JSON.stringify(expo.ios?.infoPlist ?? null));
+
+const locationPermissions = pluginOptions('expo-location');
+const mediaPermissions = pluginOptions('expo-image-picker');
+check('foreground location disclosure is explicit and K-ssenger-specific', meaningfulPermission(locationPermissions.locationWhenInUsePermission), String(locationPermissions.locationWhenInUsePermission ?? 'missing'));
+check('photo library disclosure is explicit and K-ssenger-specific', meaningfulPermission(mediaPermissions.photosPermission), String(mediaPermissions.photosPermission ?? 'missing'));
+check('camera disclosure is explicit and K-ssenger-specific', meaningfulPermission(mediaPermissions.cameraPermission), String(mediaPermissions.cameraPermission ?? 'missing'));
+check('microphone disclosure is explicit and K-ssenger-specific', meaningfulPermission(mediaPermissions.microphonePermission), String(mediaPermissions.microphonePermission ?? 'missing'));
+
+check('Android package identifier is stable', expo.android?.package === EXPECTED.androidPackage, String(expo.android?.package ?? 'missing'));
+check('Android versionCode exists', Number.isInteger(expo.android?.versionCode) && expo.android.versionCode >= 1, String(expo.android?.versionCode ?? 'missing'));
+check('Android release backups are disabled', expo.android?.allowBackup === false, String(expo.android?.allowBackup ?? 'missing'));
+check('Android background location is explicitly blocked for K-MAP',
+  Array.isArray(expo.android?.blockedPermissions)
+  && expo.android.blockedPermissions.includes('android.permission.ACCESS_BACKGROUND_LOCATION'),
+  JSON.stringify(expo.android?.blockedPermissions ?? null));
+check('Android native plugin forbids cleartext traffic', androidConfigPlugin.includes("application.$['android:usesCleartextTraffic'] = 'false'"));
+
+const productionEnv = eas?.build?.production?.env ?? {};
+check('production Neon Auth endpoint is dedicated K-ssenger', productionEnv.EXPO_PUBLIC_NEON_AUTH_URL === EXPECTED.authUrl, String(productionEnv.EXPO_PUBLIC_NEON_AUTH_URL ?? 'missing'));
+check('production Neon Data API endpoint is dedicated K-ssenger', productionEnv.EXPO_PUBLIC_NEON_DATA_API_URL === EXPECTED.dataApiUrl, String(productionEnv.EXPO_PUBLIC_NEON_DATA_API_URL ?? 'missing'));
+check('production realtime endpoint is K-ssenger', productionEnv.EXPO_PUBLIC_KSSENGER_SOCKET_URL === EXPECTED.socketUrl, String(productionEnv.EXPO_PUBLIC_KSSENGER_SOCKET_URL ?? 'missing'));
+check('production build is not a development client', eas?.build?.production?.developmentClient !== true);
+check('production build does not request internal distribution', eas?.build?.production?.distribution !== 'internal');
+
+check('server pins dedicated K-ssenger Neon Auth base URL',
+  serverConfig.includes(`KSSENGER_NEON_AUTH_BASE_URL = '${EXPECTED.authUrl}'`)
+  && serverConfig.includes('NEON_AUTH_BASE_URL: z.literal(KSSENGER_NEON_AUTH_BASE_URL)'));
+check('server pins JWKS to the same dedicated K-ssenger Auth endpoint',
+  serverConfig.includes('KSSENGER_NEON_AUTH_JWKS_URL = `${KSSENGER_NEON_AUTH_BASE_URL}/.well-known/jwks.json`')
+  && serverConfig.includes('NEON_AUTH_JWKS_URL: z.literal(KSSENGER_NEON_AUTH_JWKS_URL)'));
+check('server pins Neon Auth audience to the dedicated K-ssenger issuer',
+  serverConfig.includes(`KSSENGER_NEON_AUTH_AUDIENCE = '${EXPECTED.authAudience}'`)
+  && serverConfig.includes('NEON_AUTH_AUDIENCE: z.literal(KSSENGER_NEON_AUTH_AUDIENCE).default(KSSENGER_NEON_AUTH_AUDIENCE)'));
+
+const forbidden = [
+  /SUPABASE_/i,
+  /\.supabase\.co/i,
+  /DATABASE_URL\s*=/i,
+  /NEON_API_KEY\s*=/i,
+  /JWT_SECRET\s*=/i,
+  /PRIVATE_KEY\s*=/i,
+];
+check('mobile example env contains no backend secret or Supabase runtime marker', forbidden.every((pattern) => !pattern.test(envExample)));
+
+for (const [key, value] of Object.entries(productionEnv)) {
+  if (!key.startsWith('EXPO_PUBLIC_')) continue;
+  let parsed;
+  try { parsed = new URL(String(value)); } catch { parsed = null; }
+  check(`${key} is HTTPS without URL credentials`, !!parsed && parsed.protocol === 'https:' && !parsed.username && !parsed.password, String(value));
+}
+
+const signalPlatforms = Array.isArray(signalModule?.platforms) ? signalModule.platforms : [];
+check('native Signal module remains Android-only until vetted iOS parity lands', signalPlatforms.length === 1 && signalPlatforms[0] === 'android', JSON.stringify(signalPlatforms));
+check('no unvalidated iOS Signal bridge is shipped', !fs.existsSync(iosSignalModuleUrl));
+
+if (failed) throw new Error(`KSSENGER_RELEASE_CANDIDATE_STATIC_GATE_FAILED:${failed}`);
+console.log('KSSENGER_RELEASE_CANDIDATE_STATIC_GATE_PASS=true');
