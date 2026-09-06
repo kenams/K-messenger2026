@@ -8,8 +8,8 @@ import {
   type JWTVerifyGetKey,
 } from 'jose';
 
-const issuer = 'https://late-flower-65059830.neonauth.eu-central-1.aws.neon.tech';
-const baseUrl = `${issuer}/kssenger/auth`;
+const baseUrl = 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth';
+const issuer = new URL(baseUrl).origin;
 const jwksUrl = `${baseUrl}/.well-known/jwks.json`;
 const userId = '550e8400-e29b-41d4-a716-446655440000';
 const otherUserId = '550e8400-e29b-41d4-a716-446655440001';
