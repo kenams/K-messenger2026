@@ -10,12 +10,13 @@ Canonical current state for `kenams/K-messenger2026`. The root `PROJECT_STATE.md
 - PR #2 was merged into `bootstrap/platform` on 2026-09-06 before the physical-device/E2EE/store gates were complete. History was not rewritten.
 - PR #4 `V1 release hardening and physical-validation gates` is OPEN, DRAFT and mergeable. Keep it draft until the critical gates below are proven.
 - Product candidate remains V1 `1.0.0`: Expo app version `1.0.0`, iOS build `1`, Android versionCode `1`, stable `com.kahdigital.kssenger` identifiers.
-- Merged PR #2 head `84144a6999d41b9504ac93a7eca940cd6536bceb` is fully green: CI #566, Android E2EE Runtime #217 and iOS Native Prebuild #85.
+- Head `f17559c60edc709be3e6ce61f2915ca9221a31ef` is fully green: CI #584, Android E2EE Runtime #225 and iOS Native Prebuild #95.
 - The web React runtime crash found after PR #2 was isolated to duplicate React/ReactDOM versions. The verified fix pins both to `19.1.0` with npm overrides and was merged into `release/v1-hardening` through PR #3 after CI #568, Android E2EE Runtime #219 and iOS Native Prebuild #87 passed.
-- The static release gate now requires the root React and ReactDOM overrides to exactly match the mobile runtime dependencies, preventing future dependency drift from silently reintroducing the invalid-hook-call/blank-screen failure.
-- Release CI now runs directly on `release/v1-hardening`; Android internal APK, Android E2EE runtime and iOS native-prebuild workflows no longer depend on the retired `fix/feed-kmap-contact-security` push branch.
+- The static release gate requires the root React and ReactDOM overrides to exactly match the mobile runtime dependencies, preventing future dependency drift from silently reintroducing the invalid-hook-call/blank-screen failure.
+- Release CI runs directly on `release/v1-hardening`; Android internal APK, Android E2EE runtime and iOS native-prebuild workflows no longer depend on the retired `fix/feed-kmap-contact-security` push branch.
 - Android internal APK artifacts are release-mode APKs with generated manifest hardening checks, pinned official libsignal dependencies and SHA-256 integrity manifests. Store signing remains a separate gate.
 - Remote V1 Smoke #28 remains GREEN with 30/30 Alice/Bob/Charlie application-path checks.
+- `3dfb358e6cb7589281ed6a1f68460717fb6fd216` strengthens the live Neon release-readiness gate: the reviewed V1 account-deletion surface must contain exactly 29 public foreign keys targeting `neon_auth.user`, constraint names must remain unique, and every reference must stay `CASCADE` or `SET NULL`. Any unreviewed FK addition/removal or unsafe delete action now fails the release check.
 
 ## Dedicated backend only
 
@@ -33,10 +34,11 @@ Canonical current state for `kenams/K-messenger2026`. The root `PROJECT_STATE.md
 - All 26 public tables have RLS enabled.
 - FORCE RLS remains enabled on `device_key_bundles`, `device_one_time_prekeys`, `device_pq_one_time_prekeys`, `device_prekey_claims`, `media_objects` and `push_subscriptions`.
 - K-MAP block and contact-removal revocation triggers are installed live. The contact-removal `SECURITY DEFINER` function keeps a fixed search path and owner-only execution ACL.
-- `0019_account_delete_fk_semantics.sql` is now LIVE on the dedicated K-ssenger database and matches the repository migration:
+- `0019_account_delete_fk_semantics.sql` is LIVE on the dedicated K-ssenger database and matches the repository migration:
   - `conversations.created_by` is nullable with `ON DELETE SET NULL`.
   - `group_bans.banned_by` is nullable with `ON DELETE SET NULL`.
   - `messages.sender_user_id` remains non-null with `ON DELETE CASCADE`.
+- Fresh live verification confirms the complete reviewed account-deletion FK inventory contains exactly 29 public references to `neon_auth.user`.
 - The database migration gate is therefore no longer the blocker for account deletion. The remaining deletion gate is a disposable real in-app delete proof followed by failed sign-in verification.
 
 ## Operational Premium V1 surface
@@ -82,6 +84,7 @@ Canonical current state for `kenams/K-messenger2026`. The root `PROJECT_STATE.md
 - Blocking must not be bypassable through direct chat, groups, presence, K-Pulse or K-MAP.
 - Realtime rate limiting remains bounded and fail-closed.
 - Persisted mobile auth must be foreground-revalidated without stale async overwrite or false offline logout.
+- The reviewed V1 public FK inventory targeting `neon_auth.user` is 29. Any schema change that alters that inventory must be explicitly reviewed and the live release-readiness expectation updated; all such FKs must remain deletion-safe.
 - Account deletion must not leave account-scoped Signal secrets recoverable on the deleting Android device.
 - K-ssenger is independent from Microsoft and must not ship Microsoft branding/assets/sounds or affiliation language; preserve the MSN-era social feel using original K-ssenger identity.
 
