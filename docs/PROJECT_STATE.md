@@ -13,10 +13,12 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `9892c0e062fd06c02e76742476bbcb1cd07c6995` completed Android E2EE Runtime #159 and iOS Native Prebuild #31 successfully. CI #512 failed only because the account-deletion client contract still required an obsolete literal French sentence after the fail-closed deletion copy was strengthened; runtime, RLS integration, typecheck, release static gate and the other 70 server tests passed.
-- `f7ca62ad71da29bc7d43d84488562e4c55019094` fixes that regression contract without weakening deletion behavior. The test now proves the actual invariant: positive server ACK precedes local Signal purge, disconnect and sign-out, while any provider/local-protection rejection remains fail-closed.
+- Head `569f952cb6407ecc90d4b33650832023e6961c6d` is fully GREEN: CI #514, Android E2EE Runtime #161 and iOS Native Prebuild #33 all completed successfully.
+- `3c9a99e574f4fc8d0efb68f9c950b6ebd46d22b0` closes a group privacy bypass at creation time: block checks now cover every proposed participant pair, not only owner-versus-invitee pairs, so two users who blocked each other cannot be placed together through initial group creation.
+- `9b669054441703aeb59a56036e3460f5cab52d6d` adds a mandatory regression contract for the all-participant group-block invariant and preserves the existing post-creation invite block protection. CI #516 and Android E2EE Runtime #163 are running; iOS Native Prebuild #35 is queued at this verification point.
+- `f7ca62ad71da29bc7d43d84488562e4c55019094` fixes the account-deletion client regression contract without weakening deletion behavior. The test proves the actual invariant: positive server ACK precedes local Signal purge, disconnect and sign-out, while any provider/local-protection rejection remains fail-closed.
 - `d2cfb8fde430e4e1f637a4954caa76d80bde157b` adds a mandatory server regression contract tying repository migration `0019` and the live release-readiness gate to the exact account-deletion FK semantics required for V1.
-- `f9e5e61765c55612bfb374eb7e359f568d6d8e5e` through `9de1a47bf2284f7c8eb89b9685fd8e7f029bbcea` close a local account-deletion privacy gap on Android: after a successful server deletion acknowledgement, K-ssenger now irreversibly clears the deleted account's native libsignal records and destroys their Android Keystore wrapping keys. Android fails closed before deletion if the device inventory/native purge path cannot be prepared, and CI regression coverage locks the ordering and Keystore-erasure contract.
+- `f9e5e61765c55612bfb374eb7e359f568d6d8e5e` through `9de1a47bf2284f7c8eb89b9685fd8e7f029bbcea` close a local account-deletion privacy gap on Android: after a successful server deletion acknowledgement, K-ssenger irreversibly clears the deleted account's native libsignal records and destroys their Android Keystore wrapping keys. Android fails closed before deletion if the device inventory/native purge path cannot be prepared, and CI regression coverage locks the ordering and Keystore-erasure contract.
 
 ## Dedicated backend only
 
@@ -34,7 +36,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - FORCE RLS remains enabled on `device_key_bundles`, `device_one_time_prekeys`, `device_pq_one_time_prekeys`, `device_prekey_claims`, `media_objects` and `push_subscriptions`.
 - K-MAP block and contact-removal revocation triggers are installed live. The contact-removal `SECURITY DEFINER` function has a fixed search path and owner-only execution ACL.
 - Fresh inspection on 2026-09-06 previously confirmed exactly 29 public foreign keys target `neon_auth.user`. Internal `neon_auth` tables are provider-owned and are not part of the application FK release surface.
-- Fresh live recheck during this run confirms the same three public FKs remain deletion-blocking `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, `group_bans_banned_by_fkey`. Production was not modified.
+- Fresh live recheck during this run again confirms the three public FKs targeted by `0019` are still `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, `group_bans_banned_by_fkey`. Production was not modified.
 - Repository migration `0019_account_delete_fk_semantics.sql` changes those three to the intended deletion-safe semantics.
 - A controlled Neon temporary-branch dry-run on 2026-09-06 verified the migration schema diff exactly: `conversations.created_by` and `group_bans.banned_by` become nullable with `ON DELETE SET NULL`; `messages.sender_user_id` stays non-null and becomes `ON DELETE CASCADE`. The temporary validation branches were deleted afterward and production remained unchanged.
 - `npm run release:check-neon-live` intentionally fails until `0019` is applied live.
@@ -46,7 +48,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Contacts search/request/accept/decline/cancel/remove/favorite/block/unblock.
 - Authenticated presence and K-Pulse/Wizz behavior.
 - Direct conversations with native-libsignal multi-device envelopes, delivery/read receipts and reconnect history synchronization; no plaintext transport fallback.
-- Groups with create/invite/remove/roles/leave/ownership transfer, mute/ban/unban and moderator ban listing.
+- Groups with create/invite/remove/roles/leave/ownership transfer, mute/ban/unban and moderator ban listing. Creation and later invitations both reject any participant combination that would bypass a user block.
 - Private chat media with authorization-aware signed upload/download and strict signed-request validation.
 - K-Feed vertical video with private media backing, age gating, sensitive-content warning and moderation reporting.
 - Moments with real expiring rows, private photo/video media, visibility and moderation/reporting controls.
@@ -77,6 +79,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Never expose database/provider secrets in mobile builds.
 - K-MAP is explicit opt-in; no hidden permanent/background tracking.
 - Push data is allow-listed metadata only.
+- Blocking must not be bypassable through direct chat, initial group creation, later group invitation, presence, K-Pulse or K-MAP.
 - Account deletion readiness audits the full public FK surface targeting `neon_auth.user` and must not leave account-scoped Signal secrets recoverable on the deleting Android device.
 - K-ssenger is independent from Microsoft and must not ship Microsoft branding/assets/sounds or affiliation language; retain the MSN-era social feel using original K-ssenger identity.
 
