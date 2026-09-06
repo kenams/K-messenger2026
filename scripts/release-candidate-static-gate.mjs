@@ -2,6 +2,9 @@ import fs from 'node:fs';
 
 const app = JSON.parse(fs.readFileSync(new URL('../apps/mobile/app.json', import.meta.url), 'utf8'));
 const eas = JSON.parse(fs.readFileSync(new URL('../apps/mobile/eas.json', import.meta.url), 'utf8'));
+const rootPackage = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const mobilePackage = JSON.parse(fs.readFileSync(new URL('../apps/mobile/package.json', import.meta.url), 'utf8'));
+const serverPackage = JSON.parse(fs.readFileSync(new URL('../apps/server/package.json', import.meta.url), 'utf8'));
 const envExample = fs.readFileSync(new URL('../apps/mobile/.env.example', import.meta.url), 'utf8');
 const signalModule = JSON.parse(fs.readFileSync(new URL('../apps/mobile/modules/kssenger-signal/expo-module.config.json', import.meta.url), 'utf8'));
 const iosSignalModuleUrl = new URL('../apps/mobile/modules/kssenger-signal/ios', import.meta.url);
@@ -32,6 +35,9 @@ check('release app name is K-ssenger', expo.name === EXPECTED.appName, String(ex
 check('release slug is stable', expo.slug === EXPECTED.slug, String(expo.slug ?? 'missing'));
 check('deep-link scheme is stable', expo.scheme === EXPECTED.scheme, String(expo.scheme ?? 'missing'));
 check('mobile release version is 1.0.0', expo.version === EXPECTED.version, String(expo.version ?? 'missing'));
+check('root package version matches release', rootPackage.version === EXPECTED.version, String(rootPackage.version ?? 'missing'));
+check('mobile package version matches release', mobilePackage.version === EXPECTED.version, String(mobilePackage.version ?? 'missing'));
+check('server package version matches release', serverPackage.version === EXPECTED.version, String(serverPackage.version ?? 'missing'));
 check('runtime version follows app version', expo.runtimeVersion?.policy === 'appVersion', JSON.stringify(expo.runtimeVersion ?? null));
 check('iOS bundle identifier is stable', expo.ios?.bundleIdentifier === EXPECTED.bundleIdentifier, String(expo.ios?.bundleIdentifier ?? 'missing'));
 check('iOS build number exists', /^\d+$/.test(String(expo.ios?.buildNumber ?? '')) && Number(expo.ios.buildNumber) >= 1, String(expo.ios?.buildNumber ?? 'missing'));
