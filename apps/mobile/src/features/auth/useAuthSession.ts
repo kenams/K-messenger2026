@@ -22,7 +22,7 @@ export function useAuthSession(): AuthSessionState {
     let active = true;
     let refreshSequence = 0;
 
-    const refreshSession = async (showLoading = false) => {
+    const refreshSession = async (showLoading = false, preserveOnError = false) => {
       const sequence = ++refreshSequence;
       if (showLoading && active) {
         setState((current) => ({ ...current, loading: true }));
@@ -30,19 +30,30 @@ export function useAuthSession(): AuthSessionState {
       try {
         const { data, error } = await auth.getSession();
         if (!active || sequence !== refreshSequence) return;
-        if (error || !data.session) {
+        if (error) {
+          if (preserveOnError) {
+            setState((current) => ({ ...current, loading: false, configured: true }));
+          } else {
+            setState({ loading: false, configured: true, session: null });
+          }
+          return;
+        }
+        if (!data.session) {
           setState({ loading: false, configured: true, session: null });
           return;
         }
         setState({ loading: false, configured: true, session: data.session as KssengerSession });
       } catch {
-        if (active && sequence === refreshSequence) {
+        if (!active || sequence !== refreshSequence) return;
+        if (preserveOnError) {
+          setState((current) => ({ ...current, loading: false, configured: true }));
+        } else {
           setState({ loading: false, configured: true, session: null });
         }
       }
     };
 
-    void refreshSession(true);
+    void refreshSession(true, false);
 
     const { data: listener } = auth.onAuthStateChange((_event, session) => {
       if (!active) return;
@@ -54,8 +65,10 @@ export function useAuthSession(): AuthSessionState {
       if (nextState === 'active') {
         // Mobile OSes can suspend K-ssenger long enough for an auth session to
         // expire or be revoked elsewhere. Re-check Neon Auth when the app
-        // returns to foreground instead of trusting a stale in-memory session.
-        void refreshSession(false);
+        // returns to foreground. A transient network failure must not destroy
+        // the persisted offline session; an authenticated empty response or an
+        // explicit auth-state event still clears it normally.
+        void refreshSession(false, true);
       }
     });
 
