@@ -69,15 +69,27 @@ try {
   check('contact-removal SECURITY DEFINER is not executable by authenticated', triggerAcl.rows[0]?.authenticated_can_execute === false);
 
   const fks = await client.query(`
-    select conname, confdeltype
-      from pg_constraint
-     where contype = 'f'
-       and conname = any($1::text[])
-  `, [[
-    'conversations_created_by_fkey',
-    'messages_sender_user_id_fkey',
-    'group_bans_banned_by_fkey',
-  ]]);
+    select c.conname,
+           c.confdeltype,
+           n.nspname as table_schema,
+           r.relname as table_name
+      from pg_constraint c
+      join pg_class r on r.oid = c.conrelid
+      join pg_namespace n on n.oid = r.relnamespace
+     where c.contype = 'f'
+       and c.confrelid = 'neon_auth."user"'::regclass
+       and n.nspname = 'public'
+     order by r.relname, c.conname
+  `);
+  check('public account-deletion FK surface is present', fks.rows.length > 0, `count=${fks.rows.length}`);
+
+  const blockingFks = fks.rows.filter((row) => row.confdeltype !== 'c' && row.confdeltype !== 'n');
+  check(
+    'all public references to Neon Auth users are deletion-safe',
+    blockingFks.length === 0,
+    blockingFks.map((row) => `${row.table_name}.${row.conname}:${row.confdeltype}`).join(','),
+  );
+
   const fkMap = new Map(fks.rows.map((row) => [row.conname, row.confdeltype]));
   check('conversation creator is anonymized on account deletion', fkMap.get('conversations_created_by_fkey') === 'n', String(fkMap.get('conversations_created_by_fkey') ?? 'missing'));
   check('deleted user encrypted messages cascade away', fkMap.get('messages_sender_user_id_fkey') === 'c', String(fkMap.get('messages_sender_user_id_fkey') ?? 'missing'));
