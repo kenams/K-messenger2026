@@ -12,6 +12,7 @@ Canonical current state for `kenams/K-messenger2026`. The root `PROJECT_STATE.md
 - Product candidate remains V1 `1.0.0`: Expo app version `1.0.0`, iOS build `1`, Android versionCode `1`, stable `com.kahdigital.kssenger` identifiers.
 - Merged PR #2 head `84144a6999d41b9504ac93a7eca940cd6536bceb` is fully green: CI #566, Android E2EE Runtime #217 and iOS Native Prebuild #85.
 - The web React runtime crash found after PR #2 was isolated to duplicate React/ReactDOM versions. The verified fix pins both to `19.1.0` with npm overrides and was merged into `release/v1-hardening` through PR #3 after CI #568, Android E2EE Runtime #219 and iOS Native Prebuild #87 passed.
+- The static release gate now requires the root React and ReactDOM overrides to exactly match the mobile runtime dependencies, preventing future dependency drift from silently reintroducing the invalid-hook-call/blank-screen failure.
 - Release CI now runs directly on `release/v1-hardening`; Android internal APK, Android E2EE runtime and iOS native-prebuild workflows no longer depend on the retired `fix/feed-kmap-contact-security` push branch.
 - Android internal APK artifacts are release-mode APKs with generated manifest hardening checks, pinned official libsignal dependencies and SHA-256 integrity manifests. Store signing remains a separate gate.
 - Remote V1 Smoke #28 remains GREEN with 30/30 Alice/Bob/Charlie application-path checks.
@@ -55,7 +56,7 @@ Canonical current state for `kenams/K-messenger2026`. The root `PROJECT_STATE.md
 - Account deletion UI/server path requires password reauthentication, exact confirmation, a fresh Neon token and hard-scoped K-ssenger Neon management deletion. Android additionally purges account-scoped native Signal material and destroys the Keystore key after server success.
 - Android release config disables backup and cleartext networking. iOS ATS forbids arbitrary/local-network exceptions. Native permission disclosures are explicit for location, photo library, camera and user-initiated microphone use.
 - Expo V1 explicitly uses Hermes.
-- Web runtime now uses one pinned React/ReactDOM version tree to prevent the previously observed invalid-hook-call blank screen.
+- Web runtime uses one pinned React/ReactDOM version tree, and the release gate enforces alignment with mobile React dependencies to prevent the previously observed invalid-hook-call blank screen.
 
 ## E2EE
 
@@ -75,6 +76,7 @@ Canonical current state for `kenams/K-messenger2026`. The root `PROJECT_STATE.md
 - Never invent cryptography or advertise production E2EE without physical-device proof.
 - Never expose database/provider secrets in mobile builds.
 - Android backup and cleartext traffic must remain disabled.
+- Root React/ReactDOM overrides must remain aligned to the mobile runtime so web cannot ship a duplicate React tree.
 - K-MAP must remain foreground-only; no hidden or permanent tracking.
 - Push data remains allow-listed metadata only.
 - Blocking must not be bypassable through direct chat, groups, presence, K-Pulse or K-MAP.
