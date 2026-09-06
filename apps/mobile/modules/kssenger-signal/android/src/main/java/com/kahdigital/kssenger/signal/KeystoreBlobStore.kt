@@ -71,6 +71,18 @@ internal class KeystoreBlobStore(
     check(editor.commit()) { "STORE_PREFIX_DELETE_FAILED" }
   }
 
+  /**
+   * Permanently erase every encrypted record in this namespace and destroy the
+   * non-exportable Android Keystore key that protected them. This is used only
+   * after a K-ssenger account deletion has succeeded server-side so old Signal
+   * identity/session material cannot survive as recoverable local app state.
+   */
+  fun clearAndDestroyKey() {
+    check(preferences.edit().clear().commit()) { "STORE_CLEAR_FAILED" }
+    val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    if (keyStore.containsAlias(keyAlias)) keyStore.deleteEntry(keyAlias)
+  }
+
   fun contains(recordKey: String): Boolean = preferences.contains(recordKey)
 
   private fun getOrCreateKey(): SecretKey {
