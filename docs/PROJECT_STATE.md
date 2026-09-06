@@ -41,11 +41,16 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - Remote V1 Smoke #28 is GREEN after that correction. The real Alice/Bob/Charlie remote suite passes 30/30 across auth/profile, contacts, presence, K-Pulse, encrypted message transport contracts, receipts, reconnect, groups/moderation, K-MAP, Moments, K-Feed and Signal prekey paths.
 - `239aedc1700af5b7fd4e9b663a98feb5ae8f963b` is verified GREEN in CI #471 and Android E2EE Runtime #116.
 - `bcbec0296e24ede70134a379eff99f7894da9096` adds a mandatory mobile account-deletion safety contract: password reauthentication, exact `DELETE` confirmation, authenticated server delegation, and disconnect/sign-out only after a positive server acknowledgement.
-- `1078fc18ca9a54cd210871770cf770427fc0b01e` adds a read-only live Neon release-readiness gate. It refuses the wrong project, verifies the `kssenger` database, RLS/FORCE RLS, K-MAP revocation triggers/ACLs and the three account-deletion FK actions without mutating live data.
+- `1078fc18ca9a54cd210871770cf770427fc0b01e` adds a read-only live Neon release-readiness gate. It refuses the wrong project, verifies the `kssenger` database, RLS/FORCE RLS, K-MAP revocation triggers/ACLs and account-deletion FK actions without mutating live data.
 - `4d94517dece78afe0f2264b4287626aec3af5fd5` exposes that gate as `npm run release:check-neon-live`.
 - `b652f539b9188be81cc78b24b2e48a3a0bcfcbc3` is verified GREEN in CI #475 and Android E2EE Runtime #120.
 - `236912e28843136a5104694326bd010c3da3c905` adds a static V1 release-candidate gate covering stable app/store identifiers, version/build numbers, exact dedicated K-ssenger endpoints, HTTPS-only public URLs, no internal/development production profile, and no Supabase/backend-secret markers in the shipped mobile env surface.
 - `fbeb25d574c42e601f817342bdf77d130c21f0b7` exposes the static gate as `npm run release:check-static`; `a97cf6ef0119d58407973da5849cdcd5e3f10c27` makes it mandatory in CI.
+- `60ec7e3cf3725f4f4c665d984207ba6c0b254d5a` is verified GREEN in CI #479 and Android E2EE Runtime #124.
+- A fresh live FK inventory confirms 29 public foreign keys reference `neon_auth.user`; there is no hidden fourth deletion blocker. Exactly the three `0019` targets remain `NO ACTION`, while every other public reference is already `CASCADE` or `SET NULL`.
+- `e5d3460326911ca8bfbb6df1d9bf39de67a66ecd` hardens the live release-readiness gate to inspect the complete public FK surface pointing at Neon Auth users and fail on any future deletion-blocking action, while still asserting the exact intended semantics for conversations, encrypted messages and moderation history.
+- `59b081645c1e3c0c0e1bdc1ad08b5d789c9668ac` makes CI syntax-check the live release-readiness tooling; CI #481 is GREEN while Android E2EE Runtime #126 is still running at this verification point.
+- `35a9daa7f9be1773b0715d2a960d234e84b06133` adds the first macOS iOS native-prebuild gate. It generates the iOS project from the exact V1 configuration, verifies the production bundle identifier/Xcode project, and explicitly keeps iOS E2EE fail-closed until vetted native libsignal parity is actually integrated.
 
 ## Live Neon surface
 
@@ -61,7 +66,7 @@ Direct inspection confirms:
 
 A disposable historical smoke identity was successfully removed with the current branch-scoped Neon Auth management API and verified absent from `neon_auth.user`. The old management-provider 404 is therefore not a current platform blocker.
 
-Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but is not silently applied to live Neon. A fresh read-only inspection on 2026-09-06 confirms all three targeted live foreign keys are still `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, and `group_bans_banned_by_fkey`. The live release-readiness command is intentionally expected to fail this gate until the controlled migration is applied.
+Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but is not silently applied to live Neon. A fresh read-only inspection on 2026-09-06 confirms all three targeted live foreign keys are still `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, and `group_bans_banned_by_fkey`. The same inspection covers all 29 public foreign keys targeting `neon_auth.user`: all non-target references are already deletion-safe (`CASCADE` or `SET NULL`). The live release-readiness command intentionally fails until the controlled migration is applied.
 
 ## Operational V1 modules
 
@@ -78,7 +83,8 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 - Account export v3.
 - Account deletion UI/server route with password reauthentication, fresh Neon token and provider scope hard-coded to the dedicated K-ssenger project/branch. Repository deletion semantics are FK-safe; controlled live migration + disposable in-app proof remain open.
 - Release candidate metadata is `1.0.0` and an Android internal release APK can be produced by CI.
-- Static release configuration is now CI-gated so production metadata/endpoints cannot silently drift away from the dedicated K-ssenger V1 surface.
+- Static release configuration is CI-gated so production metadata/endpoints cannot silently drift away from the dedicated K-ssenger V1 surface.
+- iOS native project generation is now CI-gated on macOS; this is a build-readiness step only and does not weaken the E2EE fail-closed rule.
 
 ## E2EE
 
@@ -101,6 +107,7 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 - K-MAP is explicit opt-in; no hidden background/permanent tracking.
 - Blocking or removing a contact revokes active direct K-MAP shares at the database boundary.
 - Trigger-only `SECURITY DEFINER` functions must not be directly executable by API roles.
+- Account deletion readiness must audit the full public FK surface targeting `neon_auth.user`, not only a hand-picked constraint list.
 - K-ssenger is independent from Microsoft and must not use Microsoft branding/assets/sounds or affiliation language.
 
 ## Remaining Premium V1 release gates
@@ -109,9 +116,9 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 2. Real two-physical-device Android Signal proof through the production server: discovery/prekey claim, identity continuity, ratchet continuity, revocation and reconnect.
 3. Physical Android validation of avatar/chat/K-Feed/Moments media, push delivery and K-MAP GPS permission flows; repeat on iOS once native parity exists.
 4. Final Alice/Bob/Charlie physical smoke: contacts, presence, K-Pulse, direct chat, offline/reconnect, receipts, groups, media, push, K-Feed, Moments, K-MAP, block/export/delete.
-5. Implement and prove vetted native iOS libsignal parity.
+5. Implement and prove vetted native iOS libsignal parity. The iOS prebuild gate may progress independently but must not be treated as E2EE proof.
 6. Produce store-signed Android/iOS builds when signing credentials/tooling are available.
 
 ## Release rule
 
-An emulator test, green CI, management-API deletion or an APK assembly alone is not a production-E2EE declaration. Keep PR #2 draft until the critical physical-device/security gates are proven. Android internal builds may continue to be produced for real-device validation.
+An emulator test, green CI, management-API deletion, iOS prebuild or APK assembly alone is not a production-E2EE declaration. Keep PR #2 draft until the critical physical-device/security gates are proven. Android internal builds may continue to be produced for real-device validation.
