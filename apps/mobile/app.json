@@ -38,7 +38,8 @@
     },
     "android": {
       "package": "com.kahdigital.kssenger",
-      "versionCode": 1
+      "versionCode": 1,
+      "allowBackup": false
     },
     "web": {
       "bundler": "metro"
