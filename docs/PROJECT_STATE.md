@@ -43,6 +43,9 @@ This is the canonical project state file. Keep `PROJECT_STATE.md` at the reposit
 - `bcbec0296e24ede70134a379eff99f7894da9096` adds a mandatory mobile account-deletion safety contract: password reauthentication, exact `DELETE` confirmation, authenticated server delegation, and disconnect/sign-out only after a positive server acknowledgement.
 - `1078fc18ca9a54cd210871770cf770427fc0b01e` adds a read-only live Neon release-readiness gate. It refuses the wrong project, verifies the `kssenger` database, RLS/FORCE RLS, K-MAP revocation triggers/ACLs and the three account-deletion FK actions without mutating live data.
 - `4d94517dece78afe0f2264b4287626aec3af5fd5` exposes that gate as `npm run release:check-neon-live`.
+- `b652f539b9188be81cc78b24b2e48a3a0bcfcbc3` is verified GREEN in CI #475 and Android E2EE Runtime #120.
+- `236912e28843136a5104694326bd010c3da3c905` adds a static V1 release-candidate gate covering stable app/store identifiers, version/build numbers, exact dedicated K-ssenger endpoints, HTTPS-only public URLs, no internal/development production profile, and no Supabase/backend-secret markers in the shipped mobile env surface.
+- `fbeb25d574c42e601f817342bdf77d130c21f0b7` exposes the static gate as `npm run release:check-static`; `a97cf6ef0119d58407973da5849cdcd5e3f10c27` makes it mandatory in CI.
 
 ## Live Neon surface
 
@@ -75,6 +78,7 @@ Migration `0019_account_delete_fk_semantics.sql` is repository/CI validated but 
 - Account export v3.
 - Account deletion UI/server route with password reauthentication, fresh Neon token and provider scope hard-coded to the dedicated K-ssenger project/branch. Repository deletion semantics are FK-safe; controlled live migration + disposable in-app proof remain open.
 - Release candidate metadata is `1.0.0` and an Android internal release APK can be produced by CI.
+- Static release configuration is now CI-gated so production metadata/endpoints cannot silently drift away from the dedicated K-ssenger V1 surface.
 
 ## E2EE
 
