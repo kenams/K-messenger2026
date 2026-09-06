@@ -3,6 +3,8 @@ name: Android E2EE Runtime
 on:
   pull_request:
     paths:
+      - 'apps/mobile/app.json'
+      - 'apps/mobile/plugins/withKssengerLibsignal.js'
       - 'apps/mobile/modules/kssenger-signal/**'
       - 'apps/mobile/src/lib/e2ee.ts'
       - 'apps/mobile/src/lib/signalDevice.ts'
@@ -11,6 +13,8 @@ on:
     branches:
       - fix/feed-kmap-contact-security
     paths:
+      - 'apps/mobile/app.json'
+      - 'apps/mobile/plugins/withKssengerLibsignal.js'
       - 'apps/mobile/modules/kssenger-signal/**'
       - 'apps/mobile/src/lib/e2ee.ts'
       - 'apps/mobile/src/lib/signalDevice.ts'
@@ -43,6 +47,17 @@ jobs:
       - name: Prebuild Android native project
         working-directory: apps/mobile
         run: npx expo prebuild --platform android
+      - name: Verify generated Android transport security
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST="apps/mobile/android/app/src/main/AndroidManifest.xml"
+          test -f "$MANIFEST"
+          grep -Eq 'android:usesCleartextTraffic="false"' "$MANIFEST"
+          if grep -Eq 'android:usesCleartextTraffic="true"' "$MANIFEST"; then
+            echo "K-ssenger Android manifest unexpectedly permits cleartext traffic"
+            exit 1
+          fi
       - name: Install Android emulator image
         shell: bash
         run: |
