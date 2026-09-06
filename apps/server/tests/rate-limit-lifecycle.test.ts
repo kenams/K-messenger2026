@@ -1,27 +1,28 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
+import { describe, expect, it } from 'vitest';
 import { FixedWindowRateLimiter } from '../src/rateLimit.js';
 
-test('rate limiter enforces the fixed-window quota', () => {
-  const limiter = new FixedWindowRateLimiter(2, 1_000, 10);
-  assert.equal(limiter.consume('user:action', 0), true);
-  assert.equal(limiter.consume('user:action', 100), true);
-  assert.equal(limiter.consume('user:action', 200), false);
-  assert.equal(limiter.consume('user:action', 1_000), true);
-});
+describe('FixedWindowRateLimiter bounded lifecycle', () => {
+  it('enforces the fixed-window quota', () => {
+    const limiter = new FixedWindowRateLimiter(2, 1_000, 10);
+    expect(limiter.consume('user:action', 0)).toBe(true);
+    expect(limiter.consume('user:action', 100)).toBe(true);
+    expect(limiter.consume('user:action', 200)).toBe(false);
+    expect(limiter.consume('user:action', 1_000)).toBe(true);
+  });
 
-test('rate limiter frees expired capacity before rejecting a new key', () => {
-  const limiter = new FixedWindowRateLimiter(1, 1_000, 2);
-  assert.equal(limiter.consume('a', 0), true);
-  assert.equal(limiter.consume('b', 0), true);
-  assert.equal(limiter.consume('c', 500), false);
-  assert.equal(limiter.consume('c', 1_000), true);
-});
+  it('frees expired capacity before rejecting a new key', () => {
+    const limiter = new FixedWindowRateLimiter(1, 1_000, 2);
+    expect(limiter.consume('a', 0)).toBe(true);
+    expect(limiter.consume('b', 0)).toBe(true);
+    expect(limiter.consume('c', 500)).toBe(false);
+    expect(limiter.consume('c', 1_000)).toBe(true);
+  });
 
-test('rate limiter fails closed when live bucket capacity is exhausted', () => {
-  const limiter = new FixedWindowRateLimiter(1, 10_000, 2);
-  assert.equal(limiter.consume('a', 0), true);
-  assert.equal(limiter.consume('b', 0), true);
-  assert.equal(limiter.consume('c', 1), false);
-  assert.equal(limiter.consume('', 1), false);
+  it('fails closed when live bucket capacity is exhausted', () => {
+    const limiter = new FixedWindowRateLimiter(1, 10_000, 2);
+    expect(limiter.consume('a', 0)).toBe(true);
+    expect(limiter.consume('b', 0)).toBe(true);
+    expect(limiter.consume('c', 1)).toBe(false);
+    expect(limiter.consume('', 1)).toBe(false);
+  });
 });
