@@ -13,7 +13,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `fa0b6f2e14261b0d81780cea8dea7a09a1079bf3` is fully GREEN: CI #541, Android E2EE Runtime #189 and iOS Native Prebuild #60 all completed successfully.
+- Head `56a6069ec851af329f05caeec4d6e102a1d40941` is fully GREEN: CI #543, Android E2EE Runtime #191 and iOS Native Prebuild #62 all completed successfully.
 - `f469f1b7e2ab9ef5f78fff97a253fdf669835414` adds managed Neon Auth session revalidation whenever the mobile app returns to the foreground, with refresh sequencing so an older async `getSession()` result cannot overwrite a newer auth event.
 - `98db71fa40d88bda52cf01766d98498e430fb099` makes that foreground revalidation offline-safe: transient transport failure preserves the existing persisted session instead of falsely logging the user out, while confirmed no-session/revocation still clears it.
 - `3d55f3d168a5a5a48ceaeecc8637e62d22b6dd71` locks foreground revalidation, stale-refresh race protection, offline-session preservation and listener cleanup in CI.
@@ -26,6 +26,9 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - `540f30112dbe94a743a5b98fb8a3aa3156c4e399` makes the no-cleartext native policy part of the static release gate.
 - `a48a1ca0fe8d987815bed51fec0faf3640940aa9` extends Android CI to trigger on app/plugin release-security changes and verifies the generated AndroidManifest contains `usesCleartextTraffic="false"` before running libsignal instrumentation.
 - `aa4bcceebd4dcf1e85086367f646c78929f0fde2` hardens the Android Internal APK delivery workflow: it verifies the generated manifest contains both `allowBackup="false"` and `usesCleartextTraffic="false"`, generates a SHA-256 checksum for the final release APK, verifies that checksum immediately, and uploads the APK plus checksum together as one artifact.
+- `638bda49511a830b6fa37322386077614440b522` makes the realtime server fail closed unless `NEON_AUTH_BASE_URL` and `NEON_AUTH_JWKS_URL` are exactly the public endpoints of the dedicated K-ssenger Neon Auth branch.
+- `0b4f9e494283ec16ed319f73139b83a1240fc79e` aligns the server environment template with those exact public K-ssenger Auth/JWKS endpoints, reducing deployment drift without exposing any credential.
+- `7e4857c030a9a532b8b85edda7042669fcb9de24` extends the mandatory static release gate to verify the server-side dedicated Neon Auth/JWKS pinning cannot silently regress.
 
 ## Dedicated backend only
 
@@ -35,6 +38,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Managed Neon Better Auth + Neon Data API are the active backend. Runtime Supabase assumptions are retired and CI rejects their reintroduction.
 - Realtime identity comes only from verified Neon Auth JWT `sub`.
 - Mobile builds contain only public K-ssenger service endpoints; server/database/provider secrets are forbidden from the mobile surface.
+- Server startup is now pinned to the exact public Auth/JWKS endpoints of the dedicated K-ssenger Neon branch and fails closed on backend drift.
 - No other Neon project/database may be modified.
 
 ## Live Neon security state
@@ -85,6 +89,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Android platform backup must remain disabled and cleartext network traffic must remain forbidden for the release candidate.
 - Internal Android release artifacts must include a verified SHA-256 checksum generated from the final APK.
 - iOS App Transport Security must not allow arbitrary loads or local-network exemptions in the release candidate.
+- The server must reject any Neon Auth/JWKS endpoint other than the dedicated K-ssenger branch endpoints.
 - K-MAP is explicit opt-in; no hidden permanent/background tracking.
 - Push data is allow-listed metadata only.
 - Blocking must not be bypassable through direct chat, initial group creation, later group invitation, presence, K-Pulse or K-MAP.
