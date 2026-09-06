@@ -1,7 +1,7 @@
 {
   "name": "k-ssenger",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev:server": "npm --workspace @kssenger/server run dev",
