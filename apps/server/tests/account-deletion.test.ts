@@ -8,7 +8,7 @@ async function importModule() {
   vi.stubEnv('DATABASE_URL', 'postgresql://user:password@db.example/kssenger?sslmode=require');
   vi.stubEnv('NEON_AUTH_BASE_URL', authBaseUrl);
   vi.stubEnv('NEON_AUTH_JWKS_URL', authJwksUrl);
-  vi.stubEnv('CORS_ORIGIN', 'http://localhost:8081');
+  vi.stubEnv('CORS_ORIGIN', 'https://example.invalid');
   return import('../src/accountDeletion.js');
 }
 
