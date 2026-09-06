@@ -47,6 +47,7 @@ check('release app name is K-ssenger', expo.name === EXPECTED.appName, String(ex
 check('release slug is stable', expo.slug === EXPECTED.slug, String(expo.slug ?? 'missing'));
 check('deep-link scheme is stable', expo.scheme === EXPECTED.scheme, String(expo.scheme ?? 'missing'));
 check('mobile release version is 1.0.0', expo.version === EXPECTED.version, String(expo.version ?? 'missing'));
+check('mobile release runtime is explicitly Hermes', expo.jsEngine === 'hermes', String(expo.jsEngine ?? 'missing'));
 check('root package version matches release', rootPackage.version === EXPECTED.version, String(rootPackage.version ?? 'missing'));
 check('mobile package version matches release', mobilePackage.version === EXPECTED.version, String(mobilePackage.version ?? 'missing'));
 check('server package version matches release', serverPackage.version === EXPECTED.version, String(serverPackage.version ?? 'missing'));
