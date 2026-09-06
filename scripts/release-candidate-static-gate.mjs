@@ -43,6 +43,7 @@ check('iOS bundle identifier is stable', expo.ios?.bundleIdentifier === EXPECTED
 check('iOS build number exists', /^\d+$/.test(String(expo.ios?.buildNumber ?? '')) && Number(expo.ios.buildNumber) >= 1, String(expo.ios?.buildNumber ?? 'missing'));
 check('Android package identifier is stable', expo.android?.package === EXPECTED.androidPackage, String(expo.android?.package ?? 'missing'));
 check('Android versionCode exists', Number.isInteger(expo.android?.versionCode) && expo.android.versionCode >= 1, String(expo.android?.versionCode ?? 'missing'));
+check('Android release backups are disabled', expo.android?.allowBackup === false, String(expo.android?.allowBackup ?? 'missing'));
 
 const productionEnv = eas?.build?.production?.env ?? {};
 check('production Neon Auth endpoint is dedicated K-ssenger', productionEnv.EXPO_PUBLIC_NEON_AUTH_URL === EXPECTED.authUrl, String(productionEnv.EXPO_PUBLIC_NEON_AUTH_URL ?? 'missing'));
