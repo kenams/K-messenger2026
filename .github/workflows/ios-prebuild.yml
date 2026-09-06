@@ -53,4 +53,6 @@ jobs:
           set -euo pipefail
           test ! -d apps/mobile/modules/kssenger-signal/ios
           node -e "const c=require('./apps/mobile/modules/kssenger-signal/expo-module.config.json'); if ((c.platforms||[]).includes('ios')) process.exit(1)"
-          grep -F 'iOS native libsignal parity is still absent; iOS remains fail-closed.' docs/PROJECT_STATE.md
+          grep -F "requireOptionalNativeModule<NativeSignalBridge>('KssengerSignalBridge')" apps/mobile/src/lib/e2ee.ts
+          grep -F "return unavailable('NATIVE_LIBSIGNAL_BRIDGE_MISSING')" apps/mobile/src/lib/e2ee.ts
+          grep -F "protocol: available ? 'signal-libsignal' : 'unavailable'" apps/mobile/src/lib/e2ee.ts
