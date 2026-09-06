@@ -13,7 +13,9 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `a8b806718a0a68950dab83337942ed24691939cb` is fully GREEN: CI #554, Android E2EE Runtime #202 and iOS Native Prebuild #73 all completed successfully.
+- Head `eb3437f5ad99897c7d709e5138aca8c3629a5e4c` is fully GREEN: CI #558, Android E2EE Runtime #207 and iOS Native Prebuild #77 all completed successfully.
+- `356bddedc3a8892d375a40b457ca36bec4401b6c` explicitly blocks Android `ACCESS_BACKGROUND_LOCATION`; K-MAP remains foreground-only and cannot silently acquire always-on/background tracking capability through a transitive native dependency.
+- `b7bdace1ef78d4776363503d96e4a1781bf73523` makes foreground-only location a release-gate invariant on both platforms: Android must block background location and iOS must not declare either always-location usage key.
 - `289786c1eec5d9b18b9387f9c7c0723e17aa6aac`, `738cbed121b3f8e49b8316443a0821a91436aec1` and `24c36bbbee81a42228a8b259b072719ebdb00f33` aligned JWT, account-deletion and private-media tests with the exact dedicated K-ssenger Neon Auth/JWKS endpoints after stricter runtime pinning exposed stale fixtures.
 - `f84b95cc3a50cc7491de3d5ca998a9d90d2c4518` pins `NEON_AUTH_AUDIENCE` to the exact public audience of the dedicated K-ssenger Neon Auth branch while retaining a safe default to that same value.
 - `6de7ab08ec62c6792007eede4ff921fdf35c5001` makes the dedicated Neon Auth audience pin a mandatory static release-gate invariant.
@@ -68,7 +70,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Private chat media with authorization-aware signed upload/download and strict signed-request validation.
 - K-Feed vertical video with private media backing, age gating, sensitive-content warning and moderation reporting.
 - Moments with real expiring rows, private photo/video media, visibility and moderation/reporting controls.
-- K-MAP with explicit foreground permission, approximate/precise modes, recipient controls, revoke/Ghost Mode and database-boundary revocation on block/contact removal.
+- K-MAP with explicit foreground permission, approximate/precise modes, recipient controls, revoke/Ghost Mode and database-boundary revocation on block/contact removal. Android background-location permission is explicitly blocked and iOS always-location declarations are forbidden by the release gate.
 - Native push registration with metadata-only server payloads. Sensitive push fields are rejected before recipient lookup/provider delivery; sign-out revokes push state before ending auth session.
 - Account export v3.
 - Account deletion UI/server path requires password reauthentication, exact confirmation, fresh Neon token and hard-scoped Neon K-ssenger management deletion. Full in-app disposable proof waits on live `0019`. Android additionally purges deleted-account native Signal material and destroys its Keystore key after server success.
@@ -96,6 +98,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Internal Android release artifacts must include a verified SHA-256 checksum generated from the final APK.
 - iOS App Transport Security must not allow arbitrary loads or local-network exemptions in the release candidate.
 - Native foreground-location, photo-library, camera and microphone permission disclosures must remain explicit, feature-scoped and K-ssenger-specific; iOS prebuild must prove the generated Info.plist carries them.
+- K-MAP must remain foreground-only: Android must explicitly block `ACCESS_BACKGROUND_LOCATION`, and iOS must not declare always-location usage descriptions.
 - The server must reject any Neon Auth base/JWKS/audience value other than the dedicated K-ssenger branch values; tests must exercise security behavior without weakening this startup pinning.
 - K-MAP is explicit opt-in; no hidden permanent/background tracking.
 - Push data is allow-listed metadata only.
