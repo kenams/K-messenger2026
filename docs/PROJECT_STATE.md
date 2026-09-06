@@ -13,12 +13,14 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `41b653d660fe168339d3efac06a3369a3ca58b19` is fully GREEN: CI #528, Android E2EE Runtime #175 and iOS Native Prebuild #47 all completed successfully.
+- Head `9588d1e7e7a668c412657b73b354422e317b404f` is fully GREEN: CI #531, Android E2EE Runtime #178 and iOS Native Prebuild #50 all completed successfully.
 - `f469f1b7e2ab9ef5f78fff97a253fdf669835414` adds managed Neon Auth session revalidation whenever the mobile app returns to the foreground, with refresh sequencing so an older async `getSession()` result cannot overwrite a newer auth event.
 - `98db71fa40d88bda52cf01766d98498e430fb099` makes that foreground revalidation offline-safe: transient transport failure preserves the existing persisted session instead of falsely logging the user out, while confirmed no-session/revocation still clears it.
 - `3d55f3d168a5a5a48ceaeecc8637e62d22b6dd71` locks foreground revalidation, stale-refresh race protection, offline-session preservation and listener cleanup in CI.
 - `f3d4a0dc8f217d3bcca7b84a8b4742810944dc6b` disables Android application backup in the release configuration so account/session-sensitive app data is not included in platform backup/restore flows.
 - `be629b9d2c496c333a07fa5ff9697ac1cd5fc614` makes `allowBackup: false` a mandatory static release-gate invariant.
+- `f0f193c1383bead5cb77cb6432856e1b65e9729a` explicitly hardens iOS App Transport Security: arbitrary network loads and local-network exemptions are disabled in the release Info.plist configuration.
+- `d0d15d3595fe173cdec233b90639863814c301d7` makes those iOS ATS settings mandatory release-gate invariants so a future configuration drift cannot silently re-enable insecure transport exceptions.
 
 ## Dedicated backend only
 
@@ -56,6 +58,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Account export v3.
 - Account deletion UI/server path requires password reauthentication, exact confirmation, fresh Neon token and hard-scoped Neon K-ssenger management deletion. Full in-app disposable proof waits on live `0019`. Android additionally purges deleted-account native Signal material and destroys its Keystore key after server success.
 - Android release configuration disables platform backup; the static release gate enforces that invariant.
+- iOS release configuration explicitly forbids arbitrary ATS loads and local-network exemptions; the static release gate enforces both settings.
 
 ## E2EE
 
@@ -75,6 +78,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Never invent cryptography or advertise production E2EE without device proof.
 - Never expose database/provider secrets in mobile builds.
 - Android platform backup must remain disabled for the release candidate.
+- iOS App Transport Security must not allow arbitrary loads or local-network exemptions in the release candidate.
 - K-MAP is explicit opt-in; no hidden permanent/background tracking.
 - Push data is allow-listed metadata only.
 - Blocking must not be bypassable through direct chat, initial group creation, later group invitation, presence, K-Pulse or K-MAP.
