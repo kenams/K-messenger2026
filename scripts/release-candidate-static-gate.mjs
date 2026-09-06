@@ -51,6 +51,14 @@ check('mobile release runtime is explicitly Hermes', expo.jsEngine === 'hermes',
 check('root package version matches release', rootPackage.version === EXPECTED.version, String(rootPackage.version ?? 'missing'));
 check('mobile package version matches release', mobilePackage.version === EXPECTED.version, String(mobilePackage.version ?? 'missing'));
 check('server package version matches release', serverPackage.version === EXPECTED.version, String(serverPackage.version ?? 'missing'));
+check('web React override matches mobile React runtime',
+  typeof mobilePackage.dependencies?.react === 'string'
+  && rootPackage.overrides?.react === mobilePackage.dependencies.react,
+  `${String(rootPackage.overrides?.react ?? 'missing')} vs ${String(mobilePackage.dependencies?.react ?? 'missing')}`);
+check('web ReactDOM override matches mobile ReactDOM runtime',
+  typeof mobilePackage.dependencies?.['react-dom'] === 'string'
+  && rootPackage.overrides?.['react-dom'] === mobilePackage.dependencies['react-dom'],
+  `${String(rootPackage.overrides?.['react-dom'] ?? 'missing')} vs ${String(mobilePackage.dependencies?.['react-dom'] ?? 'missing')}`);
 check('runtime version follows app version', expo.runtimeVersion?.policy === 'appVersion', JSON.stringify(expo.runtimeVersion ?? null));
 check('iOS bundle identifier is stable', expo.ios?.bundleIdentifier === EXPECTED.bundleIdentifier, String(expo.ios?.bundleIdentifier ?? 'missing'));
 check('iOS build number exists', /^\d+$/.test(String(expo.ios?.buildNumber ?? '')) && Number(expo.ios.buildNumber) >= 1, String(expo.ios?.buildNumber ?? 'missing'));
