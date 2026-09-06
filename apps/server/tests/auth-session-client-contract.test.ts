@@ -12,8 +12,15 @@ describe('mobile auth session lifecycle contract', () => {
     expect(source).toContain("import { AppState } from 'react-native'");
     expect(source).toContain("AppState.addEventListener('change'");
     expect(source).toContain("nextState === 'active'");
-    expect(source).toContain('void refreshSession(false)');
+    expect(source).toContain('void refreshSession(false, true)');
     expect(source).toContain('auth.getSession()');
+  });
+
+  it('preserves an existing offline session on transient foreground refresh errors', () => {
+    expect(source).toContain('preserveOnError');
+    expect(source).toContain("setState((current) => ({ ...current, loading: false, configured: true }))");
+    expect(source).toContain('if (!data.session)');
+    expect(source).toContain('session: null');
   });
 
   it('prevents stale async refreshes from overwriting a newer auth event', () => {
