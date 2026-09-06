@@ -47,13 +47,14 @@ export async function createGroup(ownerId: string, title: string, memberIds: str
     const contactSet = new Set(contactRows.map((row) => row.contact_id));
     if (memberIds.some((id) => !contactSet.has(id))) throw new Error('GROUP_MEMBERS_MUST_BE_CONTACTS');
 
+    const participantIds = [ownerId, ...memberIds];
     const { rowCount: blockCount } = await client.query(
       `select 1
          from public.blocks
-        where (blocker_id = $1 and blocked_id = any($2::uuid[]))
-           or (blocked_id = $1 and blocker_id = any($2::uuid[]))
+        where blocker_id = any($1::uuid[])
+          and blocked_id = any($1::uuid[])
         limit 1`,
-      [ownerId, memberIds],
+      [participantIds],
     );
     if ((blockCount ?? 0) > 0) throw new Error('GROUP_MEMBER_BLOCKED');
 
