@@ -51,6 +51,15 @@ jobs:
         working-directory: apps/mobile
         run: npx expo prebuild --platform android
 
+      - name: Verify generated Android release manifest hardening
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          test -f "$MANIFEST"
+          grep -E 'android:allowBackup="false"' "$MANIFEST"
+          grep -E 'android:usesCleartextTraffic="false"' "$MANIFEST"
+
       - name: Verify libsignal release hardening survived prebuild
         working-directory: apps/mobile
         run: |
@@ -92,10 +101,23 @@ jobs:
             exit 1
           fi
 
-      - name: Upload standalone APK
+      - name: Generate APK SHA-256 manifest
+        working-directory: apps/mobile/android
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          CHECKSUM=app/build/outputs/apk/release/app-release.apk.sha256
+          test -f "$APK"
+          sha256sum "$APK" > "$CHECKSUM"
+          test -s "$CHECKSUM"
+          sha256sum --check "$CHECKSUM"
+
+      - name: Upload standalone APK and checksum
         uses: actions/upload-artifact@v4
         with:
           name: k-ssenger-android-internal-release
-          path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          path: |
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk.sha256
           if-no-files-found: error
           retention-days: 7
