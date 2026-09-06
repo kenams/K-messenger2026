@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import { reauthenticateNeonPassword, changeNeonPassword } from '../../lib/neonAuth';
 import { disconnectRealtimeSocket, emitAck, getRealtimeSocket } from '../../lib/realtime';
+import { prepareLocalSignalAccountPurge } from '../../lib/signalCleanup';
 import type { MyProfile } from './useMyProfile';
 
 type ExportRow = Record<string, unknown>;
@@ -132,18 +133,23 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
 
     setDeleteBusy(true);
     try {
+      // Capture current Signal device IDs while the authenticated rows still
+      // exist. Android fails closed here if local crypto state cannot later be
+      // erased after the provider-side deletion succeeds.
+      const purgeLocalSignalState = await prepareLocalSignalAccountPurge(profile.id);
       const freshAccessToken = await reauthenticateNeonPassword(deletePassword);
       const socket = await getRealtimeSocket();
       const response = await emitAck<DeleteAck>(socket, 'account:delete', { freshAccessToken, confirmation: 'DELETE' });
       if (!response.ok) throw new Error(response.error ?? 'ACCOUNT_DELETE_REJECTED');
 
+      await purgeLocalSignalState();
       setDeletePassword('');
       setDeleteConfirmation('');
       disconnectRealtimeSocket();
       await getBackend().auth.signOut();
-      setDeleteNotice('Compte supprimé définitivement.');
+      setDeleteNotice('Compte supprimé définitivement. Les clés et sessions Signal locales ont été effacées de cet appareil.');
     } catch {
-      setDeleteNotice('Suppression refusée. Vérifie ton mot de passe et réessaie. Si le service sécurisé de suppression n’est pas configuré côté serveur, aucune donnée n’est effacée.');
+      setDeleteNotice('Suppression refusée. Vérifie ton mot de passe et réessaie. Si les protections locales ou le service sécurisé de suppression ne sont pas prêts, K-ssenger refuse la suppression plutôt que de laisser un état sensible incomplet.');
     } finally {
       setDeleteBusy(false);
     }
@@ -180,7 +186,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
 
         <View style={styles.warningCard}>
           <Text style={styles.cardTitle}>🗑️ Supprimer mon compte</Text>
-          <Text style={styles.copy}>Action définitive. K-ssenger demande ton mot de passe, obtient un jeton Neon Auth fraîchement émis puis exige la confirmation DELETE. Le serveur ne peut cibler que le projet Neon K-ssenger dédié.</Text>
+          <Text style={styles.copy}>Action définitive. K-ssenger demande ton mot de passe, obtient un jeton Neon Auth fraîchement émis puis exige la confirmation DELETE. Le serveur ne peut cibler que le projet Neon K-ssenger dédié. Sur Android, les clés et sessions Signal locales sont également détruites après confirmation serveur.</Text>
           <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={deletePassword} onChangeText={setDeletePassword} placeholder="Mot de passe actuel" style={styles.input} />
           <TextInput autoCapitalize="characters" autoCorrect={false} value={deleteConfirmation} onChangeText={setDeleteConfirmation} placeholder="Tape DELETE" style={styles.input} />
           <TouchableOpacity style={[styles.danger, deleteBusy && styles.buttonDisabled]} disabled={deleteBusy} onPress={() => void deleteAccount()}>
