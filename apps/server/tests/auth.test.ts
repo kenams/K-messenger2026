@@ -46,7 +46,7 @@ async function importAuthModule() {
   vi.stubEnv('NEON_AUTH_BASE_URL', baseUrl);
   vi.stubEnv('NEON_AUTH_JWKS_URL', jwksUrl);
   vi.stubEnv('DATABASE_URL', 'postgresql://user:password@db.example/kssenger?sslmode=require');
-  vi.stubEnv('CORS_ORIGIN', 'http://localhost:8081');
+  vi.stubEnv('CORS_ORIGIN', 'https://example.invalid');
   return import('../src/auth.js');
 }
 

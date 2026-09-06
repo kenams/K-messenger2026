@@ -16,7 +16,25 @@ const schema = z.object({
   // Server-only Neon Console API token. Never expose this through an EXPO_PUBLIC variable.
   // Account self-delete remains unavailable until this secret is configured on the K-ssenger server.
   NEON_API_KEY: z.string().min(20).optional(),
-  CORS_ORIGIN: z.string().min(1),
+  // Comma-separated allowlist of exact https origins. Rejects "*" (which the
+  // cors package would otherwise happily echo back even with credentials:
+  // true, defeating same-origin protection for cookie/credentialed requests)
+  // and any plain-http origin.
+  CORS_ORIGIN: z
+    .string()
+    .min(1)
+    .transform((value) => value.split(',').map((origin) => origin.trim()).filter(Boolean))
+    .pipe(
+      z
+        .array(
+          z
+            .string()
+            .url()
+            .refine((origin) => origin !== '*', 'CORS_ORIGIN_WILDCARD_NOT_ALLOWED')
+            .refine((origin) => new URL(origin).protocol === 'https:', 'CORS_ORIGIN_MUST_BE_HTTPS'),
+        )
+        .min(1),
+    ),
 });
 
 export const config = schema.parse(process.env);
