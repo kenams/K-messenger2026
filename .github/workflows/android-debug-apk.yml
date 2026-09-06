@@ -61,6 +61,8 @@ jobs:
           grep -F 'coreLibraryDesugaringEnabled true' android/app/build.gradle
           grep -F 'org.signal:libsignal-client:0.100.0' android/app/build.gradle
           grep -F 'org.signal:libsignal-android:0.100.0' android/app/build.gradle
+          grep -F 'libsignal_jni*.dylib' android/app/build.gradle
+          grep -F 'signal_jni*.dll' android/app/build.gradle
 
       - name: Verify official libsignal release dependencies
         working-directory: apps/mobile/android
