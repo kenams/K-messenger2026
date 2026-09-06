@@ -21,6 +21,46 @@ type PushPayload = {
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_TOKEN_PATTERN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/;
 const MAX_BATCH = 100;
+const MAX_PUSH_TITLE_LENGTH = 64;
+const MAX_PUSH_BODY_LENGTH = 160;
+const MAX_PUSH_DATA_VALUE_LENGTH = 128;
+const ALLOWED_PUSH_DATA_KEYS = new Set(['type', 'conversationId', 'messageId', 'senderId']);
+const ALLOWED_PUSH_TYPES = new Set(['message', 'kpulse']);
+
+function assertMetadataOnlyPushPayload(payload: PushPayload) {
+  if (!payload.title || payload.title.length > MAX_PUSH_TITLE_LENGTH) {
+    throw new Error('PUSH_INVALID_TITLE');
+  }
+  if (!payload.body || payload.body.length > MAX_PUSH_BODY_LENGTH) {
+    throw new Error('PUSH_INVALID_BODY');
+  }
+
+  const data = payload.data ?? {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!ALLOWED_PUSH_DATA_KEYS.has(key)) throw new Error(`PUSH_DATA_KEY_NOT_ALLOWED:${key}`);
+    if (typeof value !== 'string' || value.length === 0 || value.length > MAX_PUSH_DATA_VALUE_LENGTH) {
+      throw new Error(`PUSH_DATA_VALUE_INVALID:${key}`);
+    }
+  }
+  if ('type' in data && !ALLOWED_PUSH_TYPES.has(data.type)) throw new Error('PUSH_TYPE_NOT_ALLOWED');
+
+  // Push notifications are deliberately metadata-only. Message content,
+  // ciphertext, tokens and credentials belong neither in the notification body
+  // nor in Expo data payloads, even if a future caller accidentally supplies one.
+  const serialized = JSON.stringify({ title: payload.title, body: payload.body, data }).toLowerCase();
+  const forbiddenMarkers = [
+    'plaintext',
+    'ciphertext',
+    'authorization',
+    'access_token',
+    'refresh_token',
+    'private_key',
+    'session_record',
+  ];
+  if (forbiddenMarkers.some((marker) => serialized.includes(marker))) {
+    throw new Error('PUSH_SENSITIVE_CONTENT_REJECTED');
+  }
+}
 
 async function listEnabledSubscriptions(userIds: string[]): Promise<PushSubscriptionRow[]> {
   if (userIds.length === 0) return [];
@@ -82,6 +122,7 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
   if (uniqueUserIds.length === 0) return;
 
   try {
+    assertMetadataOnlyPushPayload(payload);
     const subscriptions = await listEnabledSubscriptions(uniqueUserIds);
     for (let index = 0; index < subscriptions.length; index += MAX_BATCH) {
       await postBatch(subscriptions.slice(index, index + MAX_BATCH), payload);
