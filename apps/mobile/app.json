@@ -46,7 +46,10 @@
     "android": {
       "package": "com.kahdigital.kssenger",
       "versionCode": 1,
-      "allowBackup": false
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro"
