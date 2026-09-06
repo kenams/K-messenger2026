@@ -1,16 +1,16 @@
-# K-ssenger — UX Specification
+# K-ssenger â€” UX Specification
 
 ## Design direction
 
-K-ssenger doit évoquer MSN sans copier ses assets ou marques protégées.
+K-ssenger doit Ã©voquer K-ssenger sans copier ses assets ou marques protÃ©gÃ©es.
 
 Principes :
-- présence très visible
-- personnalisation assumée
+- prÃ©sence trÃ¨s visible
+- personnalisation assumÃ©e
 - interface moderne, fluide, mobile-first
-- Wizz toujours accessible
+- K-Pulse toujours accessible
 - statut et musique visibles sans surcharger
-- sécurité lisible, pas anxiogène
+- sÃ©curitÃ© lisible, pas anxiogÃ¨ne
 
 ## Navigation principale
 
@@ -22,38 +22,38 @@ Principes :
 
 ## Onboarding
 
-### Écran 1 — Welcome
+### Ã‰cran 1 â€” Welcome
 - logo K-ssenger
-- phrase : `La messagerie sociale qui remet la présence au centre.`
-- CTA Créer un compte
+- phrase : `La messagerie sociale qui remet la prÃ©sence au centre.`
+- CTA CrÃ©er un compte
 - CTA Se connecter
 
-### Écran 2 — Compte
+### Ã‰cran 2 â€” Compte
 - email
 - mot de passe
 - confirmation
 
-### Écran 3 — Identité
+### Ã‰cran 3 â€” IdentitÃ©
 - username unique
 - display name
 - avatar
 
-### Écran 4 — Présence
+### Ã‰cran 4 â€” PrÃ©sence
 - statut initial
 - bio courte
 - musique optionnelle
 
-### Écran 5 — Permissions
+### Ã‰cran 5 â€” Permissions
 Demander au bon moment, jamais tout d'un bloc :
 - notifications
-- contacts si réellement nécessaire
-- micro/caméra au premier usage
+- contacts si rÃ©ellement nÃ©cessaire
+- micro/camÃ©ra au premier usage
 - localisation au premier usage K-MAP
 
-### Écran 6 — Protection
+### Ã‰cran 6 â€” Protection
 - explication E2EE
-- appareil enregistré
-- récupération de compte séparée des clés de chiffrement
+- appareil enregistrÃ©
+- rÃ©cupÃ©ration de compte sÃ©parÃ©e des clÃ©s de chiffrement
 
 ## Contacts
 
@@ -67,34 +67,34 @@ Header :
 Sections :
 - Favoris
 - En ligne
-- Occupés
+- OccupÃ©s
 - Absents
 - Hors ligne
 
 Carte contact :
 - avatar
-- indicateur présence
+- indicateur prÃ©sence
 - display name
 - statut perso
-- musique éventuelle
-- indicateur K-MAP uniquement si partagé volontairement
+- musique Ã©ventuelle
+- indicateur K-MAP uniquement si partagÃ© volontairement
 
 Actions :
 - Message
-- Wizz
+- K-Pulse
 - Appeler
 - Voir profil
-- K-MAP si autorisé
+- K-MAP si autorisÃ©
 
 ## Chats
 
 Liste :
 - avatar
 - nom
-- aperçu local déchiffré
+- aperÃ§u local dÃ©chiffrÃ©
 - heure
 - non lu
-- statut envoyé/livré/lu
+- statut envoyÃ©/livrÃ©/lu
 - muted/pinned
 
 Chat header :
@@ -103,7 +103,7 @@ Chat header :
 - statut
 - badge verrou E2EE
 - appel audio
-- appel vidéo
+- appel vidÃ©o
 - menu
 
 Composer :
@@ -111,11 +111,11 @@ Composer :
 - champ message
 - emoji
 - micro
-- Wizz visible directement
+- K-Pulse visible directement
 
 Menu + :
 - Photo
-- Vidéo
+- VidÃ©o
 - Document
 - Position
 - Position en direct
@@ -123,17 +123,17 @@ Menu + :
 - Contact
 
 Message bubble :
-- réponse
-- édition
+- rÃ©ponse
+- Ã©dition
 - suppression
-- réaction
+- rÃ©action
 - copier
-- transférer
+- transfÃ©rer
 - info livraison
 
-## Wizz
+## K-Pulse
 
-Tap : Classic Wizz.
+Tap : Classic K-Pulse.
 
 Long press :
 - Classic
@@ -144,14 +144,14 @@ Long press :
 V1 peut n'activer que Classic.
 
 Animation :
-- shake contrôlé
+- shake contrÃ´lÃ©
 - vibration/haptique
 - son original
 - fallback reduced motion
 
 ## K-MAP
 
-Carte plein écran avec UI minimale.
+Carte plein Ã©cran avec UI minimale.
 
 Top controls :
 - recherche lieu
@@ -160,17 +160,17 @@ Top controls :
 
 Map objects :
 - Moi
-- amis autorisés
+- amis autorisÃ©s
 - rendez-vous
-- membres de trip autorisés
+- membres de trip autorisÃ©s
 
 Bottom sheet sur contact :
 - nom
-- présence
+- prÃ©sence
 - distance approximative
-- ETA si autorisé
+- ETA si autorisÃ©
 - Message
-- Wizz
+- K-Pulse
 - Rejoindre
 
 Primary FAB : `Partager / Se retrouver`
@@ -180,21 +180,21 @@ Actions :
 - Position live
 - Je viens vers toi
 - On se capte ?
-- Créer un road trip
+- CrÃ©er un road trip
 - Meet Mode
 
 Persistent sharing banner :
-`Position partagée avec Sarah · 34 min restantes · ARRÊTER`
+`Position partagÃ©e avec Sarah Â· 34 min restantes Â· ARRÃŠTER`
 
 ## Moments
 
-Feed horizontal/vertical léger, pas TikTok.
+Feed horizontal/vertical lÃ©ger, pas TikTok.
 
-- amis uniquement par défaut
+- amis uniquement par dÃ©faut
 - story 24 h
-- texte/photo/vidéo
-- reply privé
-- contrôle audience
+- texte/photo/vidÃ©o
+- reply privÃ©
+- contrÃ´le audience
 - viewer list
 
 ## Moi
@@ -203,45 +203,45 @@ Profil :
 - avatar
 - display name
 - @username
-- présence
+- prÃ©sence
 - bio
 - musique
 
 Sections :
 - Compte
-- Confidentialité
-- Sécurité
+- ConfidentialitÃ©
+- SÃ©curitÃ©
 - Appareils
 - Notifications
 - Apparence
 - Chats
 - Stockage
 - Aide
-- À propos
+- Ã€ propos
 
-## Confidentialité
+## ConfidentialitÃ©
 
-Contrôles :
-- qui voit ma présence
-- qui voit ma dernière connexion
+ContrÃ´les :
+- qui voit ma prÃ©sence
+- qui voit ma derniÃ¨re connexion
 - qui voit mon avatar
 - qui voit ma musique
-- accusés de lecture
+- accusÃ©s de lecture
 - qui peut m'ajouter
 - qui peut m'appeler
-- qui peut me Wizz
+- qui peut me K-Pulse
 - qui peut m'inviter
 - qui peut me voir sur K-MAP
 
-## Sécurité
+## SÃ©curitÃ©
 
 - appareils actifs
-- révoquer appareil
-- contacts vérifiés
+- rÃ©voquer appareil
+- contacts vÃ©rifiÃ©s
 - Safety Number / QR
-- notifications changement de clé
+- notifications changement de clÃ©
 - verrouillage app
-- biométrie
+- biomÃ©trie
 - vue claire E2EE
 
 ## Empty states
@@ -250,7 +250,7 @@ Contacts : `Aucun contact pour le moment. Ajoute quelqu'un et fais revivre ta li
 
 Chats : `Pas encore de conversation. Qui est en ligne ?`
 
-K-MAP : `Personne n'est visible ici. Le partage de position reste privé et volontaire.`
+K-MAP : `Personne n'est visible ici. Le partage de position reste privÃ© et volontaire.`
 
 Moments : `Rien de neuf pour l'instant.`
 
@@ -261,5 +261,5 @@ Moments : `Rien de neuf pour l'instant.`
 - touch targets suffisants
 - contrastes
 - Reduce Motion
-- Wizz adapté
-- ne jamais dépendre uniquement d'une couleur pour la présence
+- K-Pulse adaptÃ©
+- ne jamais dÃ©pendre uniquement d'une couleur pour la prÃ©sence

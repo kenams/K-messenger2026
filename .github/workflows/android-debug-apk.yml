@@ -1,19 +1,27 @@
-name: Android Debug APK
+name: Android Internal APK
 
 on:
   workflow_dispatch:
   push:
     branches:
       - bootstrap/platform
+      - fix/feed-kmap-contact-security
     paths:
       - 'apps/mobile/**'
       - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/android-debug-apk.yml'
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      CI: '1'
+      NODE_ENV: production
+      EXPO_PUBLIC_NEON_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
+      EXPO_PUBLIC_NEON_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
+      EXPO_PUBLIC_KSSENGER_SOCKET_URL: https://kssenger-server.onrender.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,28 +30,94 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Validate K-ssenger public backend configuration
+        run: |
+          test "$EXPO_PUBLIC_NEON_AUTH_URL" = "https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth"
+          test "$EXPO_PUBLIC_NEON_DATA_API_URL" = "https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1"
+          test "$EXPO_PUBLIC_KSSENGER_SOCKET_URL" = "https://kssenger-server.onrender.com"
 
       - name: Expo prebuild Android
         working-directory: apps/mobile
-        run: npx expo prebuild --platform android --non-interactive
+        run: npx expo prebuild --platform android
 
-      - name: Build debug APK
+      - name: Verify generated Android release manifest hardening
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          test -f "$MANIFEST"
+          grep -E 'android:allowBackup="false"' "$MANIFEST"
+          grep -E 'android:usesCleartextTraffic="false"' "$MANIFEST"
+
+      - name: Verify libsignal release hardening survived prebuild
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          test -f android/app/proguard-rules.pro
+          grep -F -- '-keep class org.signal.libsignal.** { *; }' android/app/proguard-rules.pro
+          grep -F -- '-keep class com.kahdigital.kssenger.signal.** { *; }' android/app/proguard-rules.pro
+          grep -F 'coreLibraryDesugaringEnabled true' android/app/build.gradle
+          grep -F 'org.signal:libsignal-client:0.100.0' android/app/build.gradle
+          grep -F 'org.signal:libsignal-android:0.100.0' android/app/build.gradle
+          grep -F 'libsignal_jni*.dylib' android/app/build.gradle
+          grep -F 'signal_jni*.dll' android/app/build.gradle
+
+      - name: Verify official libsignal release dependencies
         working-directory: apps/mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          set -euo pipefail
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --no-daemon > /tmp/kssenger-release-deps.txt
+          grep -F 'org.signal:libsignal-client:0.100.0' /tmp/kssenger-release-deps.txt
+          grep -F 'org.signal:libsignal-android:0.100.0' /tmp/kssenger-release-deps.txt
 
-      - name: Upload APK
+      - name: Build standalone internal release APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Inspect final APK libsignal resources
+        working-directory: apps/mobile/android
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          unzip -Z1 "$APK" > /tmp/kssenger-apk-entries.txt
+          if grep -E '(^|/)(libsignal_jni[^/]*\.dylib|signal_jni[^/]*\.dll)$' /tmp/kssenger-apk-entries.txt; then
+            echo 'Non-Android libsignal JNI resource leaked into release APK.' >&2
+            exit 1
+          fi
+          if ! grep -E '(^|/)libsignal_jni\.so$' /tmp/kssenger-apk-entries.txt; then
+            echo 'Android libsignal JNI runtime is missing from release APK.' >&2
+            exit 1
+          fi
+
+      - name: Generate APK SHA-256 manifest
+        working-directory: apps/mobile/android
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          CHECKSUM=app/build/outputs/apk/release/app-release.apk.sha256
+          test -f "$APK"
+          sha256sum "$APK" > "$CHECKSUM"
+          test -s "$CHECKSUM"
+          sha256sum --check "$CHECKSUM"
+
+      - name: Upload standalone APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: k-ssenger-android-debug
-          path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: k-ssenger-android-internal-release
+          path: |
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk.sha256
           if-no-files-found: error
           retention-days: 7

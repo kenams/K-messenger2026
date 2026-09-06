@@ -1,0 +1,156 @@
+name: Android E2EE Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/app.json'
+      - 'apps/mobile/plugins/withKssengerLibsignal.js'
+      - 'apps/mobile/modules/kssenger-signal/**'
+      - 'apps/mobile/src/lib/e2ee.ts'
+      - 'apps/mobile/src/lib/signalDevice.ts'
+      - '.github/workflows/android-e2ee-runtime.yml'
+  push:
+    branches:
+      - fix/feed-kmap-contact-security
+    paths:
+      - 'apps/mobile/app.json'
+      - 'apps/mobile/plugins/withKssengerLibsignal.js'
+      - 'apps/mobile/modules/kssenger-signal/**'
+      - 'apps/mobile/src/lib/e2ee.ts'
+      - 'apps/mobile/src/lib/signalDevice.ts'
+      - '.github/workflows/android-e2ee-runtime.yml'
+
+concurrency:
+  group: android-e2ee-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  android-runtime-e2ee:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: '1'
+      EXPO_PUBLIC_NEON_AUTH_URL: https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth
+      EXPO_PUBLIC_NEON_DATA_API_URL: https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1
+      EXPO_PUBLIC_KSSENGER_SOCKET_URL: https://kssenger-server.onrender.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm ci
+      - name: Prebuild Android native project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android
+      - name: Verify generated Android transport security
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST="apps/mobile/android/app/src/main/AndroidManifest.xml"
+          test -f "$MANIFEST"
+          grep -Eq 'android:usesCleartextTraffic="false"' "$MANIFEST"
+          if grep -Eq 'android:usesCleartextTraffic="true"' "$MANIFEST"; then
+            echo "K-ssenger Android manifest unexpectedly permits cleartext traffic"
+            exit 1
+          fi
+      - name: Install Android emulator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/kssenger-avd"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.android" "$ANDROID_AVD_HOME"
+          chmod 700 "$HOME/.android" "$ANDROID_AVD_HOME"
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          ADB="$ANDROID_HOME/platform-tools/adb"
+          EMULATOR="$ANDROID_HOME/emulator/emulator"
+          test -x "$SDKMANAGER"
+          test -x "$AVDMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;x86_64"
+          test -x "$ADB"
+          test -x "$EMULATOR"
+
+          echo no | "$AVDMANAGER" create avd \
+            -n kssenger-ci \
+            -k "system-images;android-35;google_apis;x86_64" \
+            -p "$ANDROID_AVD_HOME/kssenger-ci.avd" \
+            --force
+
+          "$EMULATOR" -list-avds | grep -Fx kssenger-ci
+      - name: Start Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADB="$ANDROID_HOME/platform-tools/adb"
+          EMULATOR="$ANDROID_HOME/emulator/emulator"
+          LOG="$RUNNER_TEMP/kssenger-emulator.log"
+
+          test -x "$ADB"
+          test -x "$EMULATOR"
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm || true
+          fi
+
+          "$ADB" start-server
+          nohup "$EMULATOR" \
+            -avd kssenger-ci \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-metrics \
+            -gpu swiftshader_indirect \
+            -no-snapshot \
+            > "$LOG" 2>&1 &
+          EMULATOR_PID=$!
+
+          for i in $(seq 1 150); do
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+              echo "Android emulator exited before boot completed"
+              cat "$LOG" || true
+              exit 1
+            fi
+
+            if "$ADB" devices | awk 'NR>1 && $2 == "device" { found=1 } END { exit !found }'; then
+              if [ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+                "$ADB" shell input keyevent 82 || true
+                "$ADB" shell settings put global window_animation_scale 0 || true
+                "$ADB" shell settings put global transition_animation_scale 0 || true
+                "$ADB" shell settings put global animator_duration_scale 0 || true
+                "$ADB" shell getprop ro.build.version.sdk
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+
+          echo "Android emulator did not finish booting"
+          "$ADB" devices -l || true
+          cat "$LOG" || true
+          exit 1
+      - name: Execute native libsignal PQXDH and Double Ratchet instrumentation
+        working-directory: apps/mobile/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :kssenger-signal:connectedDebugAndroidTest --no-daemon --stacktrace --console=plain 2>&1 | tee "$RUNNER_TEMP/kssenger-gradle-e2ee.log"
+      - name: Upload instrumentation reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kssenger-e2ee-instrumentation-reports
+          path: |
+            apps/mobile/android/**/build/reports/androidTests/**
+            apps/mobile/android/**/build/outputs/androidTest-results/**
+            ${{ runner.temp }}/kssenger-emulator.log
+            ${{ runner.temp }}/kssenger-gradle-e2ee.log
+          if-no-files-found: ignore
+          retention-days: 7

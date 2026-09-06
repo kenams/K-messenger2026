@@ -1,81 +1,179 @@
-import React, { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { FeedScreen } from './src/features/feed/FeedScreen';
 import { MomentsScreen } from './src/features/moments/MomentsScreen';
-import { MsnContactsScreen, Contact } from './src/features/contacts/MsnContactsScreen';
+import { KMapScreen } from './src/features/map/KMapScreen';
+import { MsnContactsScreen, type Contact } from './src/features/contacts/MsnContactsScreen';
 import { ChatsHubScreen } from './src/features/chats/ChatsHubScreen';
+import { DirectConversationScreen } from './src/features/chats/DirectConversationScreen';
+import { GroupsScreen } from './src/features/groups/GroupsScreen';
+import { AccountDataScreen } from './src/features/profile/AccountDataScreen';
+import { PrivacySettingsScreen } from './src/features/profile/PrivacySettingsScreen';
+import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
+import type { MyProfile } from './src/features/profile/useMyProfile';
+import { unregisterPushForSignOut } from './src/features/push/usePushRegistration';
+import { getBackend } from './src/lib/backend';
+import { getMediaDownload } from './src/lib/media';
+import { disconnectRealtimeSocket } from './src/lib/realtime';
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
 
-export default function App() {
+type AppProps = {
+  profile: MyProfile;
+  onProfileChanged: () => Promise<void>;
+};
+
+type AgeProfileRow = {
+  birth_date?: string;
+};
+
+function ageFromBirthDate(value: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) return null;
+
+  const now = new Date();
+  let age = now.getUTCFullYear() - year;
+  const monthDelta = now.getUTCMonth() - (month - 1);
+  if (monthDelta < 0 || (monthDelta === 0 && now.getUTCDate() < day)) age -= 1;
+  return age;
+}
+
+function isHttpsAvatarUrl(value: string | null | undefined): value is string {
+  return !!value && /^https:\/\//i.test(value);
+}
+
+export default function App({ profile, onProfileChanged }: AppProps) {
   const [tab, setTab] = useState<TabName>('contacts');
   const [selected, setSelected] = useState<Contact | null>(null);
-  const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<string[]>(['Salut 👋', 'Bienvenue sur K-ssenger.']);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [accountData, setAccountData] = useState(false);
+  const [privacySettings, setPrivacySettings] = useState(false);
+  const [groupsScreen, setGroupsScreen] = useState(false);
   const [userAge, setUserAge] = useState<number | null>(null);
-  const [ageInput, setAgeInput] = useState('');
+  const [ageLoading, setAgeLoading] = useState(true);
+  const [ageSaving, setAgeSaving] = useState(false);
+  const [birthDateInput, setBirthDateInput] = useState('');
   const [ageError, setAgeError] = useState('');
 
-  const confirmAge = () => {
-    const parsed = Number(ageInput);
-    if (!Number.isInteger(parsed) || parsed < 13 || parsed > 120) {
-      setAgeError('K-ssenger est actuellement réservé aux utilisateurs de 13 ans et plus.');
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const { data, error } = await getBackend()
+          .from('user_age_profile')
+          .select('birth_date')
+          .eq('user_id', profile.id)
+          .limit(1);
+        if (error) throw error;
+        const rows = ((data ?? []) as unknown) as AgeProfileRow[];
+        const birthDate = rows[0]?.birth_date;
+        const age = birthDate ? ageFromBirthDate(birthDate) : null;
+        if (!active) return;
+        if (birthDate) setBirthDateInput(birthDate);
+        if (age !== null && age >= 13 && age <= 120) setUserAge(age);
+      } catch {
+        if (active) setAgeError('Impossible de vérifier ton profil d’âge pour le moment.');
+      } finally {
+        if (active) setAgeLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [profile.id]);
+
+  const confirmAge = async () => {
+    if (ageSaving) return;
+    const parsedAge = ageFromBirthDate(birthDateInput.trim());
+    if (parsedAge === null || parsedAge < 13 || parsedAge > 120) {
+      setAgeError('Entre une date valide au format AAAA-MM-JJ. K-ssenger est réservé aux 13 ans et plus.');
       return;
     }
+
+    setAgeSaving(true);
     setAgeError('');
-    setUserAge(parsed);
+    try {
+      const birthDate = birthDateInput.trim();
+      const existing = await getBackend()
+        .from('user_age_profile')
+        .select('user_id')
+        .eq('user_id', profile.id)
+        .limit(1);
+      if (existing.error) throw existing.error;
+      const rows = ((existing.data ?? []) as unknown) as Array<{ user_id?: string }>;
+      const response = rows.length
+        ? await getBackend()
+            .from('user_age_profile')
+            .update({ birth_date: birthDate, age_assurance_level: 'declared', updated_at: new Date().toISOString() })
+            .eq('user_id', profile.id)
+        : await getBackend()
+            .from('user_age_profile')
+            .insert({ user_id: profile.id, birth_date: birthDate, age_assurance_level: 'declared' });
+      if (response.error) throw response.error;
+      setUserAge(parsedAge);
+    } catch {
+      setAgeError('Impossible d’enregistrer la date de naissance. Aucun accès au K-Feed public n’est accordé sans ce contrôle.');
+    } finally {
+      setAgeSaving(false);
+    }
   };
 
-  const sendLocalDemoMessage = () => {
-    const value = message.trim();
-    if (!value) return;
-    setMessages((current) => [...current, value]);
-    setMessage('');
-  };
+  if (ageLoading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="dark" />
+        <View style={styles.ageGate}><ActivityIndicator /><Text style={styles.legal}>Vérification du profil de sécurité…</Text></View>
+      </SafeAreaView>
+    );
+  }
 
   if (userAge === null) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style="dark" />
         <View style={styles.ageGate}>
-          <View style={styles.logoOrb}><Text style={styles.logoText}>K</Text></View>
+          <Avatar profile={profile} size="large" />
           <Text style={styles.brand}>K-SSENGER</Text>
-          <Text style={styles.ageTitle}>Bienvenue dans MSN… version 2027.</Text>
-          <Text style={styles.ageCopy}>Ton âge sert à protéger le K-Feed et les Moments publics. Les contenus 16+ et 18+ sont filtrés automatiquement.</Text>
-          <TextInput value={ageInput} onChangeText={setAgeInput} keyboardType="number-pad" placeholder="Ton âge" maxLength={3} style={styles.ageInput} onSubmitEditing={confirmAge} />
+          <Text style={styles.ageTitle}>Bienvenue {profile.display_name}.</Text>
+          <Text style={styles.ageCopy}>Ta date de naissance sert au filtrage serveur du K-Feed. Elle reste protégée par les règles RLS de ton compte.</Text>
+          <TextInput
+            value={birthDateInput}
+            onChangeText={setBirthDateInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="numbers-and-punctuation"
+            placeholder="AAAA-MM-JJ"
+            maxLength={10}
+            style={styles.ageInput}
+            onSubmitEditing={() => void confirmAge()}
+          />
           {!!ageError && <Text style={styles.error}>{ageError}</Text>}
-          <TouchableOpacity style={styles.primary} onPress={confirmAge}><Text style={styles.primaryText}>Entrer dans K-ssenger</Text></TouchableOpacity>
-          <Text style={styles.legal}>Version test · âge déclaré, vérification renforcée prévue.</Text>
+          <TouchableOpacity disabled={ageSaving} style={[styles.primary, ageSaving && styles.disabled]} onPress={() => void confirmAge()}>
+            {ageSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Entrer dans K-ssenger</Text>}
+          </TouchableOpacity>
+          <Text style={styles.legal}>Âge déclaré · K-ssenger refuse l’accès au contenu public tant que ce profil n’est pas enregistré côté Neon.</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (selected) {
+  if (selected) return <DirectConversationScreen contact={selected} onBack={() => setSelected(null)} />;
+  if (editingProfile) return <ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={() => setEditingProfile(false)} />;
+  if (accountData) return <AccountDataScreen profile={profile} onBack={() => setAccountData(false)} />;
+  if (privacySettings) return <PrivacySettingsScreen userId={profile.id} onBack={() => setPrivacySettings(false)} />;
+  if (groupsScreen) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style="dark" />
-        <View style={styles.chatHeader}>
-          <TouchableOpacity onPress={() => setSelected(null)} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
-          <View style={styles.chatAvatar}><Text style={styles.chatAvatarText}>{selected.displayName[0]}</Text></View>
-          <View style={styles.flex}>
-            <Text style={styles.chatName}>🟢 {selected.nickname}</Text>
-            <Text style={styles.chatSub}>{selected.statusMessage ?? 'Disponible'}</Text>
-            {!!selected.nowPlaying && <Text style={styles.chatMusic}>🎵 {selected.nowPlaying}</Text>}
-          </View>
-          <Text style={styles.headerAction}>📞</Text><Text style={styles.headerAction}>📍</Text>
-        </View>
-        <View style={styles.securityStrip}><Text style={styles.securityText}>🛡️ Prototype local · E2EE réel non encore activé</Text></View>
-        <ScrollView style={styles.chatBody} contentContainerStyle={styles.chatContent}>
-          {messages.map((item, index) => <View key={`${index}-${item}`} style={[styles.bubble, index % 2 ? styles.mine : styles.theirs]}><Text style={styles.bubbleText}>{item}</Text></View>)}
-        </ScrollView>
-        <View style={styles.composer}>
-          <TouchableOpacity><Text style={styles.plus}>＋</Text></TouchableOpacity>
-          <TextInput value={message} onChangeText={setMessage} placeholder="Écris un message..." style={styles.input} onSubmitEditing={sendLocalDemoMessage} returnKeyType="send" />
-          <TouchableOpacity onPress={sendLocalDemoMessage}><Text style={styles.send}>➤</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setMessages((current) => [...current, '⚡ WIZZ !'])}><View style={styles.wizzBtn}><Text style={styles.wizz}>⚡</Text></View></TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.screenBack} onPress={() => setGroupsScreen(false)} accessibilityRole="button" accessibilityLabel="Retour au profil">
+          <Text style={styles.screenBackText}>‹ Retour au profil</Text>
+        </TouchableOpacity>
+        <GroupsScreen />
       </SafeAreaView>
     );
   }
@@ -83,13 +181,13 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      {tab !== 'feed' && tab !== 'moments' && <ProfileHeader />}
+      {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} />}
       {tab === 'contacts' && <MsnContactsScreen onOpen={setSelected} />}
       {tab === 'chats' && <ChatsHubScreen />}
       {tab === 'feed' && <FeedScreen userAge={userAge} />}
-      {tab === 'map' && <MapPreview />}
+      {tab === 'map' && <KMapScreen />}
       {tab === 'moments' && <MomentsScreen />}
-      {tab === 'me' && <MeScreen userAge={userAge} />}
+      {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} />}
       <View style={styles.tabs}>
         <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
         <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
@@ -102,28 +200,90 @@ export default function App() {
   );
 }
 
-function ProfileHeader() {
-  return <View style={styles.hero}><View style={styles.avatarRing}><View style={styles.avatar}><Text style={styles.avatarText}>K</Text></View><View style={styles.onlineDot} /></View><View style={styles.flex}><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.name}>KAH 😎 <Text style={styles.handle}>@kah</Text></Text><Text style={styles.status}>🟢 Disponible · « On est là. »</Text><View style={styles.musicPill}><Text style={styles.musicText}>🎵 Changes — 2Pac</Text></View></View><TouchableOpacity><Text style={styles.headerAction}>⚙️</Text></TouchableOpacity></View>;
+function Avatar({ profile, size = 'small' }: { profile: MyProfile; size?: 'small' | 'large' }) {
+  const style = size === 'large' ? styles.profileAvatar : styles.avatar;
+  const textStyle = size === 'large' ? styles.profileAvatarText : styles.avatarText;
+  const [signedAvatarUrl, setSignedAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!profile.avatar_media_id) {
+      setSignedAvatarUrl(null);
+      return () => { active = false; };
+    }
+    void getMediaDownload(profile.avatar_media_id)
+      .then((download) => { if (active) setSignedAvatarUrl(download.url); })
+      .catch(() => { if (active) setSignedAvatarUrl(null); });
+    return () => { active = false; };
+  }, [profile.avatar_media_id]);
+
+  const avatarUri = signedAvatarUrl ?? (isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : null);
+  if (avatarUri) return <Image source={{ uri: avatarUri }} style={style} />;
+  return <View style={style}><Text style={textStyle}>{profile.display_name[0]?.toUpperCase() ?? 'K'}</Text></View>;
 }
 
-function MapPreview() {
-  return <View style={styles.center}><Text style={styles.bigIcon}>📍</Text><Text style={styles.centerTitle}>K-MAP</Text><Text style={styles.centerText}>Tes amis apparaissent uniquement lorsqu’ils choisissent de partager leur position.</Text><View style={styles.mapButtons}><TouchableOpacity style={styles.secondary}><Text style={styles.secondaryText}>👻 Ghost Mode</Text></TouchableOpacity><TouchableOpacity style={styles.primary}><Text style={styles.primaryText}>🤝 On se capte ?</Text></TouchableOpacity></View></View>;
+function ProfileHeader({ profile, onEdit }: { profile: MyProfile; onEdit: () => void }) {
+  const presenceIcon = profile.presence === 'online' ? '🟢' : profile.presence === 'busy' ? '🔴' : profile.presence === 'away' ? '🟠' : '⚫';
+  return (
+    <View style={styles.hero}>
+      <View style={styles.avatarRing}><Avatar profile={profile} /><View style={styles.onlineDot} /></View>
+      <View style={styles.flex}><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.name}>{profile.display_name}</Text><Text style={styles.status}>{presenceIcon} {profile.custom_status || `@${profile.username}`}</Text></View>
+      <TouchableOpacity onPress={onEdit} accessibilityLabel="Modifier mon profil"><Text style={styles.headerAction}>⚙️</Text></TouchableOpacity>
+    </View>
+  );
 }
 
-function MeScreen({ userAge }: { userAge: number }) {
-  return <ScrollView contentContainerStyle={styles.profilePage}><View style={styles.profileAvatar}><Text style={styles.profileAvatarText}>K</Text></View><Text style={styles.profileName}>KAH 😎</Text><Text style={styles.profileHandle}>@kah</Text><Text style={styles.profilePresence}>🟢 Disponible</Text><Text style={styles.profileQuote}>« Work hard, disappear, come back different. »</Text><View style={styles.profileMusic}><Text style={styles.profileMusicTitle}>🎵 EN ÉCOUTE</Text><Text style={styles.profileMusicSong}>Changes — 2Pac</Text></View><View style={styles.profileGrid}><ProfileButton icon="✏️" label="Pseudo"/><ProfileButton icon="🎵" label="Musique"/><ProfileButton icon="👥" label="Groupes"/><ProfileButton icon="🔒" label="Sécurité"/></View><Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text></ScrollView>;
+function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void }) {
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
+
+  const signOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError('');
+    try {
+      await unregisterPushForSignOut(profile.id);
+      const { error } = await getBackend().auth.signOut();
+      if (error) throw error;
+      disconnectRealtimeSocket();
+    } catch {
+      setSignOutError('Déconnexion sécurisée impossible pour le moment. Réessaie avec une connexion réseau afin de couper aussi les notifications de ce compte.');
+      setSigningOut(false);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.profilePage}>
+      <Avatar profile={profile} size="large" />
+      <Text style={styles.profileName}>{profile.display_name}</Text><Text style={styles.profileHandle}>@{profile.username}</Text>
+      <Text style={styles.profilePresence}>{profile.custom_status || 'Disponible'}</Text>
+      {!!profile.now_playing_title && <Text style={styles.profileMusic}>♫ {profile.now_playing_artist ? `${profile.now_playing_artist} — ` : ''}{profile.now_playing_title}</Text>}
+      {!!profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>}
+      <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes" onPress={onGroups}/><ProfileButton icon="🔒" label="Vie privée" onPress={onPrivacy}/></View>
+      <TouchableOpacity disabled={signingOut} style={[styles.signOutButton, signingOut && styles.disabled]} onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Se déconnecter de K-ssenger">
+        {signingOut ? <ActivityIndicator /> : <Text style={styles.signOutText}>Se déconnecter</Text>}
+      </TouchableOpacity>
+      {!!signOutError && <Text style={styles.error}>{signOutError}</Text>}
+      <Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text>
+    </ScrollView>
+  );
 }
 
-function ProfileButton({ icon, label }: { icon: string; label: string }) { return <TouchableOpacity style={styles.profileButton}><Text style={styles.profileButtonIcon}>{icon}</Text><Text style={styles.profileButtonLabel}>{label}</Text></TouchableOpacity>; }
-function Tab({ active, icon, label, onPress }: { active: boolean; icon: string; label: string; onPress: () => void }) { return <TouchableOpacity style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}><Text style={styles.tabIcon}>{icon}</Text><Text style={[styles.tabLabel, active && styles.tabActive]}>{label}</Text></TouchableOpacity>; }
+function ProfileButton({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
+  return <TouchableOpacity style={styles.profileButton} onPress={onPress}><Text style={styles.profileButtonIcon}>{icon}</Text><Text style={styles.profileButtonLabel}>{label}</Text></TouchableOpacity>;
+}
+
+function Tab({ active, icon, label, onPress }: { active: boolean; icon: string; label: string; onPress: () => void }) {
+  return <TouchableOpacity style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}><Text style={styles.tabIcon}>{icon}</Text><Text style={[styles.tabLabel, active && styles.tabActive]}>{label}</Text></TouchableOpacity>;
+}
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#edf7fc' }, flex: { flex: 1 },
-  ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 }, logoOrb: { width: 82, height: 82, borderRadius: 28, backgroundColor: '#278dcc', borderWidth: 5, borderColor: '#bfe8ff', alignItems: 'center', justifyContent: 'center' }, logoText: { color: '#fff', fontSize: 37, fontWeight: '900' }, brand: { color: '#3784b5', fontSize: 10, letterSpacing: 2.2, fontWeight: '900' }, ageTitle: { marginTop: 22, fontSize: 27, lineHeight: 33, textAlign: 'center', color: '#15364a', fontWeight: '900' }, ageCopy: { marginTop: 10, maxWidth: 430, textAlign: 'center', color: '#648292', lineHeight: 20 }, ageInput: { width: 160, marginTop: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 17, padding: 13, textAlign: 'center', fontSize: 19 }, error: { color: '#b42318', marginTop: 9, textAlign: 'center' }, legal: { marginTop: 14, color: '#8197a4', fontSize: 10 },
-  primary: { backgroundColor: '#2189c5', borderRadius: 16, paddingHorizontal: 22, paddingVertical: 12, marginTop: 14 }, primaryText: { color: '#fff', fontWeight: '900' }, secondary: { borderWidth: 1, borderColor: '#a8d5ed', backgroundColor: '#fff', borderRadius: 16, paddingHorizontal: 18, paddingVertical: 12, marginTop: 14 }, secondaryText: { color: '#347da8', fontWeight: '900' },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, avatarRing: { position: 'relative' }, avatar: { width: 58, height: 58, borderRadius: 19, backgroundColor: '#2f93cf', borderWidth: 4, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 25, fontWeight: '900' }, onlineDot: { position: 'absolute', width: 15, height: 15, borderRadius: 8, backgroundColor: '#4ac769', right: -2, bottom: -2, borderWidth: 3, borderColor: '#fff' }, name: { color: '#16394e', fontSize: 18, fontWeight: '900', marginTop: 2 }, handle: { color: '#7b97a7', fontSize: 11, fontWeight: '600' }, status: { color: '#5d7c8e', fontSize: 11, marginTop: 2 }, musicPill: { alignSelf: 'flex-start', marginTop: 5, backgroundColor: '#e5f5ff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9 }, musicText: { color: '#2f83b5', fontSize: 10, fontStyle: 'italic' }, headerAction: { fontSize: 20, marginLeft: 5 },
-  chatHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, back: { fontSize: 39, lineHeight: 40, color: '#2189c5' }, chatAvatar: { width: 46, height: 46, borderRadius: 15, backgroundColor: '#dff2ff', alignItems: 'center', justifyContent: 'center' }, chatAvatarText: { color: '#2a79a8', fontSize: 18, fontWeight: '900' }, chatName: { color: '#173448', fontSize: 15, fontWeight: '900' }, chatSub: { color: '#6e8796', fontSize: 10, marginTop: 2 }, chatMusic: { color: '#3387b8', fontSize: 10, marginTop: 2, fontStyle: 'italic' }, securityStrip: { alignItems: 'center', backgroundColor: '#eaf3f7', paddingVertical: 6 }, securityText: { color: '#6a8290', fontSize: 9 }, chatBody: { flex: 1, padding: 13 }, chatContent: { paddingVertical: 8 }, bubble: { maxWidth: '80%', padding: 11, borderRadius: 17, marginBottom: 8 }, mine: { alignSelf: 'flex-end', backgroundColor: '#cdeeff', borderBottomRightRadius: 5 }, theirs: { alignSelf: 'flex-start', backgroundColor: '#fff', borderBottomLeftRadius: 5 }, bubbleText: { color: '#173448' }, composer: { flexDirection: 'row', alignItems: 'center', gap: 7, padding: 9, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, plus: { color: '#2189c5', fontSize: 27 }, input: { flex: 1, backgroundColor: '#edf5f9', borderRadius: 19, paddingHorizontal: 14, paddingVertical: 9 }, send: { color: '#2189c5', fontSize: 22 }, wizzBtn: { width: 39, height: 39, borderRadius: 14, backgroundColor: '#fff2bd', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#efcf65' }, wizz: { fontSize: 22 },
+  ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 }, brand: { color: '#3784b5', fontSize: 10, letterSpacing: 2.2, fontWeight: '900' }, ageTitle: { marginTop: 22, fontSize: 27, lineHeight: 33, textAlign: 'center', color: '#15364a', fontWeight: '900' }, ageCopy: { marginTop: 10, maxWidth: 430, textAlign: 'center', color: '#648292', lineHeight: 20 }, ageInput: { width: 180, marginTop: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 17, padding: 13, textAlign: 'center', fontSize: 17 }, error: { color: '#b42318', marginTop: 9, textAlign: 'center' }, legal: { marginTop: 14, color: '#8197a4', fontSize: 10, textAlign: 'center' },
+  primary: { backgroundColor: '#2189c5', borderRadius: 16, paddingHorizontal: 22, paddingVertical: 12, marginTop: 14, minWidth: 190, alignItems: 'center' }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { opacity: 0.55 },
+  screenBack: { minHeight: 46, justifyContent: 'center', paddingHorizontal: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, screenBackText: { color: '#2189c5', fontWeight: '900' },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, avatarRing: { position: 'relative' }, avatar: { width: 58, height: 58, borderRadius: 19, backgroundColor: '#2f93cf', borderWidth: 4, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 25, fontWeight: '900' }, onlineDot: { position: 'absolute', width: 15, height: 15, borderRadius: 8, backgroundColor: '#4ac769', right: -2, bottom: -2, borderWidth: 3, borderColor: '#fff' }, name: { color: '#16394e', fontSize: 18, fontWeight: '900', marginTop: 2 }, status: { color: '#5d7c8e', fontSize: 11, marginTop: 2 }, headerAction: { fontSize: 20, marginLeft: 5 },
   tabs: { flexDirection: 'row', paddingTop: 7, paddingBottom: 9, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, tab: { flex: 1, alignItems: 'center' }, tabIcon: { fontSize: 18 }, tabLabel: { marginTop: 2, color: '#8299a7', fontSize: 8 }, tabActive: { color: '#238ac8', fontWeight: '900' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 }, bigIcon: { fontSize: 62 }, centerTitle: { color: '#173448', fontWeight: '900', fontSize: 27, marginTop: 10 }, centerText: { color: '#688493', textAlign: 'center', marginTop: 8, lineHeight: 20, maxWidth: 400 }, mapButtons: { flexDirection: 'row', gap: 8 },
-  profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileQuote: { maxWidth: 330, textAlign: 'center', color: '#657e8d', marginTop: 14, fontStyle: 'italic', lineHeight: 20 }, profileMusic: { width: '100%', marginTop: 18, backgroundColor: '#e5f5ff', borderRadius: 18, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#bee2f5' }, profileMusicTitle: { color: '#4a87aa', fontSize: 10, letterSpacing: 1.3, fontWeight: '900' }, profileMusicSong: { color: '#173448', fontWeight: '900', marginTop: 4 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 12 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
+  profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900', textAlign: 'center' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileMusic: { color: '#4e7d55', marginTop: 5, fontSize: 12, fontStyle: 'italic', textAlign: 'center' }, profileBio: { color: '#657e8d', marginTop: 10, textAlign: 'center', lineHeight: 19, maxWidth: 360 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 18 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
+  signOutButton: { marginTop: 18, minWidth: 180, alignItems: 'center', paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d7e4eb', borderRadius: 14 }, signOutText: { color: '#4c6879', fontWeight: '900' },
 });
