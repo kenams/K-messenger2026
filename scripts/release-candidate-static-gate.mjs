@@ -19,6 +19,7 @@ const EXPECTED = Object.freeze({
   bundleIdentifier: 'com.kahdigital.kssenger',
   androidPackage: 'com.kahdigital.kssenger',
   authUrl: 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth',
+  authAudience: 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech',
   dataApiUrl: 'https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1',
   socketUrl: 'https://kssenger-server.onrender.com',
 });
@@ -63,6 +64,9 @@ check('server pins dedicated K-ssenger Neon Auth base URL',
 check('server pins JWKS to the same dedicated K-ssenger Auth endpoint',
   serverConfig.includes('KSSENGER_NEON_AUTH_JWKS_URL = `${KSSENGER_NEON_AUTH_BASE_URL}/.well-known/jwks.json`')
   && serverConfig.includes('NEON_AUTH_JWKS_URL: z.literal(KSSENGER_NEON_AUTH_JWKS_URL)'));
+check('server pins Neon Auth audience to the dedicated K-ssenger issuer',
+  serverConfig.includes(`KSSENGER_NEON_AUTH_AUDIENCE = '${EXPECTED.authAudience}'`)
+  && serverConfig.includes('NEON_AUTH_AUDIENCE: z.literal(KSSENGER_NEON_AUTH_AUDIENCE).default(KSSENGER_NEON_AUTH_AUDIENCE)'));
 
 const forbidden = [
   /SUPABASE_/i,
