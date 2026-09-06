@@ -46,6 +46,7 @@ check('iOS ATS does not exempt local networking', expo.ios?.infoPlist?.NSAppTran
 check('Android package identifier is stable', expo.android?.package === EXPECTED.androidPackage, String(expo.android?.package ?? 'missing'));
 check('Android versionCode exists', Number.isInteger(expo.android?.versionCode) && expo.android.versionCode >= 1, String(expo.android?.versionCode ?? 'missing'));
 check('Android release backups are disabled', expo.android?.allowBackup === false, String(expo.android?.allowBackup ?? 'missing'));
+check('Android cleartext traffic is disabled', expo.android?.usesCleartextTraffic === false, String(expo.android?.usesCleartextTraffic ?? 'missing'));
 
 const productionEnv = eas?.build?.production?.env ?? {};
 check('production Neon Auth endpoint is dedicated K-ssenger', productionEnv.EXPO_PUBLIC_NEON_AUTH_URL === EXPECTED.authUrl, String(productionEnv.EXPO_PUBLIC_NEON_AUTH_URL ?? 'missing'));
