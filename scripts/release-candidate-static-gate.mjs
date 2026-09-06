@@ -55,6 +55,10 @@ check('iOS bundle identifier is stable', expo.ios?.bundleIdentifier === EXPECTED
 check('iOS build number exists', /^\d+$/.test(String(expo.ios?.buildNumber ?? '')) && Number(expo.ios.buildNumber) >= 1, String(expo.ios?.buildNumber ?? 'missing'));
 check('iOS ATS forbids arbitrary loads', expo.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsArbitraryLoads === false, JSON.stringify(expo.ios?.infoPlist?.NSAppTransportSecurity ?? null));
 check('iOS ATS does not exempt local networking', expo.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsLocalNetworking === false, JSON.stringify(expo.ios?.infoPlist?.NSAppTransportSecurity ?? null));
+check('iOS release does not request always-on location',
+  !('NSLocationAlwaysUsageDescription' in (expo.ios?.infoPlist ?? {}))
+  && !('NSLocationAlwaysAndWhenInUseUsageDescription' in (expo.ios?.infoPlist ?? {})),
+  JSON.stringify(expo.ios?.infoPlist ?? null));
 
 const locationPermissions = pluginOptions('expo-location');
 const mediaPermissions = pluginOptions('expo-image-picker');
@@ -66,6 +70,10 @@ check('microphone disclosure is explicit and K-ssenger-specific', meaningfulPerm
 check('Android package identifier is stable', expo.android?.package === EXPECTED.androidPackage, String(expo.android?.package ?? 'missing'));
 check('Android versionCode exists', Number.isInteger(expo.android?.versionCode) && expo.android.versionCode >= 1, String(expo.android?.versionCode ?? 'missing'));
 check('Android release backups are disabled', expo.android?.allowBackup === false, String(expo.android?.allowBackup ?? 'missing'));
+check('Android background location is explicitly blocked for K-MAP',
+  Array.isArray(expo.android?.blockedPermissions)
+  && expo.android.blockedPermissions.includes('android.permission.ACCESS_BACKGROUND_LOCATION'),
+  JSON.stringify(expo.android?.blockedPermissions ?? null));
 check('Android native plugin forbids cleartext traffic', androidConfigPlugin.includes("application.$['android:usesCleartextTraffic'] = 'false'"));
 
 const productionEnv = eas?.build?.production?.env ?? {};
