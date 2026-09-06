@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "K-ssenger",
+    "slug": "k-ssenger",
+    "scheme": "kssenger",
+    "version": "1.0.0",
+    "jsEngine": "hermes",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "K-ssenger utilise votre position uniquement lorsque vous choisissez explicitement de la partager."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "K-ssenger accède uniquement aux photos et vidéos que vous choisissez de partager.",
+          "cameraPermission": "K-ssenger utilise la caméra uniquement lorsque vous choisissez de créer un média.",
+          "microphonePermission": "K-ssenger utilise le microphone uniquement lorsque vous enregistrez une vidéo avec du son."
+        }
+      ],
+      "./plugins/withKssengerLibsignal.js"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kahdigital.kssenger",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": false
+        }
+      }
+    },
+    "android": {
+      "package": "com.kahdigital.kssenger",
+      "versionCode": 1,
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "990e00eb-6114-45ef-acf5-5d49087aef50"
+      }
+    },
+    "owner": "kenams"
+  }
+}

@@ -1,4 +1,4 @@
-# K-MAP — Functional & Security Specification
+# K-MAP â€” Functional & Security Specification
 
 ## Goal
 
@@ -63,7 +63,7 @@ Blocking another user must immediately:
 - prevent location requests
 - prevent `On se capte ?`
 - prevent route/ETA sharing
-- prevent Wizz from K-MAP
+- prevent K-Pulse from K-MAP
 
 Cached precise location for the blocked user must expire/evict as quickly as technically practical.
 
