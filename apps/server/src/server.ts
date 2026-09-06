@@ -40,6 +40,7 @@ import { banGroupMember, setGroupMute, unbanGroupMember } from './groupModeratio
 import { registerGroupBanListHandler } from './groupModerationSocket.js';
 import { registerMediaHandlers } from './mediaSocket.js';
 import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
+import { registerDeviceLinkHandlers } from './deviceLinkSocket.js';
 import { sendConversationPush, sendKPulsePush } from './push.js';
 import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
@@ -169,6 +170,17 @@ io.on('connection', (socket) => {
     socket,
     userId,
     consumeRateLimit: () => socialLimiter.consume(`${userId}:account:delete`),
+  });
+
+  // Web/mobile device linking (WhatsApp-Web-style relay): the phone stays the
+  // only Signal Protocol participant, the web session is paired via an
+  // out-of-band QR exchange and only ever exchanges opaque encrypted
+  // envelopes through this relay. See docs/DEVICE_LINKING_PLAN.md.
+  registerDeviceLinkHandlers({
+    io,
+    socket,
+    userId,
+    consumeRateLimit: (action) => socialLimiter.consume(`${userId}:link:${action}`),
   });
 
   socket.on('conversation:direct', async (raw, ack) => {
