@@ -2,6 +2,14 @@ import type { Socket } from 'socket.io';
 import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { z } from 'zod';
 import { config } from './config.js';
+import { query } from './db.js';
+
+export type UserExistsCheck = (userId: string) => Promise<boolean>;
+
+async function defaultUserExists(userId: string): Promise<boolean> {
+  const result = await query('select 1 from neon_auth."user" where id = $1', [userId]);
+  return (result.rowCount ?? 0) > 0;
+}
 
 type AccessTokenVerifier = (token: string) => Promise<string>;
 
@@ -77,8 +85,15 @@ export async function authenticateFreshAccessToken(
 export async function authenticateSocket(
   socket: Socket,
   verifyToken: AccessTokenVerifier = getDefaultVerifier(),
+  userExists: UserExistsCheck = defaultUserExists,
 ): Promise<string> {
   const token = socket.handshake.auth?.accessToken;
   if (typeof token !== 'string') throw new Error('UNAUTHENTICATED');
-  return verifyToken(token);
+  const userId = await verifyToken(token);
+  // A stateless JWT stays cryptographically valid until it expires even
+  // after the underlying Neon Auth user is deleted, since deletion does not
+  // revoke already-issued tokens. Reject reconnection immediately once the
+  // account no longer exists instead of trusting the token alone.
+  if (!(await userExists(userId))) throw new Error('UNAUTHENTICATED');
+  return userId;
 }

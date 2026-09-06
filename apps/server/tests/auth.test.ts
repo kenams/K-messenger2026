@@ -72,7 +72,18 @@ describe('Neon socket JWT authentication', () => {
       handshake: { auth: { accessToken: token, userId: otherUserId } },
     } as unknown as Socket;
 
-    await expect(authenticateSocket(socket, verifier)).resolves.toBe(userId);
+    await expect(authenticateSocket(socket, verifier, async () => true)).resolves.toBe(userId);
+  });
+
+  it('rejects a validly signed token once the underlying account no longer exists', async () => {
+    const { token, jwks } = await signedToken();
+    const { authenticateSocket, createNeonJwtVerifier } = await importAuthModule();
+    const verifier = createNeonJwtVerifier({ baseUrl, jwksUrl }, jwks);
+    const socket = { handshake: { auth: { accessToken: token } } } as unknown as Socket;
+
+    await expect(authenticateSocket(socket, verifier, async () => false)).rejects.toThrow(
+      'UNAUTHENTICATED',
+    );
   });
 
   it('rejects malformed tokens', async () => {
