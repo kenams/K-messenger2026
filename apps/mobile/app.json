@@ -4,6 +4,7 @@
     "slug": "k-ssenger",
     "scheme": "kssenger",
     "version": "1.0.0",
+    "jsEngine": "hermes",
     "runtimeVersion": {
       "policy": "appVersion"
     },
