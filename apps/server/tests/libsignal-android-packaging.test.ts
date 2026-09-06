@@ -25,4 +25,11 @@ describe('Android libsignal release packaging', () => {
     expect(apkWorkflow).toContain("grep -F 'signal_jni*.dll' android/app/build.gradle");
     expect(apkWorkflow).toContain('Build standalone internal release APK');
   });
+
+  it('inspects the assembled APK for Android libsignal JNI and rejects desktop artifacts', () => {
+    expect(apkWorkflow).toContain('Inspect final APK libsignal resources');
+    expect(apkWorkflow).toContain("libsignal_jni[^/]*\\.dylib|signal_jni[^/]*\\.dll");
+    expect(apkWorkflow).toContain("libsignal_jni\\.so$");
+    expect(apkWorkflow).toContain("Android libsignal JNI runtime is missing from release APK.");
+  });
 });
