@@ -26,7 +26,8 @@
         "expo-image-picker",
         {
           "photosPermission": "K-ssenger accède uniquement aux photos et vidéos que vous choisissez de partager.",
-          "cameraPermission": "K-ssenger utilise la caméra uniquement lorsque vous choisissez de créer un média."
+          "cameraPermission": "K-ssenger utilise la caméra uniquement lorsque vous choisissez de créer un média.",
+          "microphonePermission": "K-ssenger utilise le microphone uniquement lorsque vous enregistrez une vidéo avec du son."
         }
       ],
       "./plugins/withKssengerLibsignal.js"
