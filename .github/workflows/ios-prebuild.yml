@@ -39,7 +39,7 @@ jobs:
         working-directory: apps/mobile
         run: npx expo prebuild --platform ios --clean --non-interactive
 
-      - name: Verify generated iOS V1 identity
+      - name: Verify generated iOS V1 identity and privacy contract
         working-directory: apps/mobile
         run: |
           set -euo pipefail
@@ -47,6 +47,16 @@ jobs:
           test -d ios/*.xcodeproj
           grep -R -F 'com.kahdigital.kssenger' ios --include='project.pbxproj'
           xcodebuild -list -project ios/*.xcodeproj >/tmp/kssenger-ios-project.txt
+
+          INFO_PLIST="$(find ios -maxdepth 3 -type f -name Info.plist -print -quit)"
+          test -n "$INFO_PLIST"
+          test -f "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' "$INFO_PLIST" | grep -F 'K-ssenger'
+          /usr/libexec/PlistBuddy -c 'Print :NSPhotoLibraryUsageDescription' "$INFO_PLIST" | grep -F 'K-ssenger'
+          /usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$INFO_PLIST" | grep -F 'K-ssenger'
+          /usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$INFO_PLIST" | grep -F 'K-ssenger'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$INFO_PLIST")" = "false"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsLocalNetworking' "$INFO_PLIST")" = "false"
 
       - name: Enforce iOS E2EE fail-closed until vetted native parity exists
         run: |
