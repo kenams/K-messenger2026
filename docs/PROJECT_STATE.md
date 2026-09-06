@@ -13,30 +13,19 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Root, mobile and server npm package manifests are aligned to `1.0.0`; the static release gate rejects manifest/app version drift.
 - Android Internal APK #117 previously produced an installable internal V1 release artifact. Store signing remains a separate release gate.
 - Remote V1 Smoke #28 is GREEN with 30/30 Alice/Bob/Charlie application-path checks.
-- Head `eb3437f5ad99897c7d709e5138aca8c3629a5e4c` is fully GREEN: CI #558, Android E2EE Runtime #207 and iOS Native Prebuild #77 all completed successfully.
+- Head `1825ca16bbe26b0de3e7623b2284c4a1438c126c` has CI #562 and iOS Native Prebuild #81 GREEN; Android E2EE Runtime #212 was still in progress at the latest check.
+- `f2173abdff88ed17eb90b01bd0a8f6073bffa073` explicitly pins the Expo mobile V1 runtime to Hermes instead of depending on the SDK default, improving release determinism across Android/iOS builds.
+- `f7bbc11789c6a7bd1aaa9d0eaaf2b0df80878014` makes Hermes a mandatory static release-gate invariant so a future runtime-engine drift fails CI.
 - `356bddedc3a8892d375a40b457ca36bec4401b6c` explicitly blocks Android `ACCESS_BACKGROUND_LOCATION`; K-MAP remains foreground-only and cannot silently acquire always-on/background tracking capability through a transitive native dependency.
 - `b7bdace1ef78d4776363503d96e4a1781bf73523` makes foreground-only location a release-gate invariant on both platforms: Android must block background location and iOS must not declare either always-location usage key.
-- `289786c1eec5d9b18b9387f9c7c0723e17aa6aac`, `738cbed121b3f8e49b8316443a0821a91436aec1` and `24c36bbbee81a42228a8b259b072719ebdb00f33` aligned JWT, account-deletion and private-media tests with the exact dedicated K-ssenger Neon Auth/JWKS endpoints after stricter runtime pinning exposed stale fixtures.
+- JWT, account-deletion and private-media tests are aligned with the exact dedicated K-ssenger Neon Auth/JWKS endpoints after stricter runtime pinning exposed stale fixtures.
 - `f84b95cc3a50cc7491de3d5ca998a9d90d2c4518` pins `NEON_AUTH_AUDIENCE` to the exact public audience of the dedicated K-ssenger Neon Auth branch while retaining a safe default to that same value.
 - `6de7ab08ec62c6792007eede4ff921fdf35c5001` makes the dedicated Neon Auth audience pin a mandatory static release-gate invariant.
-- `6c62a9535b7045078e21e9ac00b8e95f127d95cd` adds an explicit K-ssenger microphone disclosure limited to user-initiated video recording with sound, complementing the existing foreground-location, photo-library and camera disclosures used by K-MAP, avatar, K-Feed and Moments.
-- `b48c99e4fffffbfccca1443d87a77f647b32e307` makes all four native privacy disclosures mandatory release-gate invariants and rejects empty/generic permission text.
-- `300038a8402464e21ef004b57e9a31abd47fcc0e` extends macOS iOS prebuild validation to inspect the generated Info.plist and prove the K-ssenger-specific location/photo/camera/microphone disclosures plus ATS restrictions are actually present in the native project.
-- `f469f1b7e2ab9ef5f78fff97a253fdf669835414` adds managed Neon Auth session revalidation whenever the mobile app returns to the foreground, with refresh sequencing so an older async `getSession()` result cannot overwrite a newer auth event.
-- `98db71fa40d88bda52cf01766d98498e430fb099` makes that foreground revalidation offline-safe: transient transport failure preserves the existing persisted session instead of falsely logging the user out, while confirmed no-session/revocation still clears it.
-- `3d55f3d168a5a5a48ceaeecc8637e62d22b6dd71` locks foreground revalidation, stale-refresh race protection, offline-session preservation and listener cleanup in CI.
-- `f3d4a0dc8f217d3bcca7b84a8b4742810944dc6b` disables Android application backup in the release configuration so account/session-sensitive app data is not included in platform backup/restore flows.
-- `be629b9d2c496c333a07fa5ff9697ac1cd5fc614` makes `allowBackup: false` a mandatory static release-gate invariant.
-- `f0f193c1383bead5cb77cb6432856e1b65e9729a` explicitly hardens iOS App Transport Security: arbitrary network loads and local-network exemptions are disabled in the release Info.plist configuration.
-- `d0d15d3595fe173cdec233b90639863814c301d7` makes those iOS ATS settings mandatory release-gate invariants so a future configuration drift cannot silently re-enable insecure transport exceptions.
-- `c2410aaeb33e89e373841ea04862efd9d8d187e1` adds a native Android manifest policy through the K-ssenger Expo config plugin that forces `android:usesCleartextTraffic="false"`.
-- `414a0789a3777020715fdb52a845f7653c41a796` removes an unsupported direct Expo config shortcut so the policy is applied only through the native manifest plugin rather than relying on an ignored field.
-- `540f30112dbe94a743a5b98fb8a3aa3156c4e399` makes the no-cleartext native policy part of the static release gate.
-- `a48a1ca0fe8d987815bed51fec0faf3640940aa9` extends Android CI to trigger on app/plugin release-security changes and verifies the generated AndroidManifest contains `usesCleartextTraffic="false"` before running libsignal instrumentation.
-- `aa4bcceebd4dcf1e85086367f646c78929f0fde2` hardens the Android Internal APK delivery workflow: it verifies the generated manifest contains both `allowBackup="false"` and `usesCleartextTraffic="false"`, generates a SHA-256 checksum for the final release APK, verifies that checksum immediately, and uploads the APK plus checksum together as one artifact.
-- `638bda49511a830b6fa37322386077614440b522` hardens the realtime server so startup fails closed unless `NEON_AUTH_BASE_URL` and `NEON_AUTH_JWKS_URL` are exactly the public endpoints of the dedicated K-ssenger Neon Auth branch.
-- `0b4f9e494283ec16ed319f73139b83a1240fc79e` aligns the server environment template with those exact public K-ssenger Auth/JWKS endpoints, reducing deployment drift without exposing any credential.
-- `7e4857c030a9a532b8b85edda7042669fcb9de24` extends the mandatory static release gate to verify the server-side dedicated Neon Auth/JWKS pinning cannot silently regress.
+- Native privacy disclosures are explicit for foreground location, photo library, camera and user-initiated microphone use; macOS prebuild validates the generated Info.plist.
+- Persisted Neon Auth sessions are revalidated on foreground with stale-refresh race protection and offline-safe preservation.
+- Android application backup is disabled and cleartext network traffic is forbidden; generated manifests and internal APK workflows verify these invariants.
+- Internal Android APK artifacts include a verified SHA-256 checksum.
+- Server startup fails closed unless Auth base URL, JWKS URL and audience exactly match the dedicated K-ssenger Neon branch.
 
 ## Dedicated backend only
 
@@ -75,14 +64,15 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Account export v3.
 - Account deletion UI/server path requires password reauthentication, exact confirmation, fresh Neon token and hard-scoped Neon K-ssenger management deletion. Full in-app disposable proof waits on live `0019`. Android additionally purges deleted-account native Signal material and destroys its Keystore key after server success.
 - Android release configuration disables platform backup and explicitly forbids cleartext network traffic; both are enforced by release/Android CI gates. Internal APK artifacts ship with a verified SHA-256 manifest for integrity checks.
-- iOS release configuration explicitly forbids arbitrary ATS loads and local-network exemptions. K-MAP/media permission strings are K-ssenger-specific and the macOS prebuild gate verifies the generated Info.plist contains the foreground-location, photo-library, camera and microphone disclosures required by the implemented features.
+- iOS release configuration explicitly forbids arbitrary ATS loads and local-network exemptions. K-MAP/media permission strings are K-ssenger-specific and the macOS prebuild gate verifies the generated Info.plist carries them.
+- Expo V1 explicitly uses Hermes on mobile; release CI rejects runtime-engine drift.
 
 ## E2EE
 
 - No custom cryptography.
 - Official `org.signal:libsignal-client:0.100.0` and `org.signal:libsignal-android:0.100.0` are pinned.
 - Android native Session/Identity/PreKey/SignedPreKey/KyberPreKey stores persist behind Android Keystore protected storage.
-- Android emulator runtime proof is GREEN for PQXDH/prekey establishment, one-time EC/PQ consumption, first PreKeySignalMessage, SignalMessage reply, Double Ratchet continuity and native-store recreation.
+- Android emulator runtime proof is GREEN for PQXDH/prekey establishment, one-time EC/PQ consumption, first PreKeySignalMessage, SignalMessage reply, Double Ratchet continuity and native-store recreation on previously verified heads.
 - Android release packaging strips desktop JNI artifacts and verifies the real Android `libsignal_jni.so` is present in the assembled APK.
 - Direct/group composers fail closed if native E2EE readiness is not proven.
 - Production E2EE is NOT claimed until a real two-physical-device server-mediated proof passes.
@@ -99,6 +89,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - iOS App Transport Security must not allow arbitrary loads or local-network exemptions in the release candidate.
 - Native foreground-location, photo-library, camera and microphone permission disclosures must remain explicit, feature-scoped and K-ssenger-specific; iOS prebuild must prove the generated Info.plist carries them.
 - K-MAP must remain foreground-only: Android must explicitly block `ACCESS_BACKGROUND_LOCATION`, and iOS must not declare always-location usage descriptions.
+- Mobile V1 must explicitly use Hermes so JS runtime selection cannot drift with framework defaults.
 - The server must reject any Neon Auth base/JWKS/audience value other than the dedicated K-ssenger branch values; tests must exercise security behavior without weakening this startup pinning.
 - K-MAP is explicit opt-in; no hidden permanent/background tracking.
 - Push data is allow-listed metadata only.
