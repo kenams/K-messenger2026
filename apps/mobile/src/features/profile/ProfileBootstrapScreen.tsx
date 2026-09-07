@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
+import { palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 function normalizeUsername(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -59,17 +60,17 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' },
-  card: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  logo: { width: 82, height: 82, borderRadius: 28, backgroundColor: '#278dcc', borderWidth: 5, borderColor: '#bfe8ff', alignItems: 'center', justifyContent: 'center' },
-  logoText: { color: '#fff', fontSize: 37, fontWeight: '900' },
-  brand: { marginTop: 10, color: '#3784b5', fontSize: 10, letterSpacing: 2.2, fontWeight: '900' },
-  title: { marginTop: 22, color: '#15364a', fontSize: 27, fontWeight: '900', textAlign: 'center' },
-  copy: { color: '#648292', marginTop: 8, marginBottom: 18, textAlign: 'center', maxWidth: 400 },
-  input: { width: '100%', maxWidth: 430, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 16, paddingHorizontal: 15, paddingVertical: 13, marginTop: 9 },
-  primary: { width: '100%', maxWidth: 430, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 16, marginTop: 16 },
+  safe: { flex: 1, backgroundColor: palette.sky },
+  card: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  logo: { width: 82, height: 82, borderRadius: radius.xl, backgroundColor: palette.azure, borderWidth: 5, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' },
+  logoText: { color: palette.white, fontSize: 37, fontWeight: '900' },
+  brand: { marginTop: spacing.sm, ...typo.brand, fontSize: 10, letterSpacing: 2.2 },
+  title: { marginTop: spacing.xl, color: palette.ink, fontSize: 26, fontWeight: '900', textAlign: 'center' },
+  copy: { color: palette.inkSoft, marginTop: spacing.sm, marginBottom: spacing.lg, textAlign: 'center', maxWidth: 400 },
+  input: { width: '100%', maxWidth: 430, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.md, marginTop: spacing.sm, color: palette.ink },
+  primary: { width: '100%', maxWidth: 430, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg, marginTop: spacing.lg },
   disabled: { opacity: 0.5 },
-  primaryText: { color: '#fff', fontWeight: '900' },
-  error: { color: '#b42318', marginTop: 12, textAlign: 'center' },
-  logout: { color: '#6f8795', marginTop: 18, fontWeight: '700' },
+  primaryText: { color: palette.white, fontWeight: '900' },
+  error: { color: palette.danger, marginTop: spacing.md, textAlign: 'center' },
+  logout: { color: palette.inkSoft, marginTop: spacing.lg, fontWeight: '700' },
 });

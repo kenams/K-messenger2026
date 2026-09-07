@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import { GroupsScreen } from '../groups/GroupsScreen';
 import { DirectConversationScreen } from './DirectConversationScreen';
 import type { Contact, Presence } from '../contacts/MsnContactsScreen';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
+import { Avatar, Card, EmptyState, Notice, Segmented, SkyBackground } from '../../theme/components';
+import { palette, spacing, type as typo } from '../../theme/tokens';
 
 type ConversationMember = {
   userId: string;
@@ -34,7 +36,7 @@ type ConversationsResponse = {
 
 export function ChatsHubScreen() {
   const [mode, setMode] = useState<'private' | 'groups'>('private');
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -123,16 +125,35 @@ export function ChatsHubScreen() {
     return <DirectConversationScreen contact={selectedContact} onBack={() => setSelectedContact(null)} />;
   }
 
+  const segment = (
+    <Segmented
+      value={mode}
+      onChange={setMode}
+      options={[
+        { value: 'private', label: '💬 Privés' },
+        { value: 'groups', label: '👥 Groupes' },
+      ]}
+    />
+  );
+
   if (mode === 'groups') {
-    return <View style={styles.fill}><Segment mode={mode} setMode={setMode} /><GroupsScreen /></View>;
+    return (
+      <SkyBackground>
+        {segment}
+        <GroupsScreen />
+      </SkyBackground>
+    );
   }
 
   return (
-    <View style={styles.fill}>
-      <Segment mode={mode} setMode={setMode} />
-      {!!notice && <Text style={styles.notice}>{notice}</Text>}
+    <SkyBackground>
+      {segment}
+      {!!notice && <Notice>{notice}</Notice>}
       {loading ? (
-        <View style={styles.center}><ActivityIndicator /><Text style={styles.empty}>Chargement des conversations…</Text></View>
+        <View style={styles.center}>
+          <ActivityIndicator color={palette.azure} />
+          <Text style={styles.loadingText}>Chargement des conversations…</Text>
+        </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           {directConversations.map((conversation) => {
@@ -140,32 +161,33 @@ export function ChatsHubScreen() {
             if (!peer) return null;
             const time = conversation.lastMessage?.createdAt || conversation.createdAt;
             return (
-              <TouchableOpacity key={conversation.id} style={styles.chat} accessibilityRole="button" onPress={() => openDirect(conversation)}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{peer.displayName[0]?.toUpperCase() ?? '?'}</Text>
-                  <Text style={styles.presenceDot}>{presenceIcon(peer.presence)}</Text>
-                </View>
+              <Card key={conversation.id} style={styles.row} onPress={() => openDirect(conversation)}>
+                <Avatar label={peer.displayName} presence={peer.presence} size={50} />
                 <View style={styles.flex}>
-                  <Text style={styles.name}>{peer.nickname || peer.displayName}</Text>
-                  <Text style={styles.preview} numberOfLines={1}>{conversation.lastMessage ? 'Message chiffré reçu dans cette conversation' : 'Nouvelle conversation'}</Text>
-                  <Text style={styles.music} numberOfLines={1}>@{peer.username}</Text>
+                  <Text style={styles.name} numberOfLines={1}>{peer.nickname || peer.displayName}</Text>
+                  <Text style={styles.preview} numberOfLines={1}>
+                    {conversation.lastMessage ? '🔒 Message chiffré' : 'Nouvelle conversation'}
+                  </Text>
+                  <Text style={styles.handle} numberOfLines={1}>@{peer.username}</Text>
                 </View>
-                <View style={styles.right}><Text style={styles.time}>{formatTime(time)}</Text><Text style={styles.chevron}>›</Text></View>
-              </TouchableOpacity>
+                <View style={styles.right}>
+                  <Text style={styles.time}>{formatTime(time)}</Text>
+                  <Text style={styles.chevron}>›</Text>
+                </View>
+              </Card>
             );
           })}
-          {!directConversations.length && <Text style={styles.empty}>Aucune conversation privée. Ouvre un contact pour commencer.</Text>}
+          {!directConversations.length && (
+            <EmptyState
+              icon="💬"
+              title="Aucune conversation privée"
+              hint="Ouvre un contact depuis ta liste pour démarrer une discussion chiffrée."
+            />
+          )}
         </ScrollView>
       )}
-    </View>
+    </SkyBackground>
   );
-}
-
-function presenceIcon(presence: Presence) {
-  if (presence === 'online') return '🟢';
-  if (presence === 'busy') return '🔴';
-  if (presence === 'away') return '🟠';
-  return '⚫';
 }
 
 function formatTime(value: string | null) {
@@ -175,12 +197,16 @@ function formatTime(value: string | null) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function Segment({ mode, setMode }: { mode: 'private' | 'groups'; setMode: (mode: 'private' | 'groups') => void }) {
-  return <View style={styles.segmentWrap}><TouchableOpacity style={[styles.segment, mode === 'private' && styles.segmentActive]} onPress={() => setMode('private')}><Text style={[styles.segmentText, mode === 'private' && styles.segmentTextActive]}>💬 Privés</Text></TouchableOpacity><TouchableOpacity style={[styles.segment, mode === 'groups' && styles.segmentActive]} onPress={() => setMode('groups')}><Text style={[styles.segmentText, mode === 'groups' && styles.segmentTextActive]}>👥 Groupes</Text></TouchableOpacity></View>;
-}
-
 const styles = StyleSheet.create({
-  fill: { flex: 1 }, flex: { flex: 1 }, content: { padding: 14 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, notice: { marginHorizontal: 16, marginBottom: 4, color: '#326e94', fontWeight: '700' },
-  segmentWrap: { flexDirection: 'row', margin: 14, padding: 4, borderRadius: 16, backgroundColor: '#dcecf5' }, segment: { flex: 1, paddingVertical: 9, borderRadius: 12, alignItems: 'center' }, segmentActive: { backgroundColor: '#fff' }, segmentText: { color: '#618397', fontWeight: '800' }, segmentTextActive: { color: '#227eB4' },
-  chat: { flexDirection: 'row', alignItems: 'center', gap: 11, padding: 12, marginBottom: 8, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: '#dceaf2' }, avatar: { width: 50, height: 50, borderRadius: 16, backgroundColor: '#e3f4fd', alignItems: 'center', justifyContent: 'center', position: 'relative' }, avatarText: { color: '#287aa8', fontSize: 19, fontWeight: '900' }, presenceDot: { position: 'absolute', right: -3, bottom: -3, fontSize: 12 }, name: { color: '#173448', fontSize: 15, fontWeight: '900' }, preview: { color: '#627f90', fontSize: 12, marginTop: 3 }, music: { color: '#3987b6', fontSize: 10, marginTop: 4 }, right: { alignItems: 'flex-end', minWidth: 42 }, time: { color: '#8aa0ad', fontSize: 10 }, chevron: { color: '#91a8b6', fontSize: 25, marginTop: 6 }, empty: { padding: 20, textAlign: 'center', color: '#7893a3' },
+  content: { padding: spacing.lg, paddingTop: spacing.xs, gap: spacing.sm },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  loadingText: { ...typo.meta },
+  flex: { flex: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  name: { ...typo.name },
+  preview: { ...typo.meta, marginTop: 2 },
+  handle: { color: palette.azure, fontSize: 11, fontWeight: '700', marginTop: 3 },
+  right: { alignItems: 'flex-end', minWidth: 42 },
+  time: { ...typo.micro },
+  chevron: { color: palette.inkFaint, fontSize: 24, marginTop: 4 },
 });
