@@ -16,6 +16,8 @@ import { unregisterPushForSignOut } from './src/features/push/usePushRegistratio
 import { getBackend } from './src/lib/backend';
 import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket } from './src/lib/realtime';
+import { palette, radius, spacing, type as typo } from './src/theme/tokens';
+import { Equalizer, NowPlayingSheet, PresenceBadge } from './src/theme/components';
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
 
@@ -61,6 +63,23 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const [ageSaving, setAgeSaving] = useState(false);
   const [birthDateInput, setBirthDateInput] = useState('');
   const [ageError, setAgeError] = useState('');
+  const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
+
+  const saveNowPlaying = async (title: string, artist: string) => {
+    try {
+      await getBackend()
+        .from('profiles')
+        .update({
+          now_playing_title: title || null,
+          now_playing_artist: artist || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id);
+      await onProfileChanged();
+    } catch {
+      // Non-blocking: the buddy list poll will pick up the next successful write.
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -181,13 +200,13 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} />}
+      {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
       {tab === 'contacts' && <MsnContactsScreen onOpen={setSelected} />}
       {tab === 'chats' && <ChatsHubScreen />}
       {tab === 'feed' && <FeedScreen userAge={userAge} />}
       {tab === 'map' && <KMapScreen />}
       {tab === 'moments' && <MomentsScreen />}
-      {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} />}
+      {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
       <View style={styles.tabs}>
         <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
         <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
@@ -196,6 +215,13 @@ export default function App({ profile, onProfileChanged }: AppProps) {
         <Tab active={tab === 'moments'} icon="✨" label="Moments" onPress={() => setTab('moments')} />
         <Tab active={tab === 'me'} icon="🙂" label="Moi" onPress={() => setTab('me')} />
       </View>
+      <NowPlayingSheet
+        visible={nowPlayingOpen}
+        initialTitle={profile.now_playing_title ?? ''}
+        initialArtist={profile.now_playing_artist ?? ''}
+        onClose={() => setNowPlayingOpen(false)}
+        onSubmit={saveNowPlaying}
+      />
     </SafeAreaView>
   );
 }
@@ -222,18 +248,28 @@ function Avatar({ profile, size = 'small' }: { profile: MyProfile; size?: 'small
   return <View style={style}><Text style={textStyle}>{profile.display_name[0]?.toUpperCase() ?? 'K'}</Text></View>;
 }
 
-function ProfileHeader({ profile, onEdit }: { profile: MyProfile; onEdit: () => void }) {
-  const presenceIcon = profile.presence === 'online' ? '🟢' : profile.presence === 'busy' ? '🔴' : profile.presence === 'away' ? '🟠' : '⚫';
+function ProfileHeader({ profile, onEdit, onNowPlaying }: { profile: MyProfile; onEdit: () => void; onNowPlaying: () => void }) {
+  const track = profile.now_playing_title
+    ? `${profile.now_playing_artist ? `${profile.now_playing_artist} — ` : ''}${profile.now_playing_title}`
+    : null;
   return (
     <View style={styles.hero}>
-      <View style={styles.avatarRing}><Avatar profile={profile} /><View style={styles.onlineDot} /></View>
-      <View style={styles.flex}><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.name}>{profile.display_name}</Text><Text style={styles.status}>{presenceIcon} {profile.custom_status || `@${profile.username}`}</Text></View>
-      <TouchableOpacity onPress={onEdit} accessibilityLabel="Modifier mon profil"><Text style={styles.headerAction}>⚙️</Text></TouchableOpacity>
+      <View style={styles.avatarRing}><Avatar profile={profile} /><View style={styles.heroBadge}><PresenceBadge presence={profile.presence} size={14} /></View></View>
+      <View style={styles.flex}>
+        <Text style={styles.brand}>K-SSENGER</Text>
+        <Text style={styles.name} numberOfLines={1}>{profile.display_name}</Text>
+        <Text style={styles.status} numberOfLines={1}>{profile.custom_status || `@${profile.username}`}</Text>
+        <TouchableOpacity style={styles.nowPlayingPill} onPress={onNowPlaying} accessibilityRole="button" accessibilityLabel="Modifier la musique que j'écoute">
+          {track ? <Equalizer size={12} /> : <Text style={styles.nowPlayingIcon}>♪</Text>}
+          <Text style={styles.nowPlayingText} numberOfLines={1}>{track ?? 'Partager ma musique'}</Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity onPress={onEdit} accessibilityLabel="Modifier mon profil" style={styles.headerGear}><Text style={styles.headerAction}>⚙︎</Text></TouchableOpacity>
     </View>
   );
 }
 
-function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void }) {
+function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups, onNowPlaying }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void; onNowPlaying: () => void }) {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
 
@@ -257,7 +293,14 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
       <Avatar profile={profile} size="large" />
       <Text style={styles.profileName}>{profile.display_name}</Text><Text style={styles.profileHandle}>@{profile.username}</Text>
       <Text style={styles.profilePresence}>{profile.custom_status || 'Disponible'}</Text>
-      {!!profile.now_playing_title && <Text style={styles.profileMusic}>♫ {profile.now_playing_artist ? `${profile.now_playing_artist} — ` : ''}{profile.now_playing_title}</Text>}
+      <TouchableOpacity style={styles.meNowPlaying} onPress={onNowPlaying} accessibilityRole="button">
+        {profile.now_playing_title ? <Equalizer size={14} /> : <Text style={styles.nowPlayingIcon}>♪</Text>}
+        <Text style={styles.meNowPlayingText} numberOfLines={1}>
+          {profile.now_playing_title
+            ? `${profile.now_playing_artist ? `${profile.now_playing_artist} — ` : ''}${profile.now_playing_title}`
+            : 'Partager la musique que j’écoute'}
+        </Text>
+      </TouchableOpacity>
       {!!profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>}
       <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes" onPress={onGroups}/><ProfileButton icon="🔒" label="Vie privée" onPress={onPrivacy}/></View>
       <TouchableOpacity disabled={signingOut} style={[styles.signOutButton, signingOut && styles.disabled]} onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Se déconnecter de K-ssenger">
@@ -282,8 +325,13 @@ const styles = StyleSheet.create({
   ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 }, brand: { color: '#3784b5', fontSize: 10, letterSpacing: 2.2, fontWeight: '900' }, ageTitle: { marginTop: 22, fontSize: 27, lineHeight: 33, textAlign: 'center', color: '#15364a', fontWeight: '900' }, ageCopy: { marginTop: 10, maxWidth: 430, textAlign: 'center', color: '#648292', lineHeight: 20 }, ageInput: { width: 180, marginTop: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 17, padding: 13, textAlign: 'center', fontSize: 17 }, error: { color: '#b42318', marginTop: 9, textAlign: 'center' }, legal: { marginTop: 14, color: '#8197a4', fontSize: 10, textAlign: 'center' },
   primary: { backgroundColor: '#2189c5', borderRadius: 16, paddingHorizontal: 22, paddingVertical: 12, marginTop: 14, minWidth: 190, alignItems: 'center' }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { opacity: 0.55 },
   screenBack: { minHeight: 46, justifyContent: 'center', paddingHorizontal: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, screenBackText: { color: '#2189c5', fontWeight: '900' },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, avatarRing: { position: 'relative' }, avatar: { width: 58, height: 58, borderRadius: 19, backgroundColor: '#2f93cf', borderWidth: 4, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontSize: 25, fontWeight: '900' }, onlineDot: { position: 'absolute', width: 15, height: 15, borderRadius: 8, backgroundColor: '#4ac769', right: -2, bottom: -2, borderWidth: 3, borderColor: '#fff' }, name: { color: '#16394e', fontSize: 18, fontWeight: '900', marginTop: 2 }, status: { color: '#5d7c8e', fontSize: 11, marginTop: 2 }, headerAction: { fontSize: 20, marginLeft: 5 },
-  tabs: { flexDirection: 'row', paddingTop: 7, paddingBottom: 9, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, tab: { flex: 1, alignItems: 'center' }, tabIcon: { fontSize: 18 }, tabLabel: { marginTop: 2, color: '#8299a7', fontSize: 8 }, tabActive: { color: '#238ac8', fontWeight: '900' },
-  profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900', textAlign: 'center' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileMusic: { color: '#4e7d55', marginTop: 5, fontSize: 12, fontStyle: 'italic', textAlign: 'center' }, profileBio: { color: '#657e8d', marginTop: 10, textAlign: 'center', lineHeight: 19, maxWidth: 360 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 18 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
+  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline }, avatarRing: { position: 'relative' }, avatar: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: palette.azure, borderWidth: 3, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: palette.white, fontSize: 24, fontWeight: '900' }, heroBadge: { position: 'absolute', right: -3, bottom: -3 }, name: { ...typo.heading, marginTop: 1 }, status: { color: palette.inkSoft, fontSize: 12, marginTop: 1 }, headerGear: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }, headerAction: { fontSize: 19, color: palette.inkSoft },
+  nowPlayingPill: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs, alignSelf: 'flex-start', backgroundColor: palette.musicSoft, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 3, maxWidth: '100%' },
+  nowPlayingIcon: { color: palette.music, fontSize: 12, fontWeight: '900' },
+  nowPlayingText: { color: palette.music, fontSize: 11, fontWeight: '800', flexShrink: 1 },
+  tabs: { flexDirection: 'row', paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline }, tab: { flex: 1, alignItems: 'center', gap: 3 }, tabIcon: { fontSize: 17, opacity: 0.9 }, tabLabel: { color: palette.inkFaint, fontSize: 9, fontWeight: '700' }, tabActive: { color: palette.azure, fontWeight: '900' },
+  meNowPlaying: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, backgroundColor: palette.musicSoft, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, maxWidth: '100%' },
+  meNowPlayingText: { color: palette.music, fontWeight: '800', fontSize: 12, flexShrink: 1 },
+  profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900', textAlign: 'center' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileBio: { color: '#657e8d', marginTop: 10, textAlign: 'center', lineHeight: 19, maxWidth: 360 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 18 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
   signOutButton: { marginTop: 18, minWidth: 180, alignItems: 'center', paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d7e4eb', borderRadius: 14 }, signOutText: { color: '#4c6879', fontWeight: '900' },
 });
