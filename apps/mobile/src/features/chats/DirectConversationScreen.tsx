@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import type { Socket } from 'socket.io-client';
 import type { Contact } from '../contacts/MsnContactsScreen';
+import { presenceLabel } from '../../theme/tokens';
 import { getBackend } from '../../lib/backend';
 import { canUnlockPrivateComposer, getKssengerE2eeStatus } from '../../lib/e2ee';
 import { loadLocalMessage, storeLocalMessage } from '../../lib/localMessageStore';
@@ -121,6 +122,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
   const [e2eeReady, setE2eeReady] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
   const canSend = useMemo(() => !!socket && !!conversationId && !!currentUserId && e2eeReady && !sending, [socket, conversationId, currentUserId, e2eeReady, sending]);
 
   useEffect(() => {
@@ -283,12 +285,17 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
         <View style={styles.avatar}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
-        <View style={styles.flex}><Text style={styles.name}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {contact.presence}</Text></View>
+        <View style={styles.flex}><Text style={styles.name}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
         <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
       <View style={styles.security}><Text style={styles.securityText}>{e2eeReady ? '🔐 Signal/libsignal · texte et références média chiffrés de bout en bout' : '🛡️ Envoi verrouillé tant que le contrôle E2EE natif n’est pas validé'}</Text></View>
       {loading ? <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Ouverture de la conversation…</Text></View> : (
-        <ScrollView style={styles.body} contentContainerStyle={styles.content}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.body}
+          contentContainerStyle={styles.content}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        >
           {!!notice && <Text style={styles.notice}>{notice}</Text>}
           {!history.length ? <View style={styles.empty}><Text style={styles.emptyIcon}>💬</Text><Text style={styles.emptyTitle}>Conversation prête</Text><Text style={styles.muted}>Envoie ton premier message ou média.</Text></View> : history.map((message) => {
             const mine = message.senderUserId === currentUserId;
