@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -13,7 +14,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { palette, presenceColor, radius, spacing, type as typo } from './tokens';
+import { elevation, palette, presenceColor, radius, spacing, type as typo } from './tokens';
 
 /** Respect the OS "reduce motion" setting for every decorative animation. */
 export function useReducedMotion(): boolean {
@@ -280,6 +281,138 @@ export function NowPlayingSheet({
   );
 }
 
+/** Buddy-list style top bar with an optional back affordance and trailing slot. */
+export function ScreenHeader({
+  title,
+  subtitle,
+  onBack,
+  right,
+}: {
+  title: string;
+  subtitle?: string;
+  onBack?: () => void;
+  right?: React.ReactNode;
+}) {
+  return (
+    <View style={styles.header}>
+      {onBack ? (
+        <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Retour" style={styles.headerBack}>
+          <Text style={styles.headerBackText}>‹</Text>
+        </TouchableOpacity>
+      ) : null}
+      <View style={styles.headerText}>
+        <Text style={styles.headerBrand}>K-SSENGER</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+        {subtitle ? <Text style={styles.headerSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
+      </View>
+      {right ? <View style={styles.headerRight}>{right}</View> : null}
+    </View>
+  );
+}
+
+/** Glass panel used for every list row / grouped block. */
+export function Card({ children, style, onPress }: { children: React.ReactNode; style?: ViewStyle; onPress?: () => void }) {
+  if (onPress) {
+    return (
+      <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={[styles.card, style]}>
+        {children}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={[styles.card, style]}>{children}</View>;
+}
+
+/** Circular / rounded avatar built from an initial, with optional presence badge. */
+export function Avatar({
+  label,
+  uri,
+  size = 48,
+  presence,
+}: {
+  label: string;
+  uri?: string | null;
+  size?: number;
+  presence?: string;
+}) {
+  return (
+    <View style={{ width: size, height: size }}>
+      {uri ? (
+        <Image source={{ uri }} style={[styles.avatar, { width: size, height: size, borderRadius: size * 0.32 }]} />
+      ) : (
+        <View style={[styles.avatar, { width: size, height: size, borderRadius: size * 0.32 }]}>
+          <Text style={[styles.avatarText, { fontSize: size * 0.42 }]}>{label?.[0]?.toUpperCase() ?? 'K'}</Text>
+        </View>
+      )}
+      {presence ? (
+        <View style={styles.avatarBadge}>
+          <PresenceBadge presence={presence} size={Math.max(12, size * 0.28)} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export function EmptyState({ icon = '💬', title, hint }: { icon?: string; title: string; hint?: string }) {
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyIcon}>{icon}</Text>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      {hint ? <Text style={styles.emptyHint}>{hint}</Text> : null}
+    </View>
+  );
+}
+
+export function Notice({ children, tone = 'info' }: { children: React.ReactNode; tone?: 'info' | 'danger' }) {
+  return (
+    <View style={[styles.notice, tone === 'danger' && styles.noticeDanger]}>
+      <Text style={[styles.noticeText, tone === 'danger' && styles.noticeTextDanger]}>{children}</Text>
+    </View>
+  );
+}
+
+export function Field({
+  label,
+  hint,
+  ...input
+}: { label: string; hint?: string } & React.ComponentProps<typeof TextInput>) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput placeholderTextColor={palette.inkFaint} {...input} style={[styles.fieldInput, input.style]} />
+      {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
+    </View>
+  );
+}
+
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <View style={styles.segment}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <TouchableOpacity
+            key={option.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            onPress={() => onChange(option.value)}
+            style={[styles.segmentItem, active && styles.segmentItemActive]}
+          >
+            <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{option.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   sky: { flex: 1, backgroundColor: palette.sky },
   skyBand: { position: 'absolute', top: 0, left: 0, right: 0, height: 220, backgroundColor: palette.skyTop },
@@ -318,4 +451,65 @@ const styles = StyleSheet.create({
   },
   sheetClear: { alignItems: 'center', paddingVertical: spacing.sm },
   sheetClearText: { color: palette.inkSoft, fontWeight: '800', fontSize: 12 },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: palette.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.hairline,
+  },
+  headerBack: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', marginLeft: -spacing.sm },
+  headerBackText: { fontSize: 30, lineHeight: 30, color: palette.azure, fontWeight: '900' },
+  headerText: { flex: 1 },
+  headerBrand: { ...typo.brand },
+  headerTitle: { ...typo.title, fontSize: 19, marginTop: 1 },
+  headerSubtitle: { ...typo.meta, marginTop: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+
+  card: {
+    backgroundColor: palette.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: palette.hairline,
+    padding: spacing.md,
+    ...elevation.card,
+  },
+
+  avatar: { backgroundColor: palette.azure, borderWidth: 3, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: palette.white, fontWeight: '900' },
+  avatarBadge: { position: 'absolute', right: -3, bottom: -3 },
+
+  empty: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl, paddingHorizontal: spacing.xl, gap: spacing.xs },
+  emptyIcon: { fontSize: 32 },
+  emptyTitle: { ...typo.name, textAlign: 'center' },
+  emptyHint: { ...typo.meta, textAlign: 'center', maxWidth: 300 },
+
+  notice: { marginHorizontal: spacing.lg, marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.md, backgroundColor: palette.azureSoft },
+  noticeDanger: { backgroundColor: palette.dangerSoft },
+  noticeText: { color: palette.azureDeep, fontSize: 12, fontWeight: '700' },
+  noticeTextDanger: { color: palette.danger },
+
+  field: { gap: spacing.xs },
+  fieldLabel: { ...typo.label, textTransform: 'uppercase' },
+  fieldInput: {
+    backgroundColor: palette.sky,
+    borderWidth: 1,
+    borderColor: palette.hairline,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    color: palette.ink,
+    fontSize: 15,
+  },
+  fieldHint: { ...typo.micro, fontWeight: '500' },
+
+  segment: { flexDirection: 'row', margin: spacing.lg, padding: 4, borderRadius: radius.lg, backgroundColor: palette.azureSoft },
+  segmentItem: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.md, alignItems: 'center' },
+  segmentItemActive: { backgroundColor: palette.surface, ...elevation.card },
+  segmentText: { color: palette.inkSoft, fontWeight: '800', fontSize: 13 },
+  segmentTextActive: { color: palette.azure },
 });

@@ -5,6 +5,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { getAuthenticatedUserId } from '../../lib/realtime';
+import { EmptyState, ScreenHeader } from '../../theme/components';
+import { palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 type MomentVisibility = 'friends' | 'close_friends' | 'public';
 type MomentKind = 'photo' | 'video' | 'text';
@@ -12,6 +14,12 @@ type MomentRow = { id: string; author_id: string; kind: MomentKind; caption: str
 type Moment = MomentRow & { author: string; isMine: boolean };
 const IMAGE_MIMES = new Set<SupportedMediaMime>(['image/jpeg','image/png','image/webp']);
 const VIDEO_MIMES = new Set<SupportedMediaMime>(['video/mp4','video/quicktime']);
+
+const VISIBILITY_LABEL: Record<MomentVisibility, string> = {
+  friends: '👥 Amis',
+  close_friends: '💚 Proches',
+  public: '🌍 Public',
+};
 
 function inferMomentMime(asset: ImagePicker.ImagePickerAsset, kind: 'photo' | 'video'): SupportedMediaMime | null {
   const normalized = asset.mimeType?.toLowerCase();
@@ -122,23 +130,40 @@ export function MomentsScreen() {
     } catch { setNotice('Impossible d’envoyer le signalement pour le moment.'); }
   };
 
-  if (loading) return <View style={styles.loading}><ActivityIndicator /><Text style={styles.muted}>Chargement des Moments…</Text></View>;
+  if (loading) return <View style={styles.loading}><ActivityIndicator color={palette.azure} /><Text style={styles.muted}>Chargement des Moments…</Text></View>;
   return (
     <View style={styles.container}>
-      <View style={styles.composer}>
-        <Text style={styles.title}>Partager un moment</Text>
-        <Text style={styles.subtitle}>Texte, photo ou vidéo : 24 h, visibilité choisie et média privé K-ssenger.</Text>
-        <View style={styles.row}>
-          <View style={[styles.chip, styles.chipActive]}><Text style={[styles.chipText, styles.chipTextActive]}>✍️ Texte</Text></View>
-          <Pressable disabled={publishing} onPress={() => void publishMedia('photo')} style={styles.chip}><Text style={styles.chipText}>📸 Photo</Text></Pressable>
-          <Pressable disabled={publishing} onPress={() => void publishMedia('video')} style={styles.chip}><Text style={styles.chipText}>🎥 Vidéo</Text></Pressable>
-        </View>
-        <TextInput value={caption} onChangeText={setCaption} placeholder="Qu'est-ce qui se passe dans ta vie ?" style={styles.input} multiline maxLength={280} />
-        <View style={styles.row}>{(['friends','close_friends','public'] as MomentVisibility[]).map((value) => <Pressable key={value} onPress={() => setVisibility(value)} style={[styles.chip, visibility === value && styles.chipActive]}><Text style={[styles.chipText, visibility === value && styles.chipTextActive]}>{value === 'friends' ? '👥 Amis' : value === 'close_friends' ? '💚 Proches' : '🌍 Public'}</Text></Pressable>)}</View>
-        <Pressable disabled={!canPublish} onPress={() => void publishText()} style={[styles.publish, !canPublish && styles.publishDisabled]}>{publishing ? <ActivityIndicator color="#fff" /> : <Text style={styles.publishText}>Publier le texte pour 24 h</Text>}</Pressable>
-        {!!notice && <Text style={styles.notice}>{notice}</Text>}
-      </View>
-      <FlatList data={moments} keyExtractor={(item) => item.id} contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />} ListEmptyComponent={<Text style={styles.empty}>Aucun Moment visible pour le moment.</Text>} renderItem={({ item }) => <MomentCard moment={item} onDelete={deleteMoment} onReport={reportMoment} />} />
+      <ScreenHeader title="Moments" subtitle="Texte, photo ou vidéo · 24 h · média privé" />
+      <FlatList
+        data={moments}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={palette.azure} />}
+        ListHeaderComponent={
+          <View style={styles.composer}>
+            <Text style={styles.title}>Partager un moment</Text>
+            <View style={styles.row}>
+              <View style={[styles.chip, styles.chipActive]}><Text style={[styles.chipText, styles.chipTextActive]}>✍️ Texte</Text></View>
+              <Pressable disabled={publishing} onPress={() => void publishMedia('photo')} style={styles.chip}><Text style={styles.chipText}>📸 Photo</Text></Pressable>
+              <Pressable disabled={publishing} onPress={() => void publishMedia('video')} style={styles.chip}><Text style={styles.chipText}>🎥 Vidéo</Text></Pressable>
+            </View>
+            <TextInput value={caption} onChangeText={setCaption} placeholder="Qu'est-ce qui se passe dans ta vie ?" placeholderTextColor={palette.inkFaint} style={styles.input} multiline maxLength={280} />
+            <View style={styles.row}>
+              {(['friends','close_friends','public'] as MomentVisibility[]).map((value) => (
+                <Pressable key={value} onPress={() => setVisibility(value)} style={[styles.chip, visibility === value && styles.chipActive]}>
+                  <Text style={[styles.chipText, visibility === value && styles.chipTextActive]}>{VISIBILITY_LABEL[value]}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable disabled={!canPublish} onPress={() => void publishText()} style={[styles.publish, !canPublish && styles.publishDisabled]}>
+              {publishing ? <ActivityIndicator color={palette.white} /> : <Text style={styles.publishText}>Publier le texte pour 24 h</Text>}
+            </Pressable>
+            {!!notice && <Text style={styles.notice}>{notice}</Text>}
+          </View>
+        }
+        ListEmptyComponent={<EmptyState icon="✨" title="Aucun Moment visible" hint="Publie le premier moment : il disparaît au bout de 24 h." />}
+        renderItem={({ item }) => <MomentCard moment={item} onDelete={deleteMoment} onReport={reportMoment} />}
+      />
     </View>
   );
 }
@@ -157,17 +182,55 @@ function MomentMedia({ moment }: { moment: Moment }) {
   const uri = signedUrl ?? legacy;
   if (moment.kind === 'photo' && uri) return <Image source={{ uri }} style={styles.media} resizeMode="cover" />;
   if (moment.kind === 'video' && uri) return <MomentVideo uri={uri} />;
-  if (moment.kind !== 'text') return <View style={styles.textMoment}><ActivityIndicator color="#fff" /><Text style={styles.textMomentCopy}>Média privé en chargement…</Text></View>;
+  if (moment.kind !== 'text') return <View style={styles.textMoment}><ActivityIndicator color={palette.white} /><Text style={styles.textMomentCopy}>Média privé en chargement…</Text></View>;
   return <View style={styles.textMoment}><Text style={styles.textMomentIcon}>💭</Text><Text style={styles.textMomentCopy}>{moment.caption || 'Moment K-ssenger'}</Text></View>;
 }
 
 function MomentCard({ moment, onDelete, onReport }: { moment: Moment; onDelete: (moment: Moment) => void; onReport: (moment: Moment) => void }) {
   const remainingHours = Math.max(1, Math.ceil(Math.max(0, new Date(moment.expires_at).getTime() - Date.now()) / 3_600_000));
-  return <View style={styles.card}><View style={styles.cardTop}><Text style={styles.author}>{moment.author}</Text><Text style={styles.time}>⏳ {remainingHours} h</Text></View><MomentMedia moment={moment} />{moment.kind !== 'text' && !!moment.caption && <Text style={styles.mediaCaption}>{moment.caption}</Text>}<Text style={styles.visibility}>{moment.visibility === 'friends' ? '👥 Amis' : moment.visibility === 'close_friends' ? '💚 Proches' : '🌍 Public'}</Text><View style={styles.actions}>{moment.isMine ? <Pressable onPress={() => onDelete(moment)}><Text style={styles.deleteAction}>Supprimer</Text></Pressable> : <Pressable onPress={() => onReport(moment)}><Text style={styles.action}>⚑ Signaler</Text></Pressable>}</View></View>;
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}><Text style={styles.author}>{moment.author}</Text><Text style={styles.time}>⏳ {remainingHours} h</Text></View>
+      <MomentMedia moment={moment} />
+      {moment.kind !== 'text' && !!moment.caption && <Text style={styles.mediaCaption}>{moment.caption}</Text>}
+      <Text style={styles.visibility}>{VISIBILITY_LABEL[moment.visibility]}</Text>
+      <View style={styles.actions}>
+        {moment.isMine
+          ? <Pressable onPress={() => onDelete(moment)}><Text style={styles.deleteAction}>Supprimer</Text></Pressable>
+          : <Pressable onPress={() => onReport(moment)}><Text style={styles.action}>⚑ Signaler</Text></Pressable>}
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#eef6fb' }, loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 }, muted: { color: '#668293' }, composer: { backgroundColor: '#fff', padding: 14, borderBottomWidth: 1, borderBottomColor: '#d9e7ef' }, title: { fontSize: 20, fontWeight: '900', color: '#173448' }, subtitle: { marginTop: 4, fontSize: 12, color: '#668293' },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }, chip: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 14, backgroundColor: '#edf5f9' }, chipActive: { backgroundColor: '#238ac8' }, chipText: { color: '#416679', fontWeight: '700', fontSize: 12 }, chipTextActive: { color: '#fff' }, input: { marginTop: 10, minHeight: 74, backgroundColor: '#f4f8fa', borderWidth: 1, borderColor: '#d9e7ef', borderRadius: 14, padding: 12, textAlignVertical: 'top' }, publish: { marginTop: 12, minHeight: 46, backgroundColor: '#238ac8', paddingVertical: 12, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, publishDisabled: { opacity: 0.45 }, publishText: { color: '#fff', fontWeight: '900' }, notice: { color: '#326e94', fontSize: 11, fontWeight: '700', marginTop: 10 },
-  list: { padding: 12, gap: 12, flexGrow: 1 }, empty: { color: '#718a99', textAlign: 'center', padding: 28 }, card: { backgroundColor: '#fff', borderRadius: 18, padding: 12, borderWidth: 1, borderColor: '#e1edf3' }, cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, author: { fontWeight: '900', color: '#173448' }, time: { color: '#718a99', fontSize: 11 }, textMoment: { marginTop: 10, minHeight: 150, borderRadius: 16, backgroundColor: '#102c3d', alignItems: 'center', justifyContent: 'center', padding: 22 }, textMomentIcon: { fontSize: 36 }, textMomentCopy: { color: '#fff', fontSize: 20, lineHeight: 27, fontWeight: '800', textAlign: 'center', marginTop: 10 }, media: { width: '100%', height: 320, marginTop: 10, borderRadius: 16, backgroundColor: '#0c1d27' }, mediaCaption: { color: '#35566a', marginTop: 9, lineHeight: 18 }, visibility: { marginTop: 8, color: '#668293', fontSize: 11 }, actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }, action: { color: '#416679', fontWeight: '700', fontSize: 12 }, deleteAction: { color: '#b42318', fontWeight: '800', fontSize: 12 },
+  container: { flex: 1, backgroundColor: palette.sky },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: palette.sky },
+  muted: { ...typo.meta },
+  composer: { backgroundColor: palette.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: palette.hairline, padding: spacing.lg, marginBottom: spacing.md },
+  title: { ...typo.heading },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, backgroundColor: palette.azureSoft },
+  chipActive: { backgroundColor: palette.azure },
+  chipText: { color: palette.inkSoft, fontWeight: '700', fontSize: 12 },
+  chipTextActive: { color: palette.white },
+  input: { marginTop: spacing.md, minHeight: 74, backgroundColor: palette.sky, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, padding: spacing.md, textAlignVertical: 'top', color: palette.ink },
+  publish: { marginTop: spacing.md, minHeight: 46, backgroundColor: palette.azure, paddingVertical: spacing.md, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  publishDisabled: { opacity: 0.45 },
+  publishText: { color: palette.white, fontWeight: '900' },
+  notice: { color: palette.azureDeep, fontSize: 11, fontWeight: '700', marginTop: spacing.md },
+  list: { padding: spacing.md, gap: spacing.md, flexGrow: 1 },
+  card: { backgroundColor: palette.surface, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: palette.hairline },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  author: { ...typo.name },
+  time: { ...typo.micro },
+  textMoment: { marginTop: spacing.md, minHeight: 150, borderRadius: radius.md, backgroundColor: '#102c3d', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  textMomentIcon: { fontSize: 36 },
+  textMomentCopy: { color: palette.white, fontSize: 20, lineHeight: 27, fontWeight: '800', textAlign: 'center', marginTop: spacing.md },
+  media: { width: '100%', height: 320, marginTop: spacing.md, borderRadius: radius.md, backgroundColor: '#0c1d27' },
+  mediaCaption: { color: palette.inkSoft, marginTop: spacing.sm, lineHeight: 18 },
+  visibility: { marginTop: spacing.sm, ...typo.micro, fontWeight: '500' },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.md },
+  action: { color: palette.inkSoft, fontWeight: '700', fontSize: 12 },
+  deleteAction: { color: palette.danger, fontWeight: '800', fontSize: 12 },
 });

@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import type { MyProfile } from './useMyProfile';
+import { ScreenHeader } from '../../theme/components';
+import { palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
 const IMAGE_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp']);
@@ -152,10 +154,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}><Text style={styles.back}>‹</Text></TouchableOpacity>
-        <View><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.title}>Modifier mon profil</Text></View>
-      </View>
+      <ScreenHeader title="Modifier mon profil" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>PSEUDO</Text>
         <TextInput autoCapitalize="none" autoCorrect={false} value={username} onChangeText={(value) => setUsername(normalizeUsername(value))} maxLength={32} placeholder="@pseudo" style={styles.input} />
@@ -202,8 +201,8 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' }, header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, back: { fontSize: 39, color: '#2189c5' }, brand: { color: '#3784b5', fontSize: 9, letterSpacing: 2, fontWeight: '900' }, title: { color: '#173448', fontSize: 18, fontWeight: '900' },
-  content: { padding: 18, paddingBottom: 40 }, label: { marginTop: 16, marginBottom: 6, color: '#52768a', fontSize: 10, letterSpacing: 1.2, fontWeight: '900' }, input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 15, paddingHorizontal: 14, paddingVertical: 12, color: '#173448' }, stackedInput: { marginTop: 8 }, multiline: { minHeight: 100, textAlignVertical: 'top' }, hint: { color: '#8197a4', fontSize: 10, lineHeight: 14, marginTop: 5 }, error: { color: '#b42318' }, notice: { marginTop: 16, color: '#326e94', fontWeight: '700' },
-  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 15 }, avatarPreview: { width: 78, height: 78, borderRadius: 25, backgroundColor: '#2f93cf', borderWidth: 4, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, avatarPreviewText: { color: '#fff', fontSize: 30, fontWeight: '900' }, avatarActions: { flex: 1, gap: 8 }, avatarButton: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: '#2189c5' }, avatarButtonText: { color: '#fff', fontWeight: '900' }, avatarSecondary: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#eef4f7', borderWidth: 1, borderColor: '#d5e2e9' }, avatarSecondaryText: { color: '#52768a', fontWeight: '900' },
-  primary: { minHeight: 48, marginTop: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 16 }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { opacity: 0.45 },
+  safe: { flex: 1, backgroundColor: palette.sky },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl }, label: { marginTop: spacing.lg, marginBottom: spacing.xs, ...typo.label, textTransform: 'uppercase' }, input: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink }, stackedInput: { marginTop: spacing.sm }, multiline: { minHeight: 100, textAlignVertical: 'top' }, hint: { ...typo.micro, fontWeight: '500', lineHeight: 14, marginTop: spacing.xs }, error: { color: palette.danger }, notice: { marginTop: spacing.lg, color: palette.azureDeep, fontWeight: '700' },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md }, avatarPreview: { width: 78, height: 78, borderRadius: radius.xl, backgroundColor: palette.azure, borderWidth: 4, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarPreviewText: { color: palette.white, fontSize: 30, fontWeight: '900' }, avatarActions: { flex: 1, gap: spacing.sm }, avatarButton: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azure }, avatarButtonText: { color: palette.white, fontWeight: '900' }, avatarSecondary: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azureSoft, borderWidth: 1, borderColor: palette.hairline }, avatarSecondaryText: { color: palette.inkSoft, fontWeight: '900' },
+  primary: { minHeight: 48, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg }, primaryText: { color: palette.white, fontWeight: '900' }, disabled: { opacity: 0.45 },
 });
