@@ -63,11 +63,13 @@ Docs de référence dans `docs/` :
   3 comptes credentials fixes, contacts mutuels, 1 groupe, K-Pulse, Moment.
   Détails + déroulé : `docs/DEMO_GUIDE.md`.
 
-## 3. Ce qui RESTE — les 6 gates V1 (détail + commandes dans `docs/V1_RELEASE_RUNBOOK.md`)
+## 3. Ce qui RESTE — les gates V1 (détail + commandes dans `docs/V1_RELEASE_RUNBOOK.md`)
+
+> MàJ 2026-09-07 soir : **Gate 1 FAITE** (migrations prod appliquées, `release:check-neon-live` GREEN). **Web déployé** (`k-ssenger.expo.app`, cf `docs/WEB_DEPLOY.md` — il reste 1 ajout de trusted-domain dans Neon Auth). **Module natif iOS scaffoldé** dans `apps/mobile/modules/kssenger-signal/ios-draft/` (~600 lignes Swift, README = étapes pour compiler + prouver). L'étape 3 ci-dessous devient : renommer `ios-draft/`→`ios/`, corriger les signatures LibSignalClient au 1er build, wirer.
 
 | # | Gate | Bloqueur |
 |---|------|----------|
-| 1 | Appliquer `neon/migrations/0019_account_delete_fk_semantics.sql` + `0020_device_links.sql` sur Neon prod | besoin `DB_URL` (secret déploiement) |
+| 1 | ~~Migrations Neon prod~~ | ✅ FAIT |
 | 2 | Preuve Signal 2 téléphones Android physiques via serveur prod | 2 appareils réels (émulateur interdit) |
 | 3 | Validation Android physique média/push/K-MAP GPS | 1 appareil réel |
 | 4 | Smoke Alice/Bob/Charlie physique complet (`docs/ACCEPTANCE_TESTS.md`) | 2-3 appareils |

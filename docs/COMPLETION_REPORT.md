@@ -4,6 +4,14 @@ Date : 2026-09-07. Branche `feature/device-linking-scaffold`.
 Méthode : code lu ligne à ligne + `remote-v1-smoke` 30/30 contre le backend
 **de production live** + `npm run test:server` 92/92 + gates statiques 24/24.
 
+## MàJ 2026-09-07 (soir)
+
+- ✅ **Gate 1 FAITE** : migrations `0019` + `0020` appliquées sur Neon prod, `release:check-neon-live` GREEN.
+- ✅ **Version web déployée** : https://k-ssenger.expo.app (social OK ; chat E2EE non — Android only). 1 réglage manuel restant : ajouter le domaine dans Neon Auth trusted domains (`docs/WEB_DEPLOY.md`).
+- ✅ **Module natif iOS scaffoldé** : `modules/kssenger-signal/ios-draft/` — port Swift complet (~600 l : KeychainBlobStore, 5 stores libsignal, SignalDeviceProtocol, modules Expo + self-test PQXDH, podspec). À compiler + prouver sur Mac/iPhone (README = étapes exactes). Non wiré → gates toujours vertes.
+- ✅ APK envoyé par mail à kenams42@gmail.com.
+- Nouveau % : **V1 Android ~92 %** · **iOS ~45 %** (scaffold fait, compile+preuve restants).
+
 ---
 
 ## 1. Avancement par fonctionnalité
