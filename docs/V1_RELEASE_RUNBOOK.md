@@ -98,7 +98,20 @@ ne pas soumettre l'app iOS et retirer la cible du périmètre de release.
   release (EAS gère le keystore distant ; s'assurer que le compte Play Console existe et
   que `com.kahdigital.kssenger` y est réservé).
 - **iOS** (si Gate 5 faite) : `eas build --platform ios --profile production` + provisioning
-  Apple Developer.
+  Apple Developer. Avant soumission App Store : renseigner
+  `ios.infoPlist.ITSAppUsesNonExemptEncryption` dans `apps/mobile/app.json`
+  (K-ssenger utilise du chiffrement non exempté → `true` + fournir la
+  documentation de conformité export, ou statuer sur l'exemption avec un
+  juriste). EAS le signale à chaque build iOS tant que ce n'est pas fait.
+
+## Artefacts produits le 2026-09-07
+
+- APK preview (design system complet) : `https://expo.dev/artifacts/eas/RAHGmMYB2GZTq9wdeMHQmLcn8SPkicTmD3ZqKYrekzk.apk` (build `bd62d3dc`)
+- AAB production Android : `https://expo.dev/artifacts/eas/DQqbh72QVRAuLya5vx3daI4hvAC_5ZdmizMF54aQsFo.aab` (build `3ad98648`, versionCode auto-bumpé à 2 pendant ce build — `app.json` remis à 1 dans le repo, à bumper volontairement lors de la vraie soumission)
+- Build iOS **simulateur** (Xcode/Mac uniquement, pas iPhone) : `https://expo.dev/accounts/kenams/projects/k-ssenger/builds/8db496c1-80b1-42b8-810b-9b4930ee946f`
+
+⚠️ Aucun build iOS installable sur iPhone n'est possible sans compte Apple
+Developer (99 $/an) + TestFlight ou provisioning ad-hoc.
 
 ---
 
