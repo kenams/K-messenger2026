@@ -43,10 +43,9 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - All 26 public tables have RLS enabled.
 - FORCE RLS remains enabled on `device_key_bundles`, `device_one_time_prekeys`, `device_pq_one_time_prekeys`, `device_prekey_claims`, `media_objects` and `push_subscriptions`.
 - K-MAP block and contact-removal revocation triggers are installed live. The contact-removal `SECURITY DEFINER` function has a fixed search path and owner-only execution ACL.
-- Fresh live recheck during this run confirms the three public FKs targeted by `0019` are still `NO ACTION`: `conversations_created_by_fkey`, `messages_sender_user_id_fkey`, `group_bans_banned_by_fkey`. Production was not modified.
-- Repository migration `0019_account_delete_fk_semantics.sql` changes those three to the intended deletion-safe semantics.
-- A controlled temporary-branch dry-run already verified the migration schema diff exactly; production remains unchanged.
-- `npm run release:check-neon-live` intentionally fails until `0019` is applied live.
+- **2026-09-07: migrations `0019_account_delete_fk_semantics.sql` and `0020_device_links.sql` APPLIED to production (`main` branch, db `kssenger`).** `npm run release:check-neon-live` now GREEN — `KSSENGER_LIVE_RELEASE_READINESS_PASS=true` (10/10): the three FKs (`conversations_created_by_fkey` → SET NULL, `messages_sender_user_id_fkey` → CASCADE, `group_bans_banned_by_fkey` → SET NULL) are deletion-safe live; `public.device_links` table + RLS/FORCE RLS/policies live.
+- Applied via `scripts/apply-migration.mjs` (generic `DB_URL` env runner).
+- Remaining for the account-deletion gate: the localhost-only destructive integration test (`neon-account-delete-fk-integration-test.mjs`) and the in-app disposable delete proof on a physical device.
 
 ## Operational Premium V1 surface
 
