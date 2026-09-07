@@ -53,8 +53,15 @@ Docs de référence dans `docs/` :
   Android off, cleartext interdit, ATS iOS strict, disclosures perm.
   explicites, APK interne avec checksum SHA-256.
 - **`npm run release:check-static` = 24/24 PASS.** `npm run typecheck` vert.
-- APK preview V1.0.0 (avec le design system) buildée sur EAS.
-- Build iOS **simulateur** (profil `preview-ios`, `ios.simulator:true`) lancé.
+- **`remote-v1-smoke` = 30/30 PASS contre le backend prod LIVE** (2026-09-07) :
+  auth + Signal prekeys/claims/discovery, contacts, présence, K-Pulse,
+  échange ciphertext + accusés + historique, groupes (rôles/mute/ban/unban/
+  reinvite/transfert), K-MAP, Moments, K-Feed, enforcement du block, reconnect.
+  `KSSENGER_AUTH_URL=… KSSENGER_DATA_API_URL=… KSSENGER_SOCKET_URL=… node scripts/remote-v1-smoke-runner.mjs`
+- APK preview V1.0.0 + AAB prod + build iOS simulateur : voir `docs/V1_RELEASE_RUNBOOK.md`.
+- **Comptes de démo peuplés** (`node scripts/demo-seed-runner.mjs`, idempotent) —
+  3 comptes credentials fixes, contacts mutuels, 1 groupe, K-Pulse, Moment.
+  Détails + déroulé : `docs/DEMO_GUIDE.md`.
 
 ## 3. Ce qui RESTE — les 6 gates V1 (détail + commandes dans `docs/V1_RELEASE_RUNBOOK.md`)
 
