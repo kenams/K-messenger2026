@@ -9,7 +9,39 @@ import { usePushRegistration } from './features/push/usePushRegistration';
 import { ProfileBootstrapScreen } from './features/profile/ProfileBootstrapScreen';
 import { useMyProfile } from './features/profile/useMyProfile';
 
+class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="dark" />
+        <View style={styles.loading}>
+          <Text style={styles.errorTitle}>K-ssenger n’a pas pu démarrer</Text>
+          <Text style={styles.errorCopy}>{this.state.error.message || String(this.state.error)}</Text>
+          <TouchableOpacity style={styles.retry} onPress={() => this.setState({ error: null })} accessibilityRole="button">
+            <Text style={styles.retryText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+}
+
 export function Root() {
+  return (
+    <RootErrorBoundary>
+      <RootInner />
+    </RootErrorBoundary>
+  );
+}
+
+function RootInner() {
   const auth = useAuthSession();
 
   if (!auth.configured) return <AuthScreen />;

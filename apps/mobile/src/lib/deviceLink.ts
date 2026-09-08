@@ -16,11 +16,30 @@
 
 import nacl from 'tweetnacl';
 import naclUtil from 'tweetnacl-util';
+import * as ExpoCrypto from 'expo-crypto';
+
+// tweetnacl bootstraps its PRNG from `self.crypto.getRandomValues` (web) or
+// `require('crypto')` (Node). On Hermes/React Native neither exists, so the
+// PRNG stays unset and any key/nonce generation would throw "no PRNG". Wire the
+// native CSPRNG explicitly. (The unresolved `require('crypto')` inside tweetnacl
+// is neutralised by the Node-core aliases in metro.config.js so the import
+// itself no longer crashes the app on Android.)
+let prngReady = false;
+function ensurePRNG() {
+  if (prngReady) return;
+  nacl.setPRNG((x, n) => {
+    const bytes = ExpoCrypto.getRandomBytes(n);
+    for (let i = 0; i < n; i += 1) x[i] = bytes[i];
+  });
+  prngReady = true;
+}
+ensurePRNG();
 
 export type LinkKeyPair = { publicKey: string; secretKey: string };
 
 /** Fresh X25519 keypair, base64-encoded for transport / storage. */
 export function generateLinkKeyPair(): LinkKeyPair {
+  ensurePRNG();
   const kp = nacl.box.keyPair();
   return {
     publicKey: naclUtil.encodeBase64(kp.publicKey),
@@ -39,6 +58,7 @@ export function deriveSharedKey(peerPublicKeyB64: string, ourSecretKeyB64: strin
 
 /** Seal a JSON payload into a `{ciphertext, nonce}` envelope. */
 export function sealEnvelope(sharedKeyB64: string, payload: unknown): { ciphertext: string; nonce: string } {
+  ensurePRNG();
   const nonce = nacl.randomBytes(nacl.box.nonceLength);
   const message = naclUtil.decodeUTF8(JSON.stringify(payload));
   const box = nacl.box.after(message, nonce, naclUtil.decodeBase64(sharedKeyB64));

@@ -14,6 +14,7 @@
     "@neondatabase/neon-js": "0.7.0-beta",
     "expo": "~54.0.0",
     "expo-constants": "~18.0.14",
+    "expo-crypto": "~15.0.9",
     "expo-device": "~8.0.10",
     "expo-image-picker": "~17.0.11",
     "expo-linear-gradient": "~15.0.8",
