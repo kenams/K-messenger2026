@@ -52,9 +52,9 @@ export function WebLinkScreen({ webLink, onBack }: { webLink: UseWebLink; onBack
               <TouchableOpacity onPress={() => void webLink.unlink()}><Text style={styles.unlink}>Délier ce navigateur</Text></TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity activeOpacity={0.9} onPress={() => void webLink.startPairing()} style={styles.ctaShell}>
+            <TouchableOpacity activeOpacity={0.9} disabled={webLink.starting} onPress={() => void webLink.startPairing()} style={[styles.ctaShell, webLink.starting && { opacity: 0.6 }]}>
               <LinearGradient colors={brandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta} pointerEvents="none">
-                <Text style={styles.ctaText}>Lier mon téléphone</Text>
+                {webLink.starting ? <ActivityIndicator color={palette.white} /> : <Text style={styles.ctaText}>Lier mon téléphone</Text>}
               </LinearGradient>
             </TouchableOpacity>
           )}
