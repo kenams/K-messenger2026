@@ -71,6 +71,7 @@ export type UseWebLink = {
   code: string | null;
   phoneReachable: boolean;
   error: string | null;
+  starting: boolean;
   startPairing: () => Promise<void>;
   cancelPairing: () => void;
   unlink: () => Promise<void>;
@@ -183,24 +184,38 @@ export function useWebLink(): UseWebLink {
     };
   }, [supported, send]);
 
+  const [starting, setStarting] = useState(false);
   const startPairing = useCallback(async () => {
-    if (!supported) return;
+    if (!supported || starting) return;
+    setStarting(true);
     setError(null);
     try {
-      const sock = await getRealtimeSocket();
+      const sock = await Promise.race([
+        getRealtimeSocket(),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('SOCKET_TIMEOUT')), 15_000)),
+      ]);
       socketRef.current = sock;
       const kp = generateLinkKeyPair();
       const res = await emitAck<{ ok: boolean; linkId?: string; error?: string }>(sock, 'link:init', { webPublicKey: kp.publicKey });
-      if (!res.ok || !res.linkId) throw new Error(res.error ?? 'LINK_INIT_FAILED');
+      if (!res || !res.ok || !res.linkId) throw new Error(res?.error ?? 'LINK_INIT_FAILED');
       const st: WebLinkState = { linkId: res.linkId, secretKey: kp.secretKey, publicKey: kp.publicKey };
       stateRef.current = st;
       writeWebLink(st);
       setCode(linkConfirmationCode(res.linkId));
       setStatus('pairing');
-    } catch {
-      setError('Impossible de démarrer l’appairage. Réessaie.');
+    } catch (e) {
+      const m = (e as Error).message;
+      setError(
+        m === 'SOCKET_TIMEOUT'
+          ? 'Serveur temps réel injoignable (il se réveille peut-être). Réessaie dans quelques secondes.'
+          : m === 'REALTIME_TIMEOUT'
+            ? 'Le serveur déployé ne gère pas encore l’appairage web. Déploie la dernière version du serveur, puis réessaie.'
+            : 'Impossible de démarrer l’appairage. Réessaie.',
+      );
+    } finally {
+      setStarting(false);
     }
-  }, [supported]);
+  }, [supported, starting]);
 
   const cancelPairing = useCallback(() => {
     stateRef.current = null; writeWebLink(null);
@@ -237,9 +252,9 @@ export function useWebLink(): UseWebLink {
   }, []);
 
   return useMemo(() => ({
-    status, code, phoneReachable, error,
+    status, code, phoneReachable, error, starting,
     startPairing, cancelPairing, unlink, fetchHistory, sendText, onIncoming,
-  }), [status, code, phoneReachable, error, startPairing, cancelPairing, unlink, fetchHistory, sendText, onIncoming]);
+  }), [status, code, phoneReachable, error, starting, startPairing, cancelPairing, unlink, fetchHistory, sendText, onIncoming]);
 }
 
 // ── phone role ─────────────────────────────────────────────────────────────
