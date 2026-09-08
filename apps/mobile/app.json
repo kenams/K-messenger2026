@@ -31,7 +31,8 @@
           "microphonePermission": "K-ssenger utilise le microphone uniquement lorsque vous enregistrez une vidéo avec du son."
         }
       ],
-      "./plugins/withKssengerLibsignal.js"
+      "./plugins/withKssengerLibsignal.js",
+      "expo-secure-store"
     ],
     "ios": {
       "supportsTablet": true,

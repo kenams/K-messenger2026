@@ -112,7 +112,7 @@ function ChatMedia({ content }: { content: Extract<ChatContent, { type: 'media' 
   );
 }
 
-export function DirectConversationScreen({ contact, onBack }: { contact: Contact; onBack: () => void }) {
+export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { contact: Contact; onBack: () => void; onLinkPhone?: () => void }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [conversationId, setConversationId] = useState('');
@@ -311,7 +311,16 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         <TouchableOpacity disabled={!canSend} onPress={() => void pickAndSendMedia()} style={[styles.attach, !canSend && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo"><Text style={styles.attachText}>＋</Text></TouchableOpacity>
         <TextInput style={styles.input} value={composer} onChangeText={setComposer} placeholder="Écrire un message…" maxLength={12000} multiline editable={!sending} />
         <TouchableOpacity disabled={!composer.trim() || sending} onPress={() => void sendMessage()} style={[styles.send, (!composer.trim() || sending) && styles.disabled]}>{sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
-      </View> : <View style={styles.composerLocked}><Text style={styles.lock}>🔒</Text><View style={styles.flex}><Text style={styles.lockTitle}>Messagerie chiffrée verrouillée</Text><Text style={styles.muted}>Aucun plaintext ne sera envoyé pour contourner la sécurité.</Text></View></View>}
+      </View> : (
+        <View style={styles.composerLocked}>
+          <Text style={styles.lock}>🔒</Text>
+          <View style={styles.flex}>
+            <Text style={styles.lockTitle}>Messagerie chiffrée verrouillée</Text>
+            <Text style={styles.muted}>{onLinkPhone ? 'Lie ce navigateur à ton téléphone pour discuter : il chiffre pour toi.' : 'Aucun plaintext ne sera envoyé pour contourner la sécurité.'}</Text>
+          </View>
+          {onLinkPhone && <TouchableOpacity style={styles.linkCta} onPress={onLinkPhone}><Text style={styles.linkCtaText}>Lier mon téléphone</Text></TouchableOpacity>}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -340,4 +349,5 @@ const styles = StyleSheet.create({
   attach: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline }, attachText: { color: palette.azureDeep, fontSize: 24, lineHeight: 26, fontWeight: '700' },
   disabled: { opacity: 0.4 }, sendText: { color: palette.white, fontWeight: '900', fontSize: 18 },
   composerLocked: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline }, lock: { fontSize: 20 }, lockTitle: { ...typo.name, fontSize: 13 },
+  linkCta: { backgroundColor: palette.azure, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, linkCtaText: { color: palette.white, fontWeight: '900', fontSize: 12 },
 });
