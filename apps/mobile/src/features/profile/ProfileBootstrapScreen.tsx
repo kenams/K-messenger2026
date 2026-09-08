@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
-import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 function normalizeUsername(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -61,16 +61,26 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
-  card: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  logo: { width: 82, height: 82, borderRadius: radius.xl, backgroundColor: palette.azure, borderWidth: 5, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' },
-  logoText: { color: palette.white, fontSize: 37, fontWeight: '900' },
-  brand: { marginTop: spacing.sm, ...typo.brand, fontSize: 10, letterSpacing: 2.2 },
-  title: { marginTop: spacing.xl, color: palette.ink, fontSize: 26, fontWeight: '900', textAlign: 'center' },
-  copy: { color: palette.inkSoft, marginTop: spacing.sm, marginBottom: spacing.lg, textAlign: 'center', maxWidth: 400 },
-  input: { width: '100%', maxWidth: 430, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.md, marginTop: spacing.sm, color: palette.ink },
-  primary: { width: '100%', maxWidth: 430, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg, marginTop: spacing.lg },
-  disabled: { opacity: 0.5 },
-  primaryText: { color: palette.white, fontWeight: '900' },
-  error: { color: palette.danger, marginTop: spacing.md, textAlign: 'center' },
-  logout: { color: palette.inkSoft, marginTop: spacing.lg, fontWeight: '700' },
+  card: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl,
+    maxWidth: layout.maxContent + 2 * spacing.xl, alignSelf: 'center', width: '100%',
+  },
+  logo: { width: 76, height: 76, borderRadius: radius.xl, backgroundColor: palette.azure, alignItems: 'center', justifyContent: 'center', ...elevation.card },
+  logoText: { color: palette.white, fontSize: 34, fontWeight: '900', letterSpacing: -1 },
+  brand: { marginTop: spacing.md, ...typo.brand },
+  title: { marginTop: spacing.sm, ...typo.display, fontSize: 26, lineHeight: 30, textAlign: 'center' },
+  copy: { ...typo.body, color: palette.inkSoft, marginTop: spacing.sm, marginBottom: spacing.lg, textAlign: 'center', maxWidth: 400 },
+  input: {
+    width: '100%', maxWidth: 430, backgroundColor: palette.surfaceSunken, borderWidth: 1.5, borderColor: palette.hairline,
+    borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 52, marginTop: spacing.sm,
+    color: palette.ink, fontSize: 15, fontWeight: '600',
+  },
+  primary: {
+    width: '100%', maxWidth: 430, minHeight: 54, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: palette.azure, borderRadius: radius.md, marginTop: spacing.lg, ...elevation.card,
+  },
+  disabled: { opacity: 0.4 },
+  primaryText: { color: palette.white, fontWeight: '900', fontSize: 14.5, letterSpacing: 0.3 },
+  error: { color: palette.danger, marginTop: spacing.md, textAlign: 'center', fontSize: 12.5, fontWeight: '700' },
+  logout: { color: palette.inkSoft, marginTop: spacing.lg, fontWeight: '800', fontSize: 12 },
 });

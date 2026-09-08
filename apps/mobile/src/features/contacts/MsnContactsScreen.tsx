@@ -4,7 +4,7 @@ import type { Socket } from 'socket.io-client';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload } from '../../lib/media';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
-import { palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
+import { elevation, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake } from '../../theme/components';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
@@ -552,12 +552,12 @@ const styles = StyleSheet.create({
   noticePill: { marginTop: spacing.sm, backgroundColor: palette.azureSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   notice: { color: palette.azureDeep, fontWeight: '700', fontSize: 12 },
 
-  group: { marginTop: spacing.lg, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: palette.glass, borderWidth: 1, borderColor: palette.hairline },
-  collapseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: palette.azureSoft },
-  groupTitle: { ...typo.label, color: palette.azureDeep },
-  groupCount: { color: palette.inkSoft, fontSize: 11, fontWeight: '800' },
+  group: { marginTop: spacing.lg, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, ...elevation.card },
+  collapseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, backgroundColor: palette.surfaceSunken, borderBottomWidth: 1, borderBottomColor: palette.hairline },
+  groupTitle: { ...typo.label, color: palette.inkSoft, textTransform: 'uppercase' },
+  groupCount: { color: palette.inkFaint, fontSize: 11, fontWeight: '800' },
 
-  contact: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: palette.hairlineSoft },
+  contact: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, borderTopWidth: 1, borderTopColor: palette.hairlineSoft },
   contactMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatarWrap: { position: 'relative' },
   avatar: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azureSoft, borderWidth: 2, borderColor: palette.hairline },

@@ -1,50 +1,70 @@
 /**
- * K-ssenger design tokens — "MSN-2026".
+ * K-ssenger design tokens — "MSN-2026, édition Lumière".
  *
- * One nostalgic buddy-list feel, modernised: deep azure ink, a vivid presence
- * green, glass panels over a soft sky wash, and a dedicated violet reserved for
- * the live "now playing" signature. Every screen pulls colour, spacing, radius,
- * type and elevation from here so the app reads as a single product.
+ * The nostalgic buddy-list warmth, rebuilt at studio craft level: a deep
+ * midnight-azure ink over an airy porcelain sky, one vivid presence green, a
+ * reserved violet for the live "now playing" signature, and a single warm brass
+ * accent kept only for moments of delight (a wizz landing, a celebratory state).
+ * Every screen pulls colour, spacing, radius, type, elevation and motion from
+ * here so the product reads as one confident object.
  */
 
 export const palette = {
-  // Brand
-  azure: '#1E7FD4',
-  azureDeep: '#166CB8',
-  azureSoft: '#E4F1FB',
-  ink: '#12303F',
-  inkSoft: '#4A6B7C',
-  inkFaint: '#7C97A6',
+  // Brand ink — deep, calm, high-contrast on porcelain
+  azure: '#1C6FD6',
+  azureDeep: '#0E4EA6',
+  azurePress: '#0B3F86',
+  azureSoft: '#E8F1FF',
+  azureHalo: 'rgba(28,111,214,0.14)',
 
-  // Surfaces
-  sky: '#EEF6FC',
-  skyTop: '#E3F1FB',
-  skyBottom: '#F5FAFD',
+  ink: '#0C2233',
+  inkSoft: '#42596B',
+  inkFaint: '#8096A4',
+  inkOnAzure: '#F4F8FF',
+
+  // Surfaces — porcelain, not chalk. Layered.
+  sky: '#F1F5FA',
+  skyTop: '#E9F1FA',
+  skyBottom: '#F7FAFD',
   surface: '#FFFFFF',
-  glass: 'rgba(255,255,255,0.74)',
-  hairline: '#D8E7F1',
-  hairlineSoft: '#EAF2F7',
+  surfaceRaised: '#FFFFFF',
+  surfaceSunken: '#EEF3F9',
+  glass: 'rgba(255,255,255,0.72)',
+  scrim: 'rgba(9,24,37,0.46)',
+  hairline: '#E2EAF2',
+  hairlineStrong: '#D2DEEA',
 
   // Presence
-  online: '#33C75A',
-  onlineRing: '#B8ECC6',
+  online: '#2FBF63',
+  onlineRing: '#BEEECD',
   busy: '#E5484D',
-  away: '#F5A524',
-  invisible: '#9AA9B2',
-  offline: '#B4C2CB',
+  away: '#F2A007',
+  invisible: '#93A3AF',
+  offline: '#B7C4CE',
 
-  // Accents
-  pulse: '#FFC53D',
-  pulseSoft: '#FFF3D1',
-  music: '#7C5CFF',
-  musicSoft: '#EDE8FF',
+  // Signature accents
+  music: '#7A5BFF',
+  musicSoft: '#EEEAFF',
+  brass: '#C8941E',
+  brassSoft: '#FBEFD6',
+  wizz: '#FFB020',
+  wizzSoft: '#FFF1D6',
 
   // Feedback
-  danger: '#C4342B',
-  dangerSoft: '#FDECEA',
-  success: '#1F7A45',
+  danger: '#C6362C',
+  dangerSoft: '#FCEBE9',
+  success: '#1C7F49',
+  successSoft: '#E3F5EA',
   white: '#FFFFFF',
+
+  // Back-compat aliases (older screens) — resolve to the new scale.
+  hairlineSoft: '#EDF2F8',
+  pulse: '#FFB020',
+  pulseSoft: '#FFF1D6',
 } as const;
+
+/** Reserved brand gradient — logo mark and the primary CTA only. Never decoration. */
+export const brandGradient = ['#2C86EE', '#1C6FD6', '#0E4EA6'] as const;
 
 export const presenceColor: Record<string, string> = {
   online: palette.online,
@@ -77,46 +97,63 @@ export const spacing = {
   lg: 16,
   xl: 24,
   xxl: 32,
+  xxxl: 48,
 } as const;
 
 export const radius = {
-  sm: 10,
-  md: 14,
-  lg: 18,
-  xl: 24,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 26,
+  xxl: 34,
   pill: 999,
 } as const;
 
 export const type = {
-  brand: { fontSize: 10, letterSpacing: 2.4, fontWeight: '900' as const, color: palette.azure },
-  label: { fontSize: 10, letterSpacing: 1.3, fontWeight: '900' as const, color: palette.inkSoft },
-  title: { fontSize: 22, fontWeight: '900' as const, color: palette.ink },
-  heading: { fontSize: 17, fontWeight: '900' as const, color: palette.ink },
+  brand: { fontSize: 10.5, letterSpacing: 3, fontWeight: '900' as const, color: palette.azureDeep },
+  label: { fontSize: 10.5, letterSpacing: 1.4, fontWeight: '800' as const, color: palette.inkFaint },
+  display: { fontSize: 30, fontWeight: '900' as const, color: palette.ink, letterSpacing: -0.5, lineHeight: 34 },
+  title: { fontSize: 22, fontWeight: '900' as const, color: palette.ink, letterSpacing: -0.3 },
+  heading: { fontSize: 17, fontWeight: '800' as const, color: palette.ink, letterSpacing: -0.2 },
   name: { fontSize: 15, fontWeight: '800' as const, color: palette.ink },
-  body: { fontSize: 14, fontWeight: '500' as const, color: palette.ink, lineHeight: 20 },
-  meta: { fontSize: 12, fontWeight: '500' as const, color: palette.inkSoft },
-  micro: { fontSize: 10, fontWeight: '700' as const, color: palette.inkFaint },
+  body: { fontSize: 14.5, fontWeight: '500' as const, color: palette.ink, lineHeight: 21 },
+  meta: { fontSize: 12, fontWeight: '600' as const, color: palette.inkSoft },
+  micro: { fontSize: 10.5, fontWeight: '700' as const, color: palette.inkFaint, letterSpacing: 0.2 },
 } as const;
 
 export const elevation = {
+  hairline: {
+    shadowColor: '#0C2233',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
   card: {
-    shadowColor: '#123A52',
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
+    shadowColor: '#0E3B5C',
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 3,
   },
   floating: {
-    shadowColor: '#0F3247',
-    shadowOpacity: 0.16,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 8,
+    shadowColor: '#0A2A44',
+    shadowOpacity: 0.14,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 10,
   },
 } as const;
 
 export const motion = {
-  fast: 160,
-  base: 240,
-  slow: 420,
+  fast: 150,
+  base: 230,
+  slow: 400,
+} as const;
+
+/** Shared maximum content width so web never sprawls edge to edge. */
+export const layout = {
+  maxContent: 480,
+  maxReading: 560,
 } as const;
