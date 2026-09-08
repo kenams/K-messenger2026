@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { FeedScreen } from './src/features/feed/FeedScreen';
 import { MomentsScreen } from './src/features/moments/MomentsScreen';
@@ -16,7 +16,8 @@ import { unregisterPushForSignOut } from './src/features/push/usePushRegistratio
 import { getBackend } from './src/lib/backend';
 import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket } from './src/lib/realtime';
-import { palette, radius, spacing, type as typo } from './src/theme/tokens';
+import { LinearGradient } from 'expo-linear-gradient';
+import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge } from './src/theme/components';
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
@@ -49,6 +50,16 @@ function ageFromBirthDate(value: string): number | null {
 
 function isHttpsAvatarUrl(value: string | null | undefined): value is string {
   return !!value && /^https:\/\//i.test(value);
+}
+
+/** Centered app column so web never sprawls edge to edge. */
+function WebShell({ children }: { children: React.ReactNode }) {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style="dark" />
+      <View style={styles.shell}>{children}</View>
+    </SafeAreaView>
+  );
 }
 
 export default function App({ profile, onProfileChanged }: AppProps) {
@@ -146,7 +157,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style="dark" />
-        <View style={styles.ageGate}><ActivityIndicator /><Text style={styles.legal}>Vérification du profil de sécurité…</Text></View>
+        <View style={styles.ageGate}><ActivityIndicator size="large" color={palette.azure} /><Text style={styles.legal}>Vérification du profil de sécurité…</Text></View>
       </SafeAreaView>
     );
   }
@@ -155,65 +166,74 @@ export default function App({ profile, onProfileChanged }: AppProps) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style="dark" />
+        <View style={styles.ageWash} pointerEvents="none" />
         <View style={styles.ageGate}>
-          <Avatar profile={profile} size="large" />
-          <Text style={styles.brand}>K-SSENGER</Text>
-          <Text style={styles.ageTitle}>Bienvenue {profile.display_name}.</Text>
-          <Text style={styles.ageCopy}>Ta date de naissance sert au filtrage serveur du K-Feed. Elle reste protégée par les règles RLS de ton compte.</Text>
-          <TextInput
-            value={birthDateInput}
-            onChangeText={setBirthDateInput}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="numbers-and-punctuation"
-            placeholder="AAAA-MM-JJ"
-            maxLength={10}
-            style={styles.ageInput}
-            onSubmitEditing={() => void confirmAge()}
-          />
-          {!!ageError && <Text style={styles.error}>{ageError}</Text>}
-          <TouchableOpacity disabled={ageSaving} style={[styles.primary, ageSaving && styles.disabled]} onPress={() => void confirmAge()}>
-            {ageSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Entrer dans K-ssenger</Text>}
-          </TouchableOpacity>
-          <Text style={styles.legal}>Âge déclaré · K-ssenger refuse l’accès au contenu public tant que ce profil n’est pas enregistré côté Neon.</Text>
+          <View style={styles.ageCard}>
+            <Avatar profile={profile} size="large" />
+            <Text style={styles.brand}>K · SSENGER</Text>
+            <Text style={styles.ageTitle}>Bienvenue {profile.display_name}</Text>
+            <Text style={styles.ageCopy}>Ta date de naissance sert au filtrage serveur du K-Feed. Elle reste protégée par les règles RLS de ton compte.</Text>
+            <TextInput
+              value={birthDateInput}
+              onChangeText={setBirthDateInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="numbers-and-punctuation"
+              placeholder="AAAA-MM-JJ"
+              placeholderTextColor={palette.inkFaint}
+              maxLength={10}
+              style={styles.ageInput}
+              onSubmitEditing={() => void confirmAge()}
+            />
+            {!!ageError && <Text style={styles.error}>{ageError}</Text>}
+            <TouchableOpacity disabled={ageSaving} activeOpacity={0.9} style={[styles.primaryShell, ageSaving && styles.disabled]} onPress={() => void confirmAge()}>
+              <LinearGradient colors={brandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primary} pointerEvents="none">
+                {ageSaving ? <ActivityIndicator color={palette.white} /> : <Text style={styles.primaryText}>Entrer dans K-ssenger</Text>}
+              </LinearGradient>
+            </TouchableOpacity>
+            <Text style={styles.legal}>Âge déclaré · l’accès au contenu public reste fermé tant que ce profil n’est pas enregistré côté Neon.</Text>
+          </View>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (selected) return <DirectConversationScreen contact={selected} onBack={() => setSelected(null)} />;
-  if (editingProfile) return <ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={() => setEditingProfile(false)} />;
-  if (accountData) return <AccountDataScreen profile={profile} onBack={() => setAccountData(false)} />;
-  if (privacySettings) return <PrivacySettingsScreen userId={profile.id} onBack={() => setPrivacySettings(false)} />;
+  if (selected) return <WebShell><DirectConversationScreen contact={selected} onBack={() => setSelected(null)} /></WebShell>;
+  if (editingProfile) return <WebShell><ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={() => setEditingProfile(false)} /></WebShell>;
+  if (accountData) return <WebShell><AccountDataScreen profile={profile} onBack={() => setAccountData(false)} /></WebShell>;
+  if (privacySettings) return <WebShell><PrivacySettingsScreen userId={profile.id} onBack={() => setPrivacySettings(false)} /></WebShell>;
   if (groupsScreen) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <StatusBar style="dark" />
+      <WebShell>
         <TouchableOpacity style={styles.screenBack} onPress={() => setGroupsScreen(false)} accessibilityRole="button" accessibilityLabel="Retour au profil">
           <Text style={styles.screenBackText}>‹ Retour au profil</Text>
         </TouchableOpacity>
         <GroupsScreen />
-      </SafeAreaView>
+      </WebShell>
     );
   }
+
+  const immersive = tab === 'feed';
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
-      {tab === 'contacts' && <MsnContactsScreen onOpen={setSelected} />}
-      {tab === 'chats' && <ChatsHubScreen />}
-      {tab === 'feed' && <FeedScreen userAge={userAge} />}
-      {tab === 'map' && <KMapScreen />}
-      {tab === 'moments' && <MomentsScreen />}
-      {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
-      <View style={styles.tabs}>
-        <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
-        <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
-        <Tab active={tab === 'feed'} icon="▶️" label="K-Feed" onPress={() => setTab('feed')} />
-        <Tab active={tab === 'map'} icon="📍" label="K-Map" onPress={() => setTab('map')} />
-        <Tab active={tab === 'moments'} icon="✨" label="Moments" onPress={() => setTab('moments')} />
-        <Tab active={tab === 'me'} icon="🙂" label="Moi" onPress={() => setTab('me')} />
+      <View style={[styles.shell, immersive && styles.shellImmersive]}>
+        {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
+        {tab === 'contacts' && <MsnContactsScreen onOpen={setSelected} />}
+        {tab === 'chats' && <ChatsHubScreen />}
+        {tab === 'feed' && <FeedScreen userAge={userAge} />}
+        {tab === 'map' && <KMapScreen />}
+        {tab === 'moments' && <MomentsScreen />}
+        {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
+        <View style={styles.tabs}>
+          <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
+          <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
+          <Tab active={tab === 'feed'} icon="▶️" label="K-Feed" onPress={() => setTab('feed')} />
+          <Tab active={tab === 'map'} icon="📍" label="K-Map" onPress={() => setTab('map')} />
+          <Tab active={tab === 'moments'} icon="✨" label="Moments" onPress={() => setTab('moments')} />
+          <Tab active={tab === 'me'} icon="🙂" label="Moi" onPress={() => setTab('me')} />
+        </View>
       </View>
       <NowPlayingSheet
         visible={nowPlayingOpen}
@@ -317,21 +337,100 @@ function ProfileButton({ icon, label, onPress }: { icon: string; label: string; 
 }
 
 function Tab({ active, icon, label, onPress }: { active: boolean; icon: string; label: string; onPress: () => void }) {
-  return <TouchableOpacity style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}><Text style={styles.tabIcon}>{icon}</Text><Text style={[styles.tabLabel, active && styles.tabActive]}>{label}</Text></TouchableOpacity>;
+  return (
+    <TouchableOpacity style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}>
+      <View style={[styles.tabPill, active && styles.tabPillActive]}>
+        <Text style={[styles.tabIcon, active && styles.tabIconActive]}>{icon}</Text>
+      </View>
+      <Text style={[styles.tabLabel, active && styles.tabActive]} numberOfLines={1}>{label}</Text>
+    </TouchableOpacity>
+  );
 }
 
+const SHELL_MAX = 720;
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' }, flex: { flex: 1 },
-  ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 }, brand: { color: '#3784b5', fontSize: 10, letterSpacing: 2.2, fontWeight: '900' }, ageTitle: { marginTop: 22, fontSize: 27, lineHeight: 33, textAlign: 'center', color: '#15364a', fontWeight: '900' }, ageCopy: { marginTop: 10, maxWidth: 430, textAlign: 'center', color: '#648292', lineHeight: 20 }, ageInput: { width: 180, marginTop: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 17, padding: 13, textAlign: 'center', fontSize: 17 }, error: { color: '#b42318', marginTop: 9, textAlign: 'center' }, legal: { marginTop: 14, color: '#8197a4', fontSize: 10, textAlign: 'center' },
-  primary: { backgroundColor: '#2189c5', borderRadius: 16, paddingHorizontal: 22, paddingVertical: 12, marginTop: 14, minWidth: 190, alignItems: 'center' }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { opacity: 0.55 },
-  screenBack: { minHeight: 46, justifyContent: 'center', paddingHorizontal: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, screenBackText: { color: '#2189c5', fontWeight: '900' },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline }, avatarRing: { position: 'relative' }, avatar: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: palette.azure, borderWidth: 3, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: palette.white, fontSize: 24, fontWeight: '900' }, heroBadge: { position: 'absolute', right: -3, bottom: -3 }, name: { ...typo.heading, marginTop: 1 }, status: { color: palette.inkSoft, fontSize: 12, marginTop: 1 }, headerGear: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }, headerAction: { fontSize: 19, color: palette.inkSoft },
-  nowPlayingPill: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs, alignSelf: 'flex-start', backgroundColor: palette.musicSoft, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 3, maxWidth: '100%' },
+  safe: { flex: 1, backgroundColor: palette.surfaceSunken, alignItems: 'center' },
+  shell: {
+    flex: 1,
+    width: '100%',
+    maxWidth: SHELL_MAX,
+    backgroundColor: palette.sky,
+    ...(Platform.OS === 'web' ? { borderLeftWidth: 1, borderRightWidth: 1, borderColor: palette.hairline } : null),
+  },
+  shellImmersive: { maxWidth: SHELL_MAX, backgroundColor: '#07131c' },
+  flex: { flex: 1 },
+
+  ageWash: { position: 'absolute', top: 0, left: 0, right: 0, height: 320, backgroundColor: palette.skyTop },
+  ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  ageCard: {
+    width: '100%', maxWidth: layout.maxContent, alignItems: 'center',
+    backgroundColor: palette.surface, borderRadius: radius.xxl, borderWidth: 1, borderColor: palette.hairline,
+    paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl, ...elevation.floating,
+  },
+  brand: { marginTop: spacing.md, ...typo.brand },
+  ageTitle: { marginTop: spacing.sm, ...typo.display, fontSize: 26, lineHeight: 30, textAlign: 'center' },
+  ageCopy: { marginTop: spacing.sm, ...typo.body, color: palette.inkSoft, maxWidth: 400, textAlign: 'center' },
+  ageInput: {
+    width: 200, marginTop: spacing.lg, backgroundColor: palette.surfaceSunken, borderWidth: 1.5, borderColor: palette.hairline,
+    borderRadius: radius.md, paddingVertical: spacing.md, textAlign: 'center', fontSize: 17, fontWeight: '700', color: palette.ink, letterSpacing: 1,
+  },
+  error: { color: palette.danger, marginTop: spacing.sm, textAlign: 'center', fontSize: 12.5, fontWeight: '700' },
+  legal: { marginTop: spacing.lg, ...typo.micro, color: palette.inkFaint, textAlign: 'center', maxWidth: 420 },
+
+  primaryShell: { marginTop: spacing.lg, borderRadius: radius.md, overflow: 'hidden', minWidth: 220, ...elevation.card },
+  primary: { minHeight: 52, paddingHorizontal: spacing.xl, alignItems: 'center', justifyContent: 'center' },
+  primaryText: { color: palette.white, fontWeight: '900', fontSize: 14.5, letterSpacing: 0.3 },
+  disabled: { opacity: 0.4 },
+
+  screenBack: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.lg, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline },
+  screenBackText: { color: palette.azureDeep, fontWeight: '900' },
+
+  hero: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md,
+    backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline,
+  },
+  avatarRing: { position: 'relative' },
+  avatar: { width: 54, height: 54, borderRadius: radius.md, backgroundColor: palette.azure, borderWidth: 2, borderColor: palette.white, alignItems: 'center', justifyContent: 'center', ...elevation.hairline },
+  avatarText: { color: palette.white, fontSize: 22, fontWeight: '900' },
+  heroBadge: { position: 'absolute', right: -3, bottom: -3 },
+  name: { ...typo.heading, marginTop: 0 },
+  status: { ...typo.meta, marginTop: 1 },
+  headerGear: { width: 38, height: 38, borderRadius: radius.sm, backgroundColor: palette.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
+  headerAction: { fontSize: 17, color: palette.inkSoft },
+
+  nowPlayingPill: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs, alignSelf: 'flex-start', backgroundColor: palette.musicSoft, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 4, maxWidth: '100%' },
   nowPlayingIcon: { color: palette.music, fontSize: 12, fontWeight: '900' },
   nowPlayingText: { color: palette.music, fontSize: 11, fontWeight: '800', flexShrink: 1 },
-  tabs: { flexDirection: 'row', paddingTop: spacing.sm, paddingBottom: spacing.md, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline }, tab: { flex: 1, alignItems: 'center', gap: 3 }, tabIcon: { fontSize: 17, opacity: 0.9 }, tabLabel: { color: palette.inkFaint, fontSize: 9, fontWeight: '700' }, tabActive: { color: palette.azure, fontWeight: '900' },
+
+  tabs: {
+    flexDirection: 'row', paddingTop: spacing.sm, paddingBottom: spacing.md, paddingHorizontal: spacing.xs,
+    backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline,
+  },
+  tab: { flex: 1, alignItems: 'center', gap: 3 },
+  tabPill: { width: 44, height: 30, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  tabPillActive: { backgroundColor: palette.azureSoft },
+  tabIcon: { fontSize: 16, opacity: 0.55 },
+  tabIconActive: { opacity: 1 },
+  tabLabel: { color: palette.inkFaint, fontSize: 9, fontWeight: '700' },
+  tabActive: { color: palette.azureDeep, fontWeight: '900' },
+
   meNowPlaying: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, backgroundColor: palette.musicSoft, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, maxWidth: '100%' },
   meNowPlayingText: { color: palette.music, fontWeight: '800', fontSize: 12, flexShrink: 1 },
-  profilePage: { alignItems: 'center', padding: 24, paddingBottom: 40 }, profileAvatar: { width: 100, height: 100, borderRadius: 34, backgroundColor: '#2f93cf', borderWidth: 5, borderColor: '#c5ecff', alignItems: 'center', justifyContent: 'center' }, profileAvatarText: { color: '#fff', fontSize: 40, fontWeight: '900' }, profileName: { marginTop: 14, color: '#173448', fontSize: 24, fontWeight: '900', textAlign: 'center' }, profileHandle: { color: '#7d96a4', marginTop: 2 }, profilePresence: { color: '#4d7b61', marginTop: 8, fontWeight: '800' }, profileBio: { color: '#657e8d', marginTop: 10, textAlign: 'center', lineHeight: 19, maxWidth: 360 }, profileGrid: { width: '100%', flexDirection: 'row', gap: 8, marginTop: 18 }, profileButton: { flex: 1, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 15, paddingVertical: 12 }, profileButtonIcon: { fontSize: 20 }, profileButtonLabel: { color: '#52768a', fontSize: 10, fontWeight: '800', marginTop: 4 }, profileFoot: { color: '#8ba0ac', fontSize: 10, marginTop: 18 },
-  signOutButton: { marginTop: 18, minWidth: 180, alignItems: 'center', paddingHorizontal: 18, paddingVertical: 11, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d7e4eb', borderRadius: 14 }, signOutText: { color: '#4c6879', fontWeight: '900' },
+
+  profilePage: { alignItems: 'center', padding: spacing.xl, paddingBottom: spacing.xxxl, maxWidth: layout.maxContent, alignSelf: 'center', width: '100%' },
+  profileAvatar: { width: 104, height: 104, borderRadius: radius.xxl, backgroundColor: palette.azure, borderWidth: 3, borderColor: palette.white, alignItems: 'center', justifyContent: 'center', ...elevation.card },
+  profileAvatarText: { color: palette.white, fontSize: 42, fontWeight: '900' },
+  profileName: { marginTop: spacing.md, ...typo.title, textAlign: 'center' },
+  profileHandle: { ...typo.meta, color: palette.inkFaint, marginTop: 2 },
+  profilePresence: { color: palette.success, marginTop: spacing.sm, fontWeight: '800', fontSize: 13 },
+  profileBio: { ...typo.body, color: palette.inkSoft, marginTop: spacing.md, textAlign: 'center', maxWidth: 360 },
+  profileGrid: { width: '100%', flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xl },
+  profileButton: { flex: 1, alignItems: 'center', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, paddingVertical: spacing.md, ...elevation.hairline },
+  profileButtonIcon: { fontSize: 19 },
+  profileButtonLabel: { color: palette.inkSoft, fontSize: 10, fontWeight: '800', marginTop: 4 },
+  profileFoot: { ...typo.micro, color: palette.inkFaint, marginTop: spacing.xl },
+  signOutButton: { marginTop: spacing.xl, minWidth: 190, alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairlineStrong, borderRadius: radius.md },
+  signOutText: { color: palette.inkSoft, fontWeight: '900' },
 });

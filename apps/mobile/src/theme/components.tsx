@@ -14,7 +14,8 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { elevation, palette, presenceColor, radius, spacing, type as typo } from './tokens';
+import { LinearGradient } from 'expo-linear-gradient';
+import { brandGradient, elevation, palette, presenceColor, radius, spacing, type as typo } from './tokens';
 
 /** Respect the OS "reduce motion" setting for every decorative animation. */
 export function useReducedMotion(): boolean {
@@ -190,15 +191,21 @@ export function PrimaryButton({
   disabled?: boolean;
   tone?: 'azure' | 'music';
 }) {
-  const bg = tone === 'music' ? palette.music : palette.azure;
+  const off = disabled || busy;
+  const gradient = tone === 'music'
+    ? ([palette.music, '#5F3EEA'] as const)
+    : brandGradient;
   return (
     <TouchableOpacity
       accessibilityRole="button"
-      disabled={disabled || busy}
+      activeOpacity={0.9}
+      disabled={off}
       onPress={onPress}
-      style={[styles.primary, { backgroundColor: bg }, (disabled || busy) && styles.disabled]}
+      style={[styles.primaryShell, off && styles.disabled]}
     >
-      {busy ? <ActivityIndicator color={palette.white} /> : <Text style={styles.primaryText}>{label}</Text>}
+      <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primary} pointerEvents="none">
+        {busy ? <ActivityIndicator color={palette.white} /> : <Text style={styles.primaryText}>{label}</Text>}
+      </LinearGradient>
     </TouchableOpacity>
   );
 }
@@ -415,18 +422,18 @@ export function Segmented<T extends string>({
 
 const styles = StyleSheet.create({
   sky: { flex: 1, backgroundColor: palette.sky },
-  skyBand: { position: 'absolute', top: 0, left: 0, right: 0, height: 220, backgroundColor: palette.skyTop },
+  skyBand: { position: 'absolute', top: 0, left: 0, right: 0, height: 260, backgroundColor: palette.skyTop },
   sectionLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   sectionLabel: { ...typo.label, textTransform: 'uppercase' },
+  primaryShell: { borderRadius: radius.md, overflow: 'hidden', ...elevation.card },
   primary: {
-    minHeight: 48,
-    borderRadius: radius.lg,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
   },
-  primaryText: { color: palette.white, fontWeight: '900', fontSize: 14, letterSpacing: 0.3 },
-  disabled: { opacity: 0.45 },
+  primaryText: { color: palette.white, fontWeight: '900', fontSize: 14.5, letterSpacing: 0.3 },
+  disabled: { opacity: 0.4 },
   sheetScrim: { flex: 1, backgroundColor: 'rgba(11,33,46,0.42)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: palette.surface,
@@ -457,17 +464,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
     backgroundColor: palette.surface,
     borderBottomWidth: 1,
     borderBottomColor: palette.hairline,
   },
-  headerBack: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', marginLeft: -spacing.sm },
-  headerBackText: { fontSize: 30, lineHeight: 30, color: palette.azure, fontWeight: '900' },
+  headerBack: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginLeft: -spacing.xs, backgroundColor: palette.surfaceSunken },
+  headerBackText: { fontSize: 26, lineHeight: 26, color: palette.azureDeep, fontWeight: '900', marginTop: -2 },
   headerText: { flex: 1 },
-  headerBrand: { ...typo.brand },
-  headerTitle: { ...typo.title, fontSize: 19, marginTop: 1 },
-  headerSubtitle: { ...typo.meta, marginTop: 1 },
+  headerBrand: { ...typo.brand, fontSize: 9.5, letterSpacing: 2.4 },
+  headerTitle: { ...typo.title, fontSize: 20, marginTop: 2 },
+  headerSubtitle: { ...typo.meta, marginTop: 2 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 
   card: {
@@ -479,7 +487,7 @@ const styles = StyleSheet.create({
     ...elevation.card,
   },
 
-  avatar: { backgroundColor: palette.azure, borderWidth: 3, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' },
+  avatar: { backgroundColor: palette.azure, borderWidth: 2, borderColor: palette.white, alignItems: 'center', justifyContent: 'center', ...elevation.hairline },
   avatarText: { color: palette.white, fontWeight: '900' },
   avatarBadge: { position: 'absolute', right: -3, bottom: -3 },
 
@@ -496,20 +504,22 @@ const styles = StyleSheet.create({
   field: { gap: spacing.xs },
   fieldLabel: { ...typo.label, textTransform: 'uppercase' },
   fieldInput: {
-    backgroundColor: palette.sky,
-    borderWidth: 1,
+    backgroundColor: palette.surfaceSunken,
+    borderWidth: 1.5,
     borderColor: palette.hairline,
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    minHeight: 50,
     color: palette.ink,
     fontSize: 15,
+    fontWeight: '600',
   },
   fieldHint: { ...typo.micro, fontWeight: '500' },
 
-  segment: { flexDirection: 'row', margin: spacing.lg, padding: 4, borderRadius: radius.lg, backgroundColor: palette.azureSoft },
+  segment: { flexDirection: 'row', margin: spacing.lg, padding: 4, borderRadius: radius.lg, backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline },
   segmentItem: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.md, alignItems: 'center' },
-  segmentItemActive: { backgroundColor: palette.surface, ...elevation.card },
+  segmentItemActive: { backgroundColor: palette.surface, ...elevation.hairline },
   segmentText: { color: palette.inkSoft, fontWeight: '800', fontSize: 13 },
-  segmentTextActive: { color: palette.azure },
+  segmentTextActive: { color: palette.azureDeep },
 });
