@@ -13,6 +13,7 @@ import {
   newEncryptedMessageId,
 } from '../../lib/signalDevice';
 import { emitAck } from '../../lib/realtime';
+import { palette, radius, spacing } from '../../theme/tokens';
 
 export type GroupEncryptedMessage = {
   id: string;
@@ -276,24 +277,24 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, memberIds, 
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: 14 },
-  security: { backgroundColor: '#eaf3f7', borderRadius: 12, padding: 9, marginBottom: 9 },
-  securityText: { color: '#486d82', textAlign: 'center', fontSize: 11, fontWeight: '800' },
-  notice: { color: '#326e94', fontWeight: '700', textAlign: 'center', marginBottom: 8 },
-  empty: { color: '#7893a3', textAlign: 'center', paddingVertical: 18 },
-  bubble: { maxWidth: '84%', paddingHorizontal: 13, paddingVertical: 10, borderRadius: 17, marginBottom: 8 },
-  mine: { alignSelf: 'flex-end', backgroundColor: '#dff2ff', borderBottomRightRadius: 5 },
-  theirs: { alignSelf: 'flex-start', backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderBottomLeftRadius: 5 },
-  body: { color: '#173448', fontSize: 14, lineHeight: 20 },
-  meta: { color: '#7893a3', fontSize: 9, marginTop: 5, textAlign: 'right' },
-  mediaPreview: { width: 230, height: 230, borderRadius: 12, backgroundColor: '#dbe9f1', marginBottom: 6 },
-  mediaError: { color: '#a63d3d', fontSize: 12, fontWeight: '700' },
-  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#d7e9f3' },
-  attach: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef6fa', borderWidth: 1, borderColor: '#cfe1eb' },
-  attachText: { color: '#2189c5', fontSize: 26, lineHeight: 28, fontWeight: '700' },
-  input: { flex: 1, minHeight: 44, maxHeight: 120, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d6e7f0', borderRadius: 17, paddingHorizontal: 12, paddingVertical: 9 },
-  send: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5' },
+  wrap: { marginTop: spacing.md },
+  security: { backgroundColor: palette.azureSoft, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm },
+  securityText: { color: palette.azureDeep, textAlign: 'center', fontSize: 11, fontWeight: '800' },
+  notice: { color: palette.azureDeep, fontWeight: '700', textAlign: 'center', marginBottom: spacing.sm },
+  empty: { color: palette.inkSoft, textAlign: 'center', paddingVertical: spacing.lg },
+  bubble: { maxWidth: '84%', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg, marginBottom: spacing.sm },
+  mine: { alignSelf: 'flex-end', backgroundColor: palette.azureSoft, borderBottomRightRadius: 5 },
+  theirs: { alignSelf: 'flex-start', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderBottomLeftRadius: 5 },
+  body: { color: palette.ink, fontSize: 14, lineHeight: 20 },
+  meta: { color: palette.inkFaint, fontSize: 9, marginTop: 5, textAlign: 'right' },
+  mediaPreview: { width: 230, height: 230, borderRadius: radius.md, backgroundColor: palette.hairline, marginBottom: 6 },
+  mediaError: { color: palette.danger, fontSize: 12, fontWeight: '700' },
+  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, marginTop: spacing.sm, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: palette.hairline },
+  attach: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azureSoft, borderWidth: 1, borderColor: palette.hairline },
+  attachText: { color: palette.azure, fontSize: 26, lineHeight: 28, fontWeight: '700' },
+  input: { flex: 1, minHeight: 44, maxHeight: 120, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: palette.ink },
+  send: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure },
   disabled: { opacity: 0.45 },
-  sendText: { color: '#fff', fontSize: 20, fontWeight: '900' },
-  locked: { color: '#7893a3', textAlign: 'center', fontSize: 11, paddingVertical: 12 },
+  sendText: { color: palette.white, fontSize: 20, fontWeight: '900' },
+  locked: { color: palette.inkSoft, textAlign: 'center', fontSize: 11, paddingVertical: spacing.md },
 });

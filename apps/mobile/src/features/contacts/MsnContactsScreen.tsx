@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload } from '../../lib/media';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
+import { elevation, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
+import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake } from '../../theme/components';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
 export type Contact = {
@@ -53,7 +55,14 @@ type SearchResponse = {
   error?: string;
 };
 
-type ContactRequest = { id: string; sender_id: string; recipient_id: string; status: string };
+type ContactRequestCounterpart = { id: string; username: string; display_name: string };
+type ContactRequest = {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  status: string;
+  counterpart?: ContactRequestCounterpart;
+};
 type RequestsResponse = { ok: boolean; requests?: ContactRequest[] };
 type LoginNotifications = 'all_contacts' | 'favorites' | 'nobody';
 type BlockedUser = {
@@ -66,9 +75,7 @@ type BlockedUser = {
 type BlockedResponse = { ok: boolean; blocked?: BlockedUser[]; error?: string };
 type SimpleAck = { ok: boolean; error?: string };
 
-const presenceIcon: Record<Presence, string> = {
-  online: '🟢', busy: '🔴', away: '🟠', invisible: '👻', offline: '⚫',
-};
+const CONTACT_POLL_MS = 25_000;
 
 function mediaIdFromAvatar(value: string | null | undefined): string | null {
   if (!value?.startsWith('media:')) return null;
@@ -98,9 +105,23 @@ function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: stri
     return () => { active = false; };
   }, [avatarUrl, mediaId]);
 
-  const avatarStyle = [styles.avatar, presence === 'online' && styles.avatarOnline];
-  if (resolvedUrl) return <Image source={{ uri: resolvedUrl }} style={avatarStyle} />;
-  return <View style={avatarStyle}><Text style={styles.avatarText}>{displayName[0]?.toUpperCase() ?? '?'}</Text></View>;
+  const online = presence === 'online';
+  return (
+    <View style={styles.avatarWrap}>
+      {resolvedUrl
+        ? <Image source={{ uri: resolvedUrl }} style={[styles.avatar, online && styles.avatarOnline]} />
+        : <View style={[styles.avatar, online && styles.avatarOnline]}><Text style={styles.avatarText}>{displayName[0]?.toUpperCase() ?? '?'}</Text></View>}
+      {presence && <View style={styles.avatarBadge}><PresenceBadge presence={presence} size={13} /></View>}
+    </View>
+  );
+}
+
+function requestName(request: ContactRequest, currentUserId: string): { name: string; handle: string } {
+  if (request.counterpart) {
+    return { name: request.counterpart.display_name, handle: `@${request.counterpart.username}` };
+  }
+  const other = request.sender_id === currentUserId ? request.recipient_id : request.sender_id;
+  return { name: 'Utilisateur K-ssenger', handle: `#${other.slice(0, 8)}` };
 }
 
 export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => void }) {
@@ -118,6 +139,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   const [managingContactId, setManagingContactId] = useState<string | null>(null);
   const contactsRef = useRef<Contact[]>([]);
   const loginNotificationsRef = useRef<LoginNotifications>('favorites');
+  const { style: shakeStyle, trigger: triggerShake } = useNudgeShake();
 
   useEffect(() => {
     contactsRef.current = contacts;
@@ -177,6 +199,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
 
     let active = true;
     let cleanupListeners: (() => void) | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
     void Promise.all([getRealtimeSocket(), getAuthenticatedUserId()]).then(async ([client, userId]) => {
       if (!active) return;
@@ -206,6 +229,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       };
       const onKPulse = ({ senderId }: { senderId: string }) => {
         const sender = contactsRef.current.find((item) => item.id === senderId);
+        triggerShake();
         setNotice(`⚡ K-Pulse reçu${sender ? ` de ${sender.nickname}` : ''} !`);
       };
 
@@ -234,6 +258,12 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         client.off('kpulse:receive', onKPulse);
       };
 
+      // Keep custom status and live "now playing" fresh even without a
+      // dedicated broadcast: a light poll while the buddy list is open.
+      pollTimer = setInterval(() => {
+        if (client.connected) void loadContacts(client).catch(() => undefined);
+      }, CONTACT_POLL_MS);
+
       try {
         await Promise.all([loadContacts(client), loadRequests(client), loadBlockedUsers(client)]);
         if (active) setNotice('');
@@ -251,9 +281,10 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
 
     return () => {
       active = false;
+      if (pollTimer) clearInterval(pollTimer);
       cleanupListeners?.();
     };
-  }, []);
+  }, [triggerShake]);
 
   useEffect(() => {
     if (!socket || search.trim().length < 2) {
@@ -374,124 +405,188 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     setNotice(`${blocked.display_name} est débloqué. Il n’a pas été réajouté automatiquement à tes contacts.`);
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator /><Text style={styles.counter}>Chargement de tes contacts…</Text></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color={palette.azure} /><Text style={styles.loadingText}>Chargement de tes contacts…</Text></View>;
 
   return (
-    <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-      <View style={styles.toolbar}>
-        <TextInput value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo..." placeholderTextColor="#7690a0" style={styles.search} autoCapitalize="none" />
-      </View>
-      <Text style={styles.counter}>{onlineCount} en ligne · {filtered.length} contacts</Text>
-      {!!notice && <Text style={styles.notice}>{notice}</Text>}
-
-      {!!incomingRequests.length && (
-        <View style={styles.group}>
-          <View style={styles.groupHeader}><Text style={styles.groupTitle}>DEMANDES REÇUES</Text><Text style={styles.groupCount}>{incomingRequests.length}</Text></View>
-          {incomingRequests.map((request) => (
-            <View key={request.id} style={styles.contact}>
-              <View style={styles.avatar}><Text style={styles.avatarText}>?</Text></View>
-              <View style={styles.flex}><Text style={styles.nickname}>Nouvelle demande</Text><Text style={styles.status}>{request.sender_id}</Text></View>
-              <TouchableOpacity style={styles.secondaryAction} onPress={() => void declineRequest(request.id)}><Text style={styles.secondaryActionText}>Refuser</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.accept} onPress={() => void acceptRequest(request.id)}><Text style={styles.acceptText}>Accepter</Text></TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {!!outgoingRequests.length && (
-        <View style={styles.group}>
-          <View style={styles.groupHeader}><Text style={styles.groupTitle}>DEMANDES ENVOYÉES</Text><Text style={styles.groupCount}>{outgoingRequests.length}</Text></View>
-          {outgoingRequests.map((request) => (
-            <View key={request.id} style={styles.contact}>
-              <View style={styles.flex}><Text style={styles.nickname}>En attente</Text><Text style={styles.status}>{request.recipient_id}</Text></View>
-              <TouchableOpacity style={styles.secondaryAction} onPress={() => void cancelRequest(request.id)}><Text style={styles.secondaryActionText}>Annuler</Text></TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {search.trim().length >= 2 && !!results?.length && (
-        <View style={styles.group}>
-          <View style={styles.groupHeader}><Text style={styles.groupTitle}>UTILISATEURS</Text><Text style={styles.groupCount}>{results.length}</Text></View>
-          {results.map((profile) => (
-            <View key={profile.id} style={styles.contact}>
-              <ContactAvatar displayName={profile.display_name} avatarUrl={profile.avatar_url} presence={profile.presence} />
-              <View style={styles.flex}><Text style={styles.nickname}>{profile.display_name}</Text><Text style={styles.status}>@{profile.username}</Text></View>
-              <TouchableOpacity style={styles.accept} onPress={() => void requestContact(profile.id)}><Text style={styles.acceptText}>Ajouter</Text></TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {!!blockedUsers.length && !search.trim() && (
-        <View style={styles.group}>
-          <TouchableOpacity style={styles.groupHeader} onPress={() => setBlockedCollapsed((value) => !value)} accessibilityRole="button" accessibilityLabel="Afficher ou masquer les personnes bloquées">
-            <Text style={styles.groupTitle}>{blockedCollapsed ? '▸' : '▾'} PERSONNES BLOQUÉES</Text>
-            <Text style={styles.groupCount}>{blockedUsers.length}</Text>
-          </TouchableOpacity>
-          {!blockedCollapsed && blockedUsers.map((blocked) => (
-            <View key={blocked.id} style={styles.contact}>
-              <ContactAvatar displayName={blocked.display_name} avatarUrl={blocked.avatar_url} />
-              <View style={styles.flex}>
-                <Text style={styles.nickname}>{blocked.display_name}</Text>
-                <Text style={styles.status}>@{blocked.username} · interactions coupées</Text>
-              </View>
-              <TouchableOpacity style={styles.secondaryAction} onPress={() => void unblockContact(blocked)} accessibilityLabel={`Débloquer ${blocked.display_name}`}>
-                <Text style={styles.secondaryActionText}>Débloquer</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {groups.map((group) => {
-        const items = filtered.filter((c) => c.group === group);
-        const isCollapsed = collapsed[group];
-        return (
-          <View key={group} style={styles.group}>
-            <TouchableOpacity style={styles.groupHeader} onPress={() => setCollapsed((v) => ({ ...v, [group]: !v[group] }))}>
-              <Text style={styles.groupTitle}>{isCollapsed ? '▸' : '▾'} {group.toUpperCase()}</Text>
-              <Text style={styles.groupCount}>{items.filter((c) => c.presence !== 'offline').length}/{items.length}</Text>
-            </TouchableOpacity>
-            {!isCollapsed && items.map((contact) => (
-              <View key={contact.id}>
-                <View style={styles.contact}>
-                  <TouchableOpacity style={styles.contactMain} onPress={() => onOpen(contact)} accessibilityRole="button">
-                    <ContactAvatar displayName={contact.displayName} avatarUrl={contact.avatarUrl} presence={contact.presence} />
-                    <View style={styles.flex}>
-                      <View style={styles.nameRow}><Text style={styles.presence}>{presenceIcon[contact.presence]}</Text><Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text></View>
-                      {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
-                      {!!contact.nowPlaying && <Text style={styles.music} numberOfLines={1}>♫ {contact.nowPlaying}</Text>}
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.favorite, contact.favorite && styles.favoriteActive]} onPress={() => void toggleFavorite(contact)} accessibilityLabel={contact.favorite ? `Retirer ${contact.displayName} des favoris` : `Ajouter ${contact.displayName} aux favoris`}><Text style={styles.favoriteText}>{contact.favorite ? '★' : '☆'}</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse(contact)} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.more} onPress={() => setManagingContactId((id) => id === contact.id ? null : contact.id)} accessibilityLabel={`Gérer ${contact.displayName}`}><Text style={styles.moreText}>•••</Text></TouchableOpacity>
-                </View>
-                {managingContactId === contact.id && (
-                  <View style={styles.manageRow}>
-                    <TouchableOpacity style={styles.secondaryAction} onPress={() => void removeContact(contact)}><Text style={styles.secondaryActionText}>Retirer le contact</Text></TouchableOpacity>
-                    <TouchableOpacity style={styles.dangerAction} onPress={() => void blockContact(contact)}><Text style={styles.dangerActionText}>Bloquer</Text></TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            ))}
+    <SkyBackground>
+      <Animated.View style={[styles.fill, shakeStyle]}>
+        <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+          <View style={styles.toolbar}>
+            <Text style={styles.searchIcon}>⌕</Text>
+            <TextInput value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo" placeholderTextColor={palette.inkFaint} style={styles.search} autoCapitalize="none" />
           </View>
-        );
-      })}
+          <Text style={styles.counter}>{onlineCount} en ligne · {filtered.length} contact{filtered.length > 1 ? 's' : ''}</Text>
+          {!!notice && <View style={styles.noticePill}><Text style={styles.notice}>{notice}</Text></View>}
 
-      {!filtered.length && !search.trim() && <Text style={styles.empty}>Aucun contact pour le moment. Recherche un @pseudo pour commencer.</Text>}
-    </ScrollView>
+          {!!incomingRequests.length && (
+            <View style={styles.group}>
+              <SectionLabel right={<Text style={styles.groupCount}>{incomingRequests.length}</Text>}>Demandes reçues</SectionLabel>
+              {incomingRequests.map((request) => {
+                const who = requestName(request, currentUserId);
+                return (
+                  <View key={request.id} style={styles.contact}>
+                    <View style={styles.avatarWrap}><View style={styles.avatar}><Text style={styles.avatarText}>{who.name[0]?.toUpperCase() ?? '?'}</Text></View></View>
+                    <View style={styles.flex}><Text style={styles.nickname} numberOfLines={1}>{who.name}</Text><Text style={styles.status}>{who.handle} · veut t'ajouter</Text></View>
+                    <TouchableOpacity style={styles.secondaryAction} onPress={() => void declineRequest(request.id)}><Text style={styles.secondaryActionText}>Refuser</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.accept} onPress={() => void acceptRequest(request.id)}><Text style={styles.acceptText}>Accepter</Text></TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {!!outgoingRequests.length && (
+            <View style={styles.group}>
+              <SectionLabel right={<Text style={styles.groupCount}>{outgoingRequests.length}</Text>}>Demandes envoyées</SectionLabel>
+              {outgoingRequests.map((request) => {
+                const who = requestName(request, currentUserId);
+                return (
+                  <View key={request.id} style={styles.contact}>
+                    <View style={styles.avatarWrap}><View style={styles.avatar}><Text style={styles.avatarText}>{who.name[0]?.toUpperCase() ?? '?'}</Text></View></View>
+                    <View style={styles.flex}><Text style={styles.nickname} numberOfLines={1}>{who.name}</Text><Text style={styles.status}>{who.handle} · en attente</Text></View>
+                    <TouchableOpacity style={styles.secondaryAction} onPress={() => void cancelRequest(request.id)}><Text style={styles.secondaryActionText}>Annuler</Text></TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {search.trim().length >= 2 && !!results?.length && (
+            <View style={styles.group}>
+              <SectionLabel right={<Text style={styles.groupCount}>{results.length}</Text>}>Utilisateurs</SectionLabel>
+              {results.map((profile) => (
+                <View key={profile.id} style={styles.contact}>
+                  <ContactAvatar displayName={profile.display_name} avatarUrl={profile.avatar_url} presence={profile.presence} />
+                  <View style={styles.flex}><Text style={styles.nickname}>{profile.display_name}</Text><Text style={styles.status}>@{profile.username}</Text></View>
+                  <TouchableOpacity style={styles.accept} onPress={() => void requestContact(profile.id)}><Text style={styles.acceptText}>Ajouter</Text></TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {!!blockedUsers.length && !search.trim() && (
+            <View style={styles.group}>
+              <TouchableOpacity style={styles.collapseHeader} onPress={() => setBlockedCollapsed((value) => !value)} accessibilityRole="button" accessibilityLabel="Afficher ou masquer les personnes bloquées">
+                <Text style={styles.groupTitle}>{blockedCollapsed ? '▸' : '▾'} PERSONNES BLOQUÉES</Text>
+                <Text style={styles.groupCount}>{blockedUsers.length}</Text>
+              </TouchableOpacity>
+              {!blockedCollapsed && blockedUsers.map((blocked) => (
+                <View key={blocked.id} style={styles.contact}>
+                  <ContactAvatar displayName={blocked.display_name} avatarUrl={blocked.avatar_url} />
+                  <View style={styles.flex}>
+                    <Text style={styles.nickname}>{blocked.display_name}</Text>
+                    <Text style={styles.status}>@{blocked.username} · interactions coupées</Text>
+                  </View>
+                  <TouchableOpacity style={styles.secondaryAction} onPress={() => void unblockContact(blocked)} accessibilityLabel={`Débloquer ${blocked.display_name}`}>
+                    <Text style={styles.secondaryActionText}>Débloquer</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {groups.map((group) => {
+            const items = filtered.filter((c) => c.group === group);
+            const isCollapsed = collapsed[group];
+            const onlineHere = items.filter((c) => c.presence !== 'offline').length;
+            return (
+              <View key={group} style={styles.group}>
+                <TouchableOpacity style={styles.collapseHeader} onPress={() => setCollapsed((v) => ({ ...v, [group]: !v[group] }))}>
+                  <Text style={styles.groupTitle}>{isCollapsed ? '▸' : '▾'} {group.toUpperCase()}</Text>
+                  <Text style={styles.groupCount}>{onlineHere}/{items.length}</Text>
+                </TouchableOpacity>
+                {!isCollapsed && items.map((contact) => (
+                  <View key={contact.id}>
+                    <View style={styles.contact}>
+                      <TouchableOpacity style={styles.contactMain} onPress={() => onOpen(contact)} accessibilityRole="button">
+                        <ContactAvatar displayName={contact.displayName} avatarUrl={contact.avatarUrl} presence={contact.presence} />
+                        <View style={styles.flex}>
+                          <Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text>
+                          {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
+                          {contact.nowPlaying
+                            ? <View style={styles.musicRow}><Equalizer size={12} /><Text style={styles.music} numberOfLines={1}>{contact.nowPlaying}</Text></View>
+                            : !contact.statusMessage && <Text style={styles.statusFaint}>{presenceLabel[contact.presence]}</Text>}
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.iconBtn, contact.favorite && styles.favoriteActive]} onPress={() => void toggleFavorite(contact)} accessibilityLabel={contact.favorite ? `Retirer ${contact.displayName} des favoris` : `Ajouter ${contact.displayName} aux favoris`}><Text style={[styles.iconBtnText, contact.favorite && styles.favoriteActiveText]}>{contact.favorite ? '★' : '☆'}</Text></TouchableOpacity>
+                      <TouchableOpacity style={[styles.iconBtn, styles.pulseBtn]} onPress={() => void sendKPulse(contact)} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.iconBtnText}>⚡</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.iconBtn} onPress={() => setManagingContactId((id) => id === contact.id ? null : contact.id)} accessibilityLabel={`Gérer ${contact.displayName}`}><Text style={styles.iconBtnText}>•••</Text></TouchableOpacity>
+                    </View>
+                    {managingContactId === contact.id && (
+                      <View style={styles.manageRow}>
+                        <TouchableOpacity style={styles.secondaryAction} onPress={() => void removeContact(contact)}><Text style={styles.secondaryActionText}>Retirer le contact</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.dangerAction} onPress={() => void blockContact(contact)}><Text style={styles.dangerActionText}>Bloquer</Text></TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+
+          {!filtered.length && !search.trim() && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>👋</Text>
+              <Text style={styles.emptyTitle}>Ta liste est vide</Text>
+              <Text style={styles.empty}>Cherche un @pseudo ci-dessus pour envoyer ta première demande.</Text>
+            </View>
+          )}
+        </ScrollView>
+      </Animated.View>
+    </SkyBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1 }, content: { padding: 14, paddingBottom: 28 }, flex: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  toolbar: { flexDirection: 'row', gap: 9, alignItems: 'center' }, search: { flex: 1, backgroundColor: '#fff', borderRadius: 17, borderWidth: 1, borderColor: '#d6e8f2', paddingHorizontal: 15, paddingVertical: 12, color: '#173448' },
-  counter: { marginTop: 8, marginLeft: 5, color: '#7893a3', fontSize: 11 }, notice: { marginTop: 10, color: '#326e94', fontWeight: '700' }, empty: { marginTop: 30, textAlign: 'center', color: '#7893a3' },
-  group: { marginTop: 14, borderRadius: 18, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.70)', borderWidth: 1, borderColor: '#daeaf3' },
-  groupHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 10, backgroundColor: '#dff1fb' }, groupTitle: { fontSize: 11, letterSpacing: 1, color: '#326e94', fontWeight: '900' }, groupCount: { color: '#5b8098', fontSize: 11, fontWeight: '700' },
-  contact: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 11, borderTopWidth: 1, borderTopColor: '#edf4f7' }, contactMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11 }, avatar: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#dcecf5', borderWidth: 2, borderColor: '#c2d7e3' }, avatarOnline: { borderColor: '#65c568', backgroundColor: '#e7f8ed' }, avatarText: { color: '#276b93', fontSize: 18, fontWeight: '900' },
-  nameRow: { flexDirection: 'row', alignItems: 'center' }, presence: { fontSize: 10, marginRight: 5 }, nickname: { color: '#173448', fontSize: 15, fontWeight: '800', maxWidth: '82%' }, status: { color: '#668696', marginTop: 2, fontSize: 12 }, music: { color: '#4e7d55', marginTop: 2, fontSize: 11, fontStyle: 'italic' },
-  accept: { backgroundColor: '#2189c5', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 11 }, acceptText: { color: '#fff', fontSize: 11, fontWeight: '900' }, secondaryAction: { backgroundColor: '#eef4f7', borderWidth: 1, borderColor: '#d5e2e9', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 11 }, secondaryActionText: { color: '#52768a', fontSize: 11, fontWeight: '900' }, dangerAction: { backgroundColor: '#fff0f0', borderWidth: 1, borderColor: '#efb4b4', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 11 }, dangerActionText: { color: '#a63d3d', fontSize: 11, fontWeight: '900' }, favorite: { width: 34, height: 38, borderRadius: 12, borderWidth: 1, borderColor: '#d5e2e9', backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }, favoriteActive: { backgroundColor: '#fff7d6', borderColor: '#e7ca5c' }, favoriteText: { color: '#b48a00', fontSize: 19, fontWeight: '900' }, pulse: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#fff2bd', borderWidth: 1, borderColor: '#efcf65', alignItems: 'center', justifyContent: 'center' }, pulseText: { fontSize: 20 }, more: { width: 38, height: 38, borderRadius: 13, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d5e2e9', alignItems: 'center', justifyContent: 'center' }, moreText: { color: '#52768a', fontWeight: '900', letterSpacing: 1 }, manageRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, paddingHorizontal: 11, paddingBottom: 10 },
+  fill: { flex: 1 },
+  page: { flex: 1 },
+  content: { padding: spacing.md, paddingBottom: spacing.xxl },
+  flex: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: palette.sky },
+  loadingText: { color: palette.inkSoft, marginTop: spacing.md, fontWeight: '700' },
+
+  toolbar: { flexDirection: 'row', alignItems: 'center', backgroundColor: palette.surface, borderRadius: radius.pill, borderWidth: 1, borderColor: palette.hairline, paddingHorizontal: spacing.md },
+  searchIcon: { fontSize: 18, color: palette.inkFaint, marginRight: spacing.xs },
+  search: { flex: 1, paddingVertical: spacing.md, color: palette.ink, fontSize: 14 },
+  counter: { marginTop: spacing.sm, marginLeft: spacing.xs, ...typo.micro },
+  noticePill: { marginTop: spacing.sm, backgroundColor: palette.azureSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  notice: { color: palette.azureDeep, fontWeight: '700', fontSize: 12 },
+
+  group: { marginTop: spacing.lg, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, ...elevation.card },
+  collapseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, backgroundColor: palette.surfaceSunken, borderBottomWidth: 1, borderBottomColor: palette.hairline },
+  groupTitle: { ...typo.label, color: palette.inkSoft, textTransform: 'uppercase' },
+  groupCount: { color: palette.inkFaint, fontSize: 11, fontWeight: '800' },
+
+  contact: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, borderTopWidth: 1, borderTopColor: palette.hairlineSoft },
+  contactMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  avatarWrap: { position: 'relative' },
+  avatar: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azureSoft, borderWidth: 2, borderColor: palette.hairline },
+  avatarOnline: { borderColor: palette.onlineRing },
+  avatarText: { color: palette.azureDeep, fontSize: 18, fontWeight: '900' },
+  avatarBadge: { position: 'absolute', right: -3, bottom: -3 },
+
+  nickname: { ...typo.name, maxWidth: '92%' },
+  status: { color: palette.inkSoft, marginTop: 2, fontSize: 12 },
+  statusFaint: { color: palette.inkFaint, marginTop: 2, fontSize: 11 },
+  musicRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 3 },
+  music: { color: palette.music, fontSize: 11, fontWeight: '700', flexShrink: 1 },
+
+  accept: { backgroundColor: palette.azure, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm },
+  acceptText: { color: palette.white, fontSize: 11, fontWeight: '900' },
+  secondaryAction: { backgroundColor: palette.sky, borderWidth: 1, borderColor: palette.hairline, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm },
+  secondaryActionText: { color: palette.inkSoft, fontSize: 11, fontWeight: '900' },
+  dangerAction: { backgroundColor: palette.dangerSoft, borderWidth: 1, borderColor: '#EFB4B4', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm },
+  dangerActionText: { color: palette.danger, fontSize: 11, fontWeight: '900' },
+
+  iconBtn: { width: 38, height: 38, borderRadius: radius.md, borderWidth: 1, borderColor: palette.hairline, backgroundColor: palette.surface, alignItems: 'center', justifyContent: 'center' },
+  iconBtnText: { color: palette.inkSoft, fontSize: 16, fontWeight: '900' },
+  pulseBtn: { backgroundColor: palette.pulseSoft, borderColor: '#EFCF65' },
+  favoriteActive: { backgroundColor: '#FFF7D6', borderColor: '#E7CA5C' },
+  favoriteActiveText: { color: '#B48A00' },
+  manageRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+
+  emptyState: { alignItems: 'center', marginTop: 60, paddingHorizontal: spacing.xl },
+  emptyIcon: { fontSize: 40 },
+  emptyTitle: { ...typo.heading, marginTop: spacing.sm },
+  empty: { marginTop: spacing.xs, textAlign: 'center', color: palette.inkFaint, fontSize: 12, lineHeight: 18 },
 });

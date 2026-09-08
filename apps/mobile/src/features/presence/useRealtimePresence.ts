@@ -23,10 +23,12 @@ export function useRealtimePresence() {
       void publish(socket, state === 'active' ? 'online' : 'away');
     };
 
+    let onConnect: (() => void) | null = null;
+
     void getRealtimeSocket().then((client) => {
       if (!active) return;
       socket = client;
-      const onConnect = () => void publish(client, AppState.currentState === 'active' ? 'online' : 'away');
+      onConnect = () => void publish(client, AppState.currentState === 'active' ? 'online' : 'away');
       client.on('connect', onConnect);
       onConnect();
     }).catch(() => undefined);
@@ -37,7 +39,7 @@ export function useRealtimePresence() {
       active = false;
       subscription.remove();
       if (socket) {
-        socket.removeAllListeners('connect');
+        if (onConnect) socket.off('connect', onConnect);
         if (socket.connected) void publish(socket, 'offline');
       }
       disconnectRealtimeSocket();

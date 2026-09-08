@@ -2,7 +2,10 @@
   "name": "k-ssenger",
   "private": true,
   "version": "1.0.0",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "overrides": {
     "react": "19.1.0",
     "react-dom": "19.1.0"
@@ -13,5 +16,6 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "release:check-static": "node scripts/release-candidate-static-gate.mjs",
     "release:check-neon-live": "node scripts/neon-live-release-readiness.mjs"
-  }
+  },
+  "dependencies": {}
 }

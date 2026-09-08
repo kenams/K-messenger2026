@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
+import { ScreenHeader } from '../../theme/components';
+import { palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 type Visibility = 'everyone' | 'contacts' | 'nobody';
 type KPulsePolicy = 'everyone' | 'contacts' | 'favorites' | 'nobody';
@@ -145,10 +147,7 @@ export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBa
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}><Text style={styles.back}>‹</Text></TouchableOpacity>
-        <View><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.title}>Présence & confidentialité</Text></View>
-      </View>
+      <ScreenHeader title="Présence & confidentialité" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.intro}>Garde le côté vivant des messageries d’époque sans perdre le contrôle sur ce que les autres voient.</Text>
 
@@ -206,8 +205,7 @@ function ChoiceSection<T extends string>({ title, value, options, onChange }: { 
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' }, flex: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderBottomWidth: 1, borderBottomColor: '#d7e9f3' }, back: { fontSize: 39, color: '#2189c5' }, brand: { color: '#3784b5', fontSize: 9, letterSpacing: 2, fontWeight: '900' }, title: { color: '#173448', fontSize: 18, fontWeight: '900' },
-  content: { padding: 18, paddingBottom: 42 }, intro: { color: '#607f90', lineHeight: 19, marginBottom: 4 }, section: { marginTop: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: '#d8e9f2', borderRadius: 17, padding: 13 }, sectionTitle: { color: '#4f7388', fontSize: 10, letterSpacing: 1, fontWeight: '900' }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 10 }, option: { borderWidth: 1, borderColor: '#cbdfe9', borderRadius: 13, paddingHorizontal: 11, paddingVertical: 9, backgroundColor: '#f8fcfe' }, optionActive: { borderColor: '#2189c5', backgroundColor: '#e1f3fc' }, optionLabel: { color: '#52768a', fontSize: 11, fontWeight: '800' }, optionLabelActive: { color: '#1675ad' }, toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10 }, toggle: { fontSize: 22 }, hint: { color: '#8197a4', fontSize: 10, lineHeight: 14, marginTop: 3 }, notice: { color: '#326e94', marginTop: 16, fontWeight: '800' }, primary: { minHeight: 48, marginTop: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 16 }, primaryText: { color: '#fff', fontWeight: '900' }, disabled: { opacity: 0.5 },
-  blockRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#edf4f7', paddingVertical: 10, marginTop: 8 }, blockLabel: { color: '#173448', fontWeight: '800', fontSize: 12 }, blockId: { color: '#8197a4', fontSize: 10, marginTop: 2 }, unblock: { borderWidth: 1, borderColor: '#cbdfe9', backgroundColor: '#f8fcfe', borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, minWidth: 82, alignItems: 'center' }, unblockText: { color: '#347da8', fontSize: 10, fontWeight: '900' }, empty: { color: '#8197a4', fontSize: 11, marginTop: 10 },
+  safe: { flex: 1, backgroundColor: palette.sky }, flex: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl }, intro: { color: palette.inkSoft, lineHeight: 19, marginBottom: spacing.xs }, section: { marginTop: spacing.lg, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, padding: spacing.md }, sectionTitle: { ...typo.label, textTransform: 'uppercase' }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm }, option: { borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: palette.sky }, optionActive: { borderColor: palette.azure, backgroundColor: palette.azureSoft }, optionLabel: { color: palette.inkSoft, fontSize: 11, fontWeight: '800' }, optionLabelActive: { color: palette.azureDeep }, toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm }, toggle: { fontSize: 22 }, hint: { ...typo.micro, fontWeight: '500', lineHeight: 14, marginTop: 3 }, notice: { color: palette.azureDeep, marginTop: spacing.lg, fontWeight: '800' }, primary: { minHeight: 48, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg }, primaryText: { color: palette.white, fontWeight: '900' }, disabled: { opacity: 0.5 },
+  blockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: palette.hairlineSoft, paddingVertical: spacing.sm, marginTop: spacing.sm }, blockLabel: { color: palette.ink, fontWeight: '800', fontSize: 12 }, blockId: { ...typo.micro, fontWeight: '500', marginTop: 2 }, unblock: { borderWidth: 1, borderColor: palette.hairline, backgroundColor: palette.sky, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minWidth: 82, alignItems: 'center' }, unblockText: { color: palette.azureDeep, fontSize: 10, fontWeight: '900' }, empty: { color: palette.inkFaint, fontSize: 11, marginTop: spacing.sm },
 });

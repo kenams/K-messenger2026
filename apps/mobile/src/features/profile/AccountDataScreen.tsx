@@ -6,6 +6,8 @@ import { reauthenticateNeonPassword, changeNeonPassword } from '../../lib/neonAu
 import { disconnectRealtimeSocket, emitAck, getRealtimeSocket } from '../../lib/realtime';
 import { prepareLocalSignalAccountPurge } from '../../lib/signalCleanup';
 import type { MyProfile } from './useMyProfile';
+import { ScreenHeader } from '../../theme/components';
+import { palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 type ExportRow = Record<string, unknown>;
 type DeleteAck = { ok: boolean; error?: string };
@@ -158,10 +160,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}><Text style={styles.back}>‹</Text></TouchableOpacity>
-        <View><Text style={styles.brand}>K-SSENGER</Text><Text style={styles.title}>Compte & données</Text></View>
-      </View>
+      <ScreenHeader title="Compte & données" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Text style={styles.cardTitle}>🔑 Changer mon mot de passe</Text>
@@ -200,11 +199,9 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', padding: 12, borderBottomWidth: 1, borderBottomColor: '#d7e9f3' },
-  back: { fontSize: 39, color: '#2189c5' }, brand: { color: '#3784b5', fontSize: 9, letterSpacing: 2, fontWeight: '900' }, title: { color: '#173448', fontSize: 18, fontWeight: '900' },
-  content: { padding: 18, paddingBottom: 40 }, card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 18, padding: 16 }, sectionGap: { marginTop: 14 }, warningCard: { marginTop: 14, backgroundColor: '#fff6f4', borderWidth: 1, borderColor: '#efb8ad', borderRadius: 18, padding: 16 },
-  cardTitle: { color: '#173448', fontSize: 16, fontWeight: '900' }, copy: { color: '#6e8796', lineHeight: 19, marginTop: 8 }, input: { minHeight: 48, marginTop: 10, paddingHorizontal: 13, backgroundColor: '#f7fafc', borderWidth: 1, borderColor: '#dbe9f1', borderRadius: 13 },
-  primary: { minHeight: 48, marginTop: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 15 }, danger: { minHeight: 48, marginTop: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#b42318', borderRadius: 15 }, buttonDisabled: { opacity: 0.55 }, primaryText: { color: '#fff', fontWeight: '900', textAlign: 'center' },
-  notice: { marginTop: 12, color: '#326e94', fontWeight: '700' }, deleteNotice: { marginTop: 12, color: '#9d281d', fontWeight: '700' },
+  safe: { flex: 1, backgroundColor: palette.sky },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl }, card: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, padding: spacing.lg }, sectionGap: { marginTop: spacing.md }, warningCard: { marginTop: spacing.md, backgroundColor: palette.dangerSoft, borderWidth: 1, borderColor: palette.busy, borderRadius: radius.lg, padding: spacing.lg },
+  cardTitle: { ...typo.heading }, copy: { color: palette.inkSoft, lineHeight: 19, marginTop: spacing.sm }, input: { minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: palette.sky, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, color: palette.ink },
+  primary: { minHeight: 48, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.md }, danger: { minHeight: 48, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.danger, borderRadius: radius.md }, buttonDisabled: { opacity: 0.55 }, primaryText: { color: palette.white, fontWeight: '900', textAlign: 'center' },
+  notice: { marginTop: spacing.md, color: palette.azureDeep, fontWeight: '700' }, deleteNotice: { marginTop: spacing.md, color: palette.danger, fontWeight: '700' },
 });

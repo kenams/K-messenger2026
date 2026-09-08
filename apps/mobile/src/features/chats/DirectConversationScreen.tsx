@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import type { Socket } from 'socket.io-client';
 import type { Contact } from '../contacts/MsnContactsScreen';
+import { elevation, layout, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
 import { getBackend } from '../../lib/backend';
 import { canUnlockPrivateComposer, getKssengerE2eeStatus } from '../../lib/e2ee';
 import { loadLocalMessage, storeLocalMessage } from '../../lib/localMessageStore';
@@ -111,7 +112,7 @@ function ChatMedia({ content }: { content: Extract<ChatContent, { type: 'media' 
   );
 }
 
-export function DirectConversationScreen({ contact, onBack }: { contact: Contact; onBack: () => void }) {
+export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { contact: Contact; onBack: () => void; onLinkPhone?: () => void }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [conversationId, setConversationId] = useState('');
@@ -121,6 +122,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
   const [e2eeReady, setE2eeReady] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
   const canSend = useMemo(() => !!socket && !!conversationId && !!currentUserId && e2eeReady && !sending, [socket, conversationId, currentUserId, e2eeReady, sending]);
 
   useEffect(() => {
@@ -283,19 +285,24 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
         <View style={styles.avatar}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
-        <View style={styles.flex}><Text style={styles.name}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {contact.presence}</Text></View>
+        <View style={styles.flex}><Text style={styles.name}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
         <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
       <View style={styles.security}><Text style={styles.securityText}>{e2eeReady ? '🔐 Signal/libsignal · texte et références média chiffrés de bout en bout' : '🛡️ Envoi verrouillé tant que le contrôle E2EE natif n’est pas validé'}</Text></View>
       {loading ? <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Ouverture de la conversation…</Text></View> : (
-        <ScrollView style={styles.body} contentContainerStyle={styles.content}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.body}
+          contentContainerStyle={styles.content}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        >
           {!!notice && <Text style={styles.notice}>{notice}</Text>}
           {!history.length ? <View style={styles.empty}><Text style={styles.emptyIcon}>💬</Text><Text style={styles.emptyTitle}>Conversation prête</Text><Text style={styles.muted}>Envoie ton premier message ou média.</Text></View> : history.map((message) => {
             const mine = message.senderUserId === currentUserId;
             const content = message.content ?? (message.plaintext ? parseChatContent(message.plaintext) : undefined);
             return <View key={message.id} style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-              {content?.type === 'media' ? <ChatMedia content={content} /> : <Text style={styles.bodyText}>{content?.type === 'text' ? content.text : (message.decryptFailed ? '⚠️ Impossible de déchiffrer ce message sur cet appareil.' : '🔐 Message chiffré')}</Text>}
-              <Text style={styles.messageMeta}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
+              {content?.type === 'media' ? <ChatMedia content={content} /> : <Text style={[styles.bodyText, mine && styles.bodyTextMine]}>{content?.type === 'text' ? content.text : (message.decryptFailed ? '⚠️ Impossible de déchiffrer ce message sur cet appareil.' : '🔐 Message chiffré')}</Text>}
+              <Text style={[styles.messageMeta, mine && styles.messageMetaMine]}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
             </View>;
           })}
         </ScrollView>
@@ -304,21 +311,43 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         <TouchableOpacity disabled={!canSend} onPress={() => void pickAndSendMedia()} style={[styles.attach, !canSend && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo"><Text style={styles.attachText}>＋</Text></TouchableOpacity>
         <TextInput style={styles.input} value={composer} onChangeText={setComposer} placeholder="Écrire un message…" maxLength={12000} multiline editable={!sending} />
         <TouchableOpacity disabled={!composer.trim() || sending} onPress={() => void sendMessage()} style={[styles.send, (!composer.trim() || sending) && styles.disabled]}>{sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
-      </View> : <View style={styles.composerLocked}><Text style={styles.lock}>🔒</Text><View style={styles.flex}><Text style={styles.lockTitle}>Messagerie chiffrée verrouillée</Text><Text style={styles.muted}>Aucun plaintext ne sera envoyé pour contourner la sécurité.</Text></View></View>}
+      </View> : (
+        <View style={styles.composerLocked}>
+          <Text style={styles.lock}>🔒</Text>
+          <View style={styles.flex}>
+            <Text style={styles.lockTitle}>Messagerie chiffrée verrouillée</Text>
+            <Text style={styles.muted}>{onLinkPhone ? 'Lie ce navigateur à ton téléphone pour discuter : il chiffre pour toi.' : 'Aucun plaintext ne sera envoyé pour contourner la sécurité.'}</Text>
+          </View>
+          {onLinkPhone && <TouchableOpacity style={styles.linkCta} onPress={onLinkPhone}><Text style={styles.linkCtaText}>Lier mon téléphone</Text></TouchableOpacity>}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' }, flex: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#d7e9f3' },
-  back: { fontSize: 39, lineHeight: 40, color: '#2189c5' }, avatar: { width: 46, height: 46, borderRadius: 15, backgroundColor: '#dff2ff', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#2a79a8', fontSize: 18, fontWeight: '900' },
-  name: { color: '#173448', fontSize: 15, fontWeight: '900' }, sub: { color: '#6e8796', fontSize: 10, marginTop: 2 }, pulse: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#fff2bd', borderWidth: 1, borderColor: '#efcf65', alignItems: 'center', justifyContent: 'center' }, pulseText: { fontSize: 22 },
-  security: { backgroundColor: '#eaf3f7', paddingHorizontal: 14, paddingVertical: 7 }, securityText: { color: '#617b89', fontSize: 10, lineHeight: 14, textAlign: 'center', fontWeight: '700' },
-  body: { flex: 1 }, content: { padding: 14, paddingBottom: 28 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' }, notice: { color: '#326e94', fontWeight: '800', marginBottom: 8, textAlign: 'center' },
-  empty: { alignItems: 'center', marginTop: 70 }, emptyIcon: { fontSize: 44 }, emptyTitle: { color: '#173448', fontWeight: '900', fontSize: 18, marginTop: 8 }, muted: { color: '#7893a3', fontSize: 11, marginTop: 4 },
-  bubble: { maxWidth: '82%', borderRadius: 18, paddingHorizontal: 13, paddingVertical: 10, marginBottom: 8 }, mine: { backgroundColor: '#dff2ff', alignSelf: 'flex-end', borderBottomRightRadius: 5 }, theirs: { backgroundColor: '#fff', alignSelf: 'flex-start', borderBottomLeftRadius: 5, borderWidth: 1, borderColor: '#dbe9f1' }, bodyText: { color: '#173448', fontSize: 14, lineHeight: 20 }, messageMeta: { color: '#7893a3', fontSize: 9, marginTop: 5, textAlign: 'right' },
-  mediaPreview: { width: 230, height: 230, borderRadius: 12, backgroundColor: '#dbe9f1', marginBottom: 6 }, mediaError: { color: '#a63d3d', fontSize: 12, fontWeight: '700' },
-  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, input: { flex: 1, maxHeight: 120, minHeight: 44, backgroundColor: '#f3f8fb', borderWidth: 1, borderColor: '#d6e7f0', borderRadius: 18, paddingHorizontal: 13, paddingVertical: 10 }, send: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5' }, attach: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eef6fa', borderWidth: 1, borderColor: '#cfe1eb' }, attachText: { color: '#2189c5', fontSize: 26, lineHeight: 28, fontWeight: '700' }, disabled: { opacity: 0.45 }, sendText: { color: '#fff', fontWeight: '900', fontSize: 20 },
-  composerLocked: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#d7e9f3' }, lock: { fontSize: 22 }, lockTitle: { color: '#173448', fontWeight: '800', fontSize: 12 },
+  safe: { flex: 1, backgroundColor: palette.sky }, flex: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline },
+  back: { fontSize: 30, lineHeight: 30, color: palette.azureDeep, fontWeight: '900', width: 30, textAlign: 'center' },
+  avatar: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: palette.azureDeep, fontSize: 17, fontWeight: '900' },
+  name: { ...typo.name }, sub: { ...typo.micro, color: palette.inkSoft, marginTop: 2 },
+  pulse: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: palette.wizzSoft, borderWidth: 1, borderColor: palette.wizz, alignItems: 'center', justifyContent: 'center' }, pulseText: { fontSize: 20 },
+  security: { backgroundColor: palette.surfaceSunken, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: palette.hairline }, securityText: { ...typo.micro, color: palette.inkSoft, textAlign: 'center', lineHeight: 14 },
+  body: { flex: 1 }, content: { padding: spacing.lg, paddingBottom: spacing.xl, maxWidth: layout.maxReading, alignSelf: 'center', width: '100%' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, notice: { color: palette.azureDeep, fontWeight: '800', marginBottom: spacing.sm, textAlign: 'center', fontSize: 12 },
+  empty: { alignItems: 'center', marginTop: 70, gap: spacing.xs }, emptyIcon: { fontSize: 40 }, emptyTitle: { ...typo.heading }, muted: { ...typo.meta, color: palette.inkFaint },
+  bubble: { maxWidth: '82%', borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, marginBottom: spacing.sm },
+  mine: { backgroundColor: palette.azure, alignSelf: 'flex-end', borderBottomRightRadius: 6, ...elevation.hairline },
+  theirs: { backgroundColor: palette.surface, alignSelf: 'flex-start', borderBottomLeftRadius: 6, borderWidth: 1, borderColor: palette.hairline, ...elevation.hairline },
+  bodyText: { ...typo.body },
+  bodyTextMine: { color: palette.inkOnAzure },
+  messageMeta: { fontSize: 9.5, marginTop: 5, textAlign: 'right', color: palette.inkFaint, fontWeight: '600' },
+  messageMetaMine: { color: 'rgba(244,248,255,0.75)' },
+  mediaPreview: { width: 230, height: 230, borderRadius: radius.sm, backgroundColor: palette.surfaceSunken, marginBottom: 6 }, mediaError: { color: palette.danger, fontSize: 12, fontWeight: '700' },
+  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, padding: spacing.sm + 2, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline },
+  input: { flex: 1, maxHeight: 120, minHeight: 46, backgroundColor: palette.surfaceSunken, borderWidth: 1.5, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink, fontSize: 15, fontWeight: '500', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : null) },
+  send: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, ...elevation.hairline },
+  attach: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline }, attachText: { color: palette.azureDeep, fontSize: 24, lineHeight: 26, fontWeight: '700' },
+  disabled: { opacity: 0.4 }, sendText: { color: palette.white, fontWeight: '900', fontSize: 18 },
+  composerLocked: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline }, lock: { fontSize: 20 }, lockTitle: { ...typo.name, fontSize: 13 },
+  linkCta: { backgroundColor: palette.azure, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, linkCtaText: { color: palette.white, fontWeight: '900', fontSize: 12 },
 });

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
+import { elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 function normalizeUsername(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
@@ -59,17 +60,27 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' },
-  card: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  logo: { width: 82, height: 82, borderRadius: 28, backgroundColor: '#278dcc', borderWidth: 5, borderColor: '#bfe8ff', alignItems: 'center', justifyContent: 'center' },
-  logoText: { color: '#fff', fontSize: 37, fontWeight: '900' },
-  brand: { marginTop: 10, color: '#3784b5', fontSize: 10, letterSpacing: 2.2, fontWeight: '900' },
-  title: { marginTop: 22, color: '#15364a', fontSize: 27, fontWeight: '900', textAlign: 'center' },
-  copy: { color: '#648292', marginTop: 8, marginBottom: 18, textAlign: 'center', maxWidth: 400 },
-  input: { width: '100%', maxWidth: 430, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cee2ed', borderRadius: 16, paddingHorizontal: 15, paddingVertical: 13, marginTop: 9 },
-  primary: { width: '100%', maxWidth: 430, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5', borderRadius: 16, marginTop: 16 },
-  disabled: { opacity: 0.5 },
-  primaryText: { color: '#fff', fontWeight: '900' },
-  error: { color: '#b42318', marginTop: 12, textAlign: 'center' },
-  logout: { color: '#6f8795', marginTop: 18, fontWeight: '700' },
+  safe: { flex: 1, backgroundColor: palette.sky },
+  card: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl,
+    maxWidth: layout.maxContent + 2 * spacing.xl, alignSelf: 'center', width: '100%',
+  },
+  logo: { width: 76, height: 76, borderRadius: radius.xl, backgroundColor: palette.azure, alignItems: 'center', justifyContent: 'center', ...elevation.card },
+  logoText: { color: palette.white, fontSize: 34, fontWeight: '900', letterSpacing: -1 },
+  brand: { marginTop: spacing.md, ...typo.brand },
+  title: { marginTop: spacing.sm, ...typo.display, fontSize: 26, lineHeight: 30, textAlign: 'center' },
+  copy: { ...typo.body, color: palette.inkSoft, marginTop: spacing.sm, marginBottom: spacing.lg, textAlign: 'center', maxWidth: 400 },
+  input: {
+    width: '100%', maxWidth: 430, backgroundColor: palette.surfaceSunken, borderWidth: 1.5, borderColor: palette.hairline,
+    borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 52, marginTop: spacing.sm,
+    color: palette.ink, fontSize: 15, fontWeight: '600',
+  },
+  primary: {
+    width: '100%', maxWidth: 430, minHeight: 54, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: palette.azure, borderRadius: radius.md, marginTop: spacing.lg, ...elevation.card,
+  },
+  disabled: { opacity: 0.4 },
+  primaryText: { color: palette.white, fontWeight: '900', fontSize: 14.5, letterSpacing: 0.3 },
+  error: { color: palette.danger, marginTop: spacing.md, textAlign: 'center', fontSize: 12.5, fontWeight: '700' },
+  logout: { color: palette.inkSoft, marginTop: spacing.lg, fontWeight: '800', fontSize: 12 },
 });

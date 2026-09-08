@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { getAuthenticatedUserId } from '../../lib/realtime';
+import { palette, radius, spacing } from '../../theme/tokens';
 
 export type FeedVideo = {
   id: string; ownerId: string; author: string; caption: string; ageRating: 13 | 16 | 18;
@@ -102,11 +103,14 @@ export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
     } catch { setNotice('Signalement impossible pour le moment.'); }
   };
 
-  if (loading) return <View style={styles.loading}><ActivityIndicator /><Text style={styles.muted}>Chargement du K-Feed…</Text></View>;
+  if (loading) return <View style={styles.loading}><ActivityIndicator color={palette.azure} /><Text style={styles.muted}>Chargement du K-Feed…</Text></View>;
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
-        <Text style={styles.toolbarTitle}>K-FEED</Text>
+        <View>
+          <Text style={styles.toolbarBrand}>K-SSENGER</Text>
+          <Text style={styles.toolbarTitle}>K-Feed</Text>
+        </View>
         <Pressable disabled={uploading} style={[styles.createButton, uploading && styles.disabled]} onPress={() => void createClip()}>
           <Text style={styles.createText}>{uploading ? 'Envoi…' : '＋ K-Clip'}</Text>
         </Pressable>
@@ -119,13 +123,13 @@ export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
         showsVerticalScrollIndicator={false}
         snapToInterval={ITEM_HEIGHT}
         decelerationRate="fast"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={palette.white} />}
         onMomentumScrollEnd={(event) => {
           const index = Math.max(0, Math.min(videos.length - 1, Math.round(event.nativeEvent.contentOffset.y / ITEM_HEIGHT)));
           setActiveId(videos[index]?.id ?? null);
         }}
         renderItem={({ item }) => <VideoCard video={item} active={item.id === activeId} onReport={report} />}
-        ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyTitle}>Aucun K-Clip disponible</Text><Text style={styles.emptyText}>Publie le premier clip. Les médias restent privés jusqu’à leur validation.</Text></View>}
+        ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyIcon}>▶️</Text><Text style={styles.emptyTitle}>Aucun K-Clip disponible</Text><Text style={styles.emptyText}>Publie le premier clip. Les médias restent privés jusqu’à leur validation.</Text></View>}
       />
     </View>
   );
@@ -168,10 +172,45 @@ function VideoCard({ video, active, onReport }: { video: FeedVideo; active: bool
   );
 }
 
+const ink = '#07131c';
+const inkPanel = '#102c3d';
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#07131c' }, loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 }, muted: { color: '#668293' }, toolbar: { minHeight: 48, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#07131c' }, toolbarTitle: { color: '#fff', fontWeight: '900', letterSpacing: 2 }, createButton: { backgroundColor: '#2189c5', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 8 }, createText: { color: '#fff', fontWeight: '900' }, disabled: { opacity: 0.5 }, noticeBox: { paddingHorizontal: 12, paddingVertical: 7, backgroundColor: '#15384d' }, notice: { color: '#d7effc', textAlign: 'center', fontSize: 11, fontWeight: '700' },
-  card: { height: ITEM_HEIGHT, backgroundColor: '#07131c', position: 'relative' }, videoSurface: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#102c3d' }, nativeVideo: { width: '100%', height: '100%', backgroundColor: '#000' }, mediaPending: { alignItems: 'center', padding: 30 }, play: { fontSize: 58, color: '#fff' }, mediaLabel: { color: '#fff', marginTop: 12, fontWeight: '900', textAlign: 'center' }, mediaHint: { color: '#a8c4d4', marginTop: 7, fontSize: 11, textAlign: 'center', maxWidth: 320 },
-  overlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 18, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: 'rgba(0,0,0,0.48)' }, meta: { flex: 1, paddingRight: 12 }, author: { color: '#fff', fontWeight: '900', fontSize: 17 }, caption: { color: '#fff', marginTop: 6, fontSize: 14 }, rating: { color: '#d5e4ec', marginTop: 8, fontSize: 11 }, actions: { gap: 14, alignItems: 'center' }, action: { alignItems: 'center', minWidth: 52 }, actionIcon: { fontSize: 27, color: '#fff' }, actionLabel: { color: '#fff', fontSize: 10, marginTop: 2 },
-  warning: { margin: 24, padding: 24, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.78)', alignItems: 'center', maxWidth: 420 }, warningIcon: { fontSize: 42 }, warningTitle: { color: '#fff', fontSize: 22, fontWeight: '900', marginTop: 8 }, warningText: { color: '#e3edf3', textAlign: 'center', marginTop: 8, lineHeight: 20 }, revealButton: { marginTop: 18, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 14, backgroundColor: '#fff' }, revealText: { color: '#102c3d', fontWeight: '900' },
-  empty: { flex: 1, minHeight: ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center', padding: 30, backgroundColor: '#eef6fb' }, emptyTitle: { fontSize: 22, fontWeight: '900', color: '#173448' }, emptyText: { marginTop: 8, textAlign: 'center', color: '#668293', lineHeight: 20 },
+  container: { flex: 1, backgroundColor: ink },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: ink },
+  muted: { color: '#7fa0b1' },
+  toolbar: { minHeight: 56, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: ink, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  toolbarBrand: { color: '#6FB4F2', fontSize: 10, letterSpacing: 2.6, fontWeight: '900' },
+  toolbarTitle: { color: palette.white, fontWeight: '900', fontSize: 20, marginTop: 2, letterSpacing: -0.3 },
+  createButton: { backgroundColor: palette.azure, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 1 },
+  createText: { color: palette.white, fontWeight: '900', fontSize: 12.5 },
+  disabled: { opacity: 0.5 },
+  noticeBox: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: '#153a4f' },
+  notice: { color: '#d7effc', textAlign: 'center', fontSize: 11, fontWeight: '700' },
+  card: { height: ITEM_HEIGHT, backgroundColor: ink, position: 'relative' },
+  videoSurface: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: inkPanel },
+  nativeVideo: { width: '100%', height: '100%', backgroundColor: '#000' },
+  mediaPending: { alignItems: 'center', padding: spacing.xxl },
+  play: { fontSize: 58, color: palette.white },
+  mediaLabel: { color: palette.white, marginTop: spacing.md, fontWeight: '900', textAlign: 'center' },
+  mediaHint: { color: '#a8c4d4', marginTop: spacing.sm, fontSize: 11, textAlign: 'center', maxWidth: 320 },
+  overlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: spacing.lg, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: 'rgba(0,0,0,0.48)' },
+  meta: { flex: 1, paddingRight: spacing.md },
+  author: { color: palette.white, fontWeight: '900', fontSize: 17 },
+  caption: { color: palette.white, marginTop: spacing.xs, fontSize: 14 },
+  rating: { color: '#d5e4ec', marginTop: spacing.sm, fontSize: 11 },
+  actions: { gap: spacing.md, alignItems: 'center' },
+  action: { alignItems: 'center', minWidth: 52 },
+  actionIcon: { fontSize: 26, color: palette.white },
+  actionLabel: { color: palette.white, fontSize: 10, marginTop: 2 },
+  warning: { margin: spacing.xl, padding: spacing.xl, borderRadius: radius.xl, backgroundColor: 'rgba(0,0,0,0.78)', alignItems: 'center', maxWidth: 420 },
+  warningIcon: { fontSize: 42 },
+  warningTitle: { color: palette.white, fontSize: 22, fontWeight: '900', marginTop: spacing.sm },
+  warningText: { color: '#e3edf3', textAlign: 'center', marginTop: spacing.sm, lineHeight: 20 },
+  revealButton: { marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: palette.white },
+  revealText: { color: inkPanel, fontWeight: '900' },
+  empty: { flex: 1, minHeight: ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, backgroundColor: ink, gap: spacing.xs },
+  emptyIcon: { fontSize: 34 },
+  emptyTitle: { fontSize: 20, fontWeight: '900', color: palette.white },
+  emptyText: { marginTop: spacing.xs, textAlign: 'center', color: '#9db4c2', lineHeight: 20, maxWidth: 300 },
 });

@@ -16,8 +16,10 @@
     "expo-constants": "~18.0.14",
     "expo-device": "~8.0.10",
     "expo-image-picker": "~17.0.11",
+    "expo-linear-gradient": "~15.0.8",
     "expo-location": "~19.0.8",
     "expo-notifications": "~0.32.17",
+    "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.0",
     "expo-video": "~3.0.16",
     "react": "19.1.0",
@@ -25,7 +27,9 @@
     "react-native": "0.81.5",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "^0.21.0",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
