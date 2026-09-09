@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrarySafe } from '../../lib/pickMedia';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { getAuthenticatedUserId } from '../../lib/realtime';
@@ -74,7 +75,7 @@ export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) { setNotice('Autorise l’accès aux vidéos choisies pour publier un K-Clip.'); return; }
-      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], quality: 1, allowsEditing: false });
+      const picked = await launchImageLibrarySafe({ mediaTypes: ['videos'], quality: 1, allowsEditing: false });
       if (picked.canceled) return;
       const asset = picked.assets[0];
       if (!asset?.uri) throw new Error('UNSUPPORTED_KCLIP');

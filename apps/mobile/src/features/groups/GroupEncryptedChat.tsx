@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrarySafe } from '../../lib/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
@@ -205,7 +206,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, memberIds, 
         setNotice('Autorise l’accès aux photos et vidéos pour partager un média dans ce groupe.');
         return;
       }
-      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.9, videoMaxDuration: 120 });
+      const picked = await launchImageLibrarySafe({ mediaTypes: ['images', 'videos'], quality: 0.9, videoMaxDuration: 120 });
       if (picked.canceled) return;
       const asset = picked.assets[0];
       if (!asset?.uri) throw new Error('GROUP_MEDIA_UNSUPPORTED');

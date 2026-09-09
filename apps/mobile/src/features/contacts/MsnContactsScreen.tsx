@@ -305,6 +305,17 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     return contacts.filter((c) => `${c.displayName} ${c.nickname} ${c.handle} ${c.statusMessage ?? ''} ${c.nowPlaying ?? ''}`.toLowerCase().includes(term));
   }, [contacts, search]);
   const groups = useMemo(() => Array.from(new Set(filtered.map((contact) => contact.group))), [filtered]);
+
+  // Directory hits, minus people who are already a contact, blocked, or myself,
+  // with the pending-request ones tagged so we don't offer "Ajouter" twice.
+  const directoryResults = useMemo(() => {
+    const contactIds = new Set(contacts.map((c) => c.id));
+    const blockedIds = new Set(blockedUsers.map((b) => b.id));
+    const pendingIds = new Set(requests.flatMap((r) => [r.sender_id, r.recipient_id]));
+    return (results ?? [])
+      .filter((p) => p.id !== currentUserId && !contactIds.has(p.id) && !blockedIds.has(p.id))
+      .map((p) => ({ profile: p, pending: pendingIds.has(p.id) }));
+  }, [results, contacts, blockedUsers, requests, currentUserId]);
   const incomingRequests = requests.filter((request) => request.recipient_id === currentUserId);
   const outgoingRequests = requests.filter((request) => request.sender_id === currentUserId);
   const onlineCount = filtered.filter((c) => c.presence !== 'offline').length;
@@ -451,14 +462,20 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
             </View>
           )}
 
-          {search.trim().length >= 2 && !!results?.length && (
+          {search.trim().length >= 2 && directoryResults.length > 0 && (
             <View style={styles.group}>
-              <SectionLabel right={<Text style={styles.groupCount}>{results.length}</Text>}>Utilisateurs</SectionLabel>
-              {results.map((profile) => (
+              <View style={styles.plainHeader}>
+                <SectionLabel right={<Text style={styles.groupCount}>{directoryResults.length}</Text>}>Utilisateurs</SectionLabel>
+              </View>
+              {directoryResults.map(({ profile, pending }) => (
                 <View key={profile.id} style={styles.contact}>
                   <ContactAvatar displayName={profile.display_name} avatarUrl={profile.avatar_url} presence={profile.presence} />
                   <View style={styles.flex}><Text style={styles.nickname}>{profile.display_name}</Text><Text style={styles.status}>@{profile.username}</Text></View>
-                  <TouchableOpacity style={styles.accept} onPress={() => void requestContact(profile.id)}><Text style={styles.acceptText}>Ajouter</Text></TouchableOpacity>
+                  {pending ? (
+                    <Text style={styles.pendingTag}>Demande envoyée</Text>
+                  ) : (
+                    <TouchableOpacity style={styles.accept} onPress={() => void requestContact(profile.id)}><Text style={styles.acceptText}>Ajouter</Text></TouchableOpacity>
+                  )}
                 </View>
               ))}
             </View>
@@ -554,6 +571,8 @@ const styles = StyleSheet.create({
 
   group: { marginTop: spacing.lg, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, ...elevation.card },
   collapseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, backgroundColor: palette.surfaceSunken, borderBottomWidth: 1, borderBottomColor: palette.hairline },
+  plainHeader: { paddingHorizontal: spacing.md, paddingTop: spacing.sm + 2, backgroundColor: palette.surfaceSunken, borderBottomWidth: 1, borderBottomColor: palette.hairline },
+  pendingTag: { color: palette.inkFaint, fontSize: 10.5, fontWeight: '900', textTransform: 'uppercase' },
   groupTitle: { ...typo.label, color: palette.inkSoft, textTransform: 'uppercase' },
   groupCount: { color: palette.inkFaint, fontSize: 11, fontWeight: '800' },
 

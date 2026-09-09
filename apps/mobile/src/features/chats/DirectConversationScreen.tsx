@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrarySafe } from '../../lib/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { ActivityIndicator, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -265,7 +266,7 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) { setNotice('Autorise l’accès aux photos et vidéos pour envoyer un média.'); return; }
-      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.9, videoMaxDuration: 120 });
+      const picked = await launchImageLibrarySafe({ mediaTypes: ['images', 'videos'], quality: 0.9, videoMaxDuration: 120 });
       if (picked.canceled) return;
       const asset = picked.assets[0];
       const mimeType = asset ? inferChatMime(asset) : null;

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrarySafe } from '../../lib/pickMedia';
 import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
@@ -103,7 +104,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         setNotice('Autorise l\'acces aux photos pour choisir un avatar K-ssenger.');
         return;
       }
-      const picked = await ImagePicker.launchImageLibraryAsync({
+      const picked = await launchImageLibrarySafe({
         mediaTypes: ['images'],
         quality: 0.9,
         allowsEditing: true,

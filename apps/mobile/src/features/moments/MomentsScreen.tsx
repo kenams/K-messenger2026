@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrarySafe } from '../../lib/pickMedia';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { getAuthenticatedUserId } from '../../lib/realtime';
@@ -97,7 +98,7 @@ export function MomentsScreen() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) { setNotice('Autorise l’accès au média que tu choisis pour publier ce Moment.'); return; }
-      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kind === 'photo' ? ['images'] : ['videos'], quality: 1, allowsEditing: false });
+      const picked = await launchImageLibrarySafe({ mediaTypes: kind === 'photo' ? ['images'] : ['videos'], quality: 1, allowsEditing: false });
       if (picked.canceled) return;
       const asset = picked.assets[0];
       if (!asset?.uri) throw new Error('UNSUPPORTED_MOMENT_MEDIA');
