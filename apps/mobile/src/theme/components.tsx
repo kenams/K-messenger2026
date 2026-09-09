@@ -321,7 +321,7 @@ export function ScreenHeader({
   return (
     <View style={styles.header}>
       {onBack ? (
-        <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Retour" style={styles.headerBack}>
+        <TouchableOpacity testID="screen-back" onPress={onBack} accessibilityRole="button" accessibilityLabel="Retour" style={styles.headerBack}>
           <Text style={styles.headerBackText}>‹</Text>
         </TouchableOpacity>
       ) : null}

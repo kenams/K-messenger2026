@@ -383,12 +383,12 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
 }
 
 function ProfileButton({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
-  return <TouchableOpacity style={styles.profileButton} onPress={onPress}><Text style={styles.profileButtonIcon}>{icon}</Text><Text style={styles.profileButtonLabel}>{label}</Text></TouchableOpacity>;
+  return <TouchableOpacity testID={`me-${label}`} accessibilityRole="button" accessibilityLabel={label} style={styles.profileButton} onPress={onPress}><Text style={styles.profileButtonIcon}>{icon}</Text><Text style={styles.profileButtonLabel}>{label}</Text></TouchableOpacity>;
 }
 
 function Tab({ active, icon, label, onPress }: { active: boolean; icon: string; label: string; onPress: () => void }) {
   return (
-    <TouchableOpacity style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}>
+    <TouchableOpacity testID={`tab-${label}`} style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}>
       <View style={[styles.tabPill, active && styles.tabPillActive]}>
         <Text style={[styles.tabIcon, active && styles.tabIconActive]}>{icon}</Text>
       </View>

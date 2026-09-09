@@ -94,6 +94,7 @@ function KPulseBurstView({ from, onDone }: { from?: string; onDone: () => void }
   return (
     <Modal transparent animationType="none" statusBarTranslucent onRequestClose={onDone}>
       <Animated.View
+        testID="kpulse-burst"
         style={[
           styles.fill,
           styles.center,

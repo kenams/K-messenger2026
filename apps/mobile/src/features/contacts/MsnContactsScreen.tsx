@@ -424,7 +424,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         <ScrollView style={styles.page} contentContainerStyle={styles.content}>
           <View style={styles.toolbar}>
             <Text style={styles.searchIcon}>⌕</Text>
-            <TextInput value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo" placeholderTextColor={palette.inkFaint} style={styles.search} autoCapitalize="none" />
+            <TextInput testID="contact-search" value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo" placeholderTextColor={palette.inkFaint} style={styles.search} autoCapitalize="none" />
           </View>
           <Text style={styles.counter}>{onlineCount} en ligne · {filtered.length} contact{filtered.length > 1 ? 's' : ''}</Text>
           {!!notice && <View style={styles.noticePill}><Text style={styles.notice}>{notice}</Text></View>}
