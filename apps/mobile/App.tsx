@@ -16,6 +16,7 @@ import { LinkedDevicesScreen } from './src/features/devicelink/LinkedDevicesScre
 import { WebRelayConversationScreen } from './src/features/devicelink/WebRelayConversationScreen';
 import { useDeviceLinkRelay, useWebLink } from './src/lib/deviceLinkClient';
 import type { MyProfile } from './src/features/profile/useMyProfile';
+import { useNowPlayingSync } from './src/features/profile/useNowPlayingSync';
 import { unregisterPushForSignOut } from './src/features/push/usePushRegistration';
 import { getBackend } from './src/lib/backend';
 import { getMediaDownload } from './src/lib/media';
@@ -77,6 +78,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const [webLinkScreen, setWebLinkScreen] = useState(false);
   const webLink = useWebLink();
   useDeviceLinkRelay(profile.id);
+  useNowPlayingSync(profile, onProfileChanged);
   const [userAge, setUserAge] = useState<number | null>(null);
   const [ageLoading, setAgeLoading] = useState(true);
   const [ageSaving, setAgeSaving] = useState(false);
@@ -341,23 +343,16 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
     if (signingOut) return;
     setSigningOut(true);
     setSignOutError('');
-    // Watchdog: never leave the button spinning forever if a step hangs.
-    const watchdog = setTimeout(() => {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') window.location.reload();
-      else setSigningOut(false);
-    }, 6000);
     try {
-      try { await unregisterPushForSignOut(profile.id); } catch { /* push cleanup is best-effort */ }
+      await unregisterPushForSignOut(profile.id);
       const { error } = await getBackend().auth.signOut();
       if (error) throw error;
       disconnectRealtimeSocket();
-      clearTimeout(watchdog);
       // The web auth adapter doesn't always emit onAuthStateChange, which left
       // the app stuck on the spinner. Reloading lands cleanly on the sign-in screen.
       if (Platform.OS === 'web' && typeof window !== 'undefined') window.location.reload();
     } catch {
-      clearTimeout(watchdog);
-      setSignOutError('Déconnexion impossible pour le moment. Vérifie ta connexion et réessaie.');
+      setSignOutError('Déconnexion sécurisée impossible pour le moment. Réessaie avec une connexion réseau afin de couper aussi les notifications de ce compte.');
       setSigningOut(false);
     }
   };

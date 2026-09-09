@@ -7,6 +7,16 @@ import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../
 import type { MyProfile } from './useMyProfile';
 import { ScreenHeader } from '../../theme/components';
 import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import {
+  beginSpotifyAuth,
+  disconnectLastfm,
+  disconnectSpotify,
+  getLastfmUsername,
+  isSpotifyConnected,
+  lastfmConfigured,
+  setLastfmUsername,
+  spotifyConfigured,
+} from '../../lib/musicNowPlaying';
 
 const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
 const IMAGE_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp']);
@@ -167,9 +177,10 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         <TextInput value={customStatus} onChangeText={setCustomStatus} maxLength={140} placeholder="Quoi de neuf ?" style={styles.input} />
 
         <Text style={styles.label}>MUSIQUE EN COURS</Text>
-        <TextInput value={nowPlayingTitle} onChangeText={setNowPlayingTitle} maxLength={120} placeholder="Titre du morceau" style={styles.input} />
+        <MusicSyncCard />
+        <TextInput value={nowPlayingTitle} onChangeText={setNowPlayingTitle} maxLength={120} placeholder="Titre du morceau" style={[styles.input, styles.stackedInput]} />
         <TextInput value={nowPlayingArtist} onChangeText={setNowPlayingArtist} maxLength={120} placeholder="Artiste" style={[styles.input, styles.stackedInput]} />
-        <Text style={styles.hint}>♫ Affiché à tes contacts selon tes réglages de confidentialité.</Text>
+        <Text style={styles.hint}>♫ Affiché à tes contacts selon tes réglages de confidentialité. La synchro automatique écrase ces champs quand une source est connectée.</Text>
 
         <Text style={styles.label}>BIO</Text>
         <TextInput value={bio} onChangeText={setBio} maxLength={500} multiline placeholder="Quelques mots sur toi" style={[styles.input, styles.multiline]} />
@@ -199,6 +210,113 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
     </SafeAreaView>
   );
 }
+
+function MusicSyncCard() {
+  const [spotifyOn, setSpotifyOn] = useState(false);
+  const [lastfm, setLastfm] = useState('');
+  const [savedLastfm, setSavedLastfm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const [connected, name] = await Promise.all([isSpotifyConnected(), getLastfmUsername()]);
+      setSpotifyOn(connected);
+      setLastfm(name ?? '');
+      setSavedLastfm(name ?? '');
+      setReady(true);
+    })();
+  }, []);
+
+  if (!spotifyConfigured && !lastfmConfigured) return null;
+
+  const saveLastfm = async () => {
+    setBusy(true);
+    try {
+      await setLastfmUsername(lastfm);
+      setSavedLastfm(lastfm.trim());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={mstyles.card}>
+      <Text style={mstyles.title}>Synchro automatique</Text>
+      <Text style={mstyles.lede}>Ta musique se met à jour toute seule pendant que tu écoutes.</Text>
+
+      {spotifyConfigured ? (
+        <View style={mstyles.row}>
+          <View style={mstyles.rowText}>
+            <Text style={mstyles.rowTitle}>Spotify</Text>
+            <Text style={mstyles.rowMeta}>{spotifyOn ? 'Connecté' : 'Lecture en direct de ton Spotify'}</Text>
+          </View>
+          {spotifyOn ? (
+            <TouchableOpacity
+              disabled={busy}
+              onPress={async () => { setBusy(true); await disconnectSpotify(); setSpotifyOn(false); setBusy(false); }}
+              style={mstyles.ghostBtn}
+            >
+              <Text style={mstyles.ghostBtnText}>Déconnecter</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity disabled={busy || !ready} onPress={() => void beginSpotifyAuth()} style={mstyles.spotifyBtn}>
+              <Text style={mstyles.spotifyBtnText}>Connecter</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
+
+      {lastfmConfigured ? (
+        <View style={mstyles.lastfmBlock}>
+          <Text style={mstyles.rowTitle}>Last.fm</Text>
+          <Text style={mstyles.rowMeta}>Couvre Deezer, Apple Music, YouTube Music… via le scrobble.</Text>
+          <View style={mstyles.lastfmRow}>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={lastfm}
+              onChangeText={setLastfm}
+              placeholder="Pseudo Last.fm"
+              placeholderTextColor={palette.inkFaint}
+              style={mstyles.lastfmInput}
+            />
+            <TouchableOpacity
+              disabled={busy || lastfm.trim() === savedLastfm}
+              onPress={() => void saveLastfm()}
+              style={[mstyles.ghostBtn, (busy || lastfm.trim() === savedLastfm) && styles.disabled]}
+            >
+              {busy ? <ActivityIndicator /> : <Text style={mstyles.ghostBtnText}>{savedLastfm && !lastfm.trim() ? 'Retirer' : 'Enregistrer'}</Text>}
+            </TouchableOpacity>
+          </View>
+          {savedLastfm ? (
+            <TouchableOpacity onPress={async () => { await disconnectLastfm(); setLastfm(''); setSavedLastfm(''); }}>
+              <Text style={mstyles.unlink}>Retirer Last.fm</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const mstyles = StyleSheet.create({
+  card: { marginTop: spacing.sm, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
+  title: { ...typo.heading },
+  lede: { ...typo.micro, fontWeight: '500' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowText: { flex: 1 },
+  rowTitle: { ...typo.name, fontSize: 14 },
+  rowMeta: { ...typo.micro, fontWeight: '500', marginTop: 2 },
+  spotifyBtn: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1DB954' },
+  spotifyBtnText: { color: palette.white, fontWeight: '900', fontSize: 13 },
+  ghostBtn: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline },
+  ghostBtnText: { color: palette.inkSoft, fontWeight: '900', fontSize: 13 },
+  lastfmBlock: { gap: spacing.xs, borderTopWidth: 1, borderTopColor: palette.hairline, paddingTop: spacing.sm },
+  lastfmRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  lastfmInput: { flex: 1, backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: palette.ink },
+  unlink: { color: palette.danger, fontWeight: '800', fontSize: 12, marginTop: spacing.xs },
+});
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },

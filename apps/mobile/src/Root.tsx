@@ -8,6 +8,8 @@ import { useRealtimePresence } from './features/presence/useRealtimePresence';
 import { usePushRegistration } from './features/push/usePushRegistration';
 import { ProfileBootstrapScreen } from './features/profile/ProfileBootstrapScreen';
 import { useMyProfile } from './features/profile/useMyProfile';
+import { useKPulse } from './features/kpulse/KPulseBurst';
+import { useKPulseReceiver } from './features/kpulse/useKPulseReceiver';
 
 class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -55,12 +57,19 @@ function AuthenticatedRoot({ userId }: { userId: string }) {
   useRealtimePresence();
   usePushRegistration(userId);
   const profile = useMyProfile(userId);
+  const { fire: fireKPulse, node: kpulseNode } = useKPulse();
+  useKPulseReceiver(fireKPulse);
 
   if (profile.loading) return <Loading label="Chargement de ton profil K-ssenger…" />;
   if (profile.error) return <ProfileLoadError onRetry={profile.refresh} />;
   if (!profile.profile) return <ProfileBootstrapScreen onDone={profile.refresh} />;
 
-  return <App profile={profile.profile} onProfileChanged={profile.refresh} />;
+  return (
+    <>
+      {kpulseNode}
+      <App profile={profile.profile} onProfileChanged={profile.refresh} />
+    </>
+  );
 }
 
 function Loading({ label }: { label: string }) {
