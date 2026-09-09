@@ -82,8 +82,13 @@ export function AuthScreen() {
     try {
       const backend = getBackend();
       if (mode === 'login') {
-        const { error: authError } = await backend.auth.signInWithPassword({ email: normalizedEmail, password });
+        const { data, error: authError } = await backend.auth.signInWithPassword({ email: normalizedEmail, password });
         if (authError) setError('Connexion impossible. Vérifie ton e-mail et ton mot de passe.');
+        else if (data.session && Platform.OS === 'web' && typeof window !== 'undefined') {
+          // The web auth adapter doesn't reliably emit onAuthStateChange; reload to enter the app.
+          window.location.reload();
+          return;
+        }
       } else {
         const { data, error: authError } = await backend.auth.signUp({
           email: normalizedEmail,
@@ -92,6 +97,10 @@ export function AuthScreen() {
         });
         if (authError) setError('Création du compte impossible. Essaie un autre pseudo ou réessaie dans un instant.');
         else if (!data.session) setNotice('Compte créé. Confirme ton e-mail pour te connecter.');
+        else if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.location.reload();
+          return;
+        }
       }
     } catch {
       setError(mode === 'login'
