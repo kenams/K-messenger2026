@@ -177,7 +177,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
         <View style={[styles.card, styles.sectionGap]}>
           <Text style={styles.cardTitle}>📦 Exporter mon compte</Text>
           <Text style={styles.copy}>Génère un export JSON de ton profil, paramètres, relations, conversations autorisées, appareils, K-Feed, Moments et partages K-MAP. Les messages privés restent chiffrés et les jetons push ne sont jamais exportés.</Text>
-          <TouchableOpacity style={[styles.primary, busy && styles.buttonDisabled]} disabled={busy} onPress={() => void exportData()}>
+          <TouchableOpacity style={[styles.primary, busy && styles.buttonDisabled]} disabled={busy} accessibilityRole="button" accessibilityLabel="Créer mon export" onPress={() => void exportData()}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Créer mon export</Text>}
           </TouchableOpacity>
           {!!notice && <Text style={styles.notice}>{notice}</Text>}

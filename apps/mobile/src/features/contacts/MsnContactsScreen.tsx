@@ -526,7 +526,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
                         </View>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.iconBtn, contact.favorite && styles.favoriteActive]} onPress={() => void toggleFavorite(contact)} accessibilityLabel={contact.favorite ? `Retirer ${contact.displayName} des favoris` : `Ajouter ${contact.displayName} aux favoris`}><Text style={[styles.iconBtnText, contact.favorite && styles.favoriteActiveText]}>{contact.favorite ? '★' : '☆'}</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.iconBtn, styles.pulseBtn]} onPress={() => void sendKPulse(contact)} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.iconBtnText}>⚡</Text></TouchableOpacity>
+                      <TouchableOpacity style={[styles.iconBtn, styles.pulseBtn]} onPress={() => void sendKPulse(contact)} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.iconBtnText}>⚡</Text></TouchableOpacity>
                       <TouchableOpacity style={styles.iconBtn} onPress={() => setManagingContactId((id) => id === contact.id ? null : contact.id)} accessibilityLabel={`Gérer ${contact.displayName}`}><Text style={styles.iconBtnText}>•••</Text></TouchableOpacity>
                     </View>
                     {managingContactId === contact.id && (

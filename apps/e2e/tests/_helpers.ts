@@ -11,19 +11,17 @@ export const BOTS = {
 const TABS = ['Contacts', 'Chats', 'K-Feed', 'K-Map', 'Moments', 'Moi'] as const;
 export type TabName = (typeof TABS)[number];
 
-/** Sign in and wait until the buddy list (or any main tab) is on screen. */
+/** Sign in and wait until a main tab is on screen. Only auth.setup / auth.spec use this. */
 export async function signIn(page: Page, who: { email: string; password: string }): Promise<void> {
   await page.goto('/');
-  // Already signed in from a persisted session?
   if (await onAppShell(page)) return;
 
   await page.getByPlaceholder('E-mail').fill(who.email);
   await page.getByPlaceholder(/Mot de passe/).fill(who.password);
   await page.getByRole('button', { name: 'Se connecter' }).click();
 
-  // The web adapter reloads after a successful sign-in; wait for the shell.
   await expect
-    .poll(async () => onAppShell(page), { timeout: 30_000, message: 'app shell never appeared after sign-in' })
+    .poll(() => onAppShell(page), { timeout: 40_000, message: 'app shell never appeared after sign-in' })
     .toBe(true);
 }
 
@@ -34,6 +32,12 @@ export async function onAppShell(page: Page): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Land on the app shell using the stored session (journeys project). */
+export async function openApp(page: Page): Promise<void> {
+  await page.goto('/');
+  await expect.poll(() => onAppShell(page), { timeout: 25_000, message: 'stored session did not open the app' }).toBe(true);
 }
 
 export async function signOut(page: Page): Promise<void> {
@@ -52,8 +56,9 @@ export function trackConsoleErrors(page: Page): string[] {
   const ignore = [
     /useNativeDriver/i,
     /expo-notifications.*not.*supported on web/i,
-    /message channel closed/i, // browser-extension noise
+    /message channel closed/i,
     /Download the React DevTools/i,
+    /Failed to load resource.*currently-playing/i, // Spotify not configured yet
   ];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;

@@ -287,7 +287,7 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
         <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
         <View style={styles.avatar}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
         <View style={styles.flex}><Text style={styles.name}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
-        <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
       <View style={styles.security}><Text style={styles.securityText}>{e2eeReady ? '🔐 Signal/libsignal · texte et références média chiffrés de bout en bout' : '🛡️ Envoi verrouillé tant que le contrôle E2EE natif n’est pas validé'}</Text></View>
       {loading ? <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Ouverture de la conversation…</Text></View> : (

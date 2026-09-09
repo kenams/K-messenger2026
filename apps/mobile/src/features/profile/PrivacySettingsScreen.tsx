@@ -181,7 +181,7 @@ export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBa
         </View>
 
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
-        <TouchableOpacity disabled={saving} style={[styles.primary, saving && styles.disabled]} onPress={() => void save()}>
+        <TouchableOpacity disabled={saving} accessibilityRole="button" accessibilityLabel="Enregistrer" style={[styles.primary, saving && styles.disabled]} onPress={() => void save()}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Enregistrer</Text>}
         </TouchableOpacity>
       </ScrollView>

@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { KENAMS, signIn, openTab } from './_helpers';
+import { openApp, openTab } from './_helpers';
 
 test.describe('Profile & settings persist', () => {
   test.beforeEach(async ({ page }) => {
-    await signIn(page, KENAMS);
+    await openApp(page);
     await openTab(page, 'Moi');
   });
 
@@ -11,13 +11,10 @@ test.describe('Profile & settings persist', () => {
     const status = `E2E ${Date.now() % 100000}`;
     await page.getByTestId('me-Profil').click();
 
-    const field = page.getByPlaceholder('Quoi de neuf ?');
-    await field.fill(status);
+    await page.getByPlaceholder('Quoi de neuf ?').fill(status);
     await page.getByRole('button', { name: 'Enregistrer' }).click();
 
-    // back on the buddy list, header shows the new status
     await expect(page.getByText(status).first()).toBeVisible();
-
     await page.reload();
     await expect(page.getByText(status).first()).toBeVisible({ timeout: 20_000 });
   });
@@ -26,12 +23,11 @@ test.describe('Profile & settings persist', () => {
     await page.getByTestId('me-Vie privée').click();
     await expect(page.getByText('QUI VOIT QUE JE SUIS EN LIGNE ?')).toBeVisible();
 
-    await page.getByRole('tab', { name: 'Tout le monde' }).first().click();
+    await page.getByText('Tout le monde', { exact: true }).first().click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
     await expect(page.getByText('Confidentialité enregistrée.')).toBeVisible();
 
-    // put it back
-    await page.getByRole('tab', { name: 'Mes contacts' }).first().click();
+    await page.getByText('Mes contacts', { exact: true }).first().click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
     await expect(page.getByText('Confidentialité enregistrée.')).toBeVisible();
   });

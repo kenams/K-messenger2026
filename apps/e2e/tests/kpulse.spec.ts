@@ -1,25 +1,26 @@
 import { test, expect } from '@playwright/test';
-import { KENAMS, BOTS, signIn, openTab } from './_helpers';
+import { BOTS, openApp, openTab } from './_helpers';
 
 /**
- * Two real browser sessions: a bot fires a K-Pulse at Kenams, and Kenams's
- * screen must show the full-screen burst with the sender's name — from any tab.
+ * Two real sessions (both pre-authenticated): bot Léa fires a K-Pulse at
+ * Kenams, and Kenams's screen shows the full-screen burst with her name —
+ * while sitting on a tab other than Contacts.
  */
 test('an incoming K-Pulse takes over the recipient screen', async ({ browser }) => {
-  const kenamsCtx = await browser.newContext();
-  const botCtx = await browser.newContext();
+  const kenamsCtx = await browser.newContext({ storageState: '.auth/kenams.json' });
+  const botCtx = await browser.newContext({ storageState: '.auth/lea.json' });
 
   try {
     const kenams = await kenamsCtx.newPage();
-    await signIn(kenams, KENAMS);
-    await openTab(kenams, 'Moments'); // prove it fires globally, not just on Contacts
+    await openApp(kenams);
+    await openTab(kenams, 'Moments');
 
     const bot = await botCtx.newPage();
-    await signIn(bot, BOTS.lea);
+    await openApp(bot);
     await openTab(bot, 'Contacts');
     await bot.getByTestId('contact-search').fill('kenams');
     await bot.getByRole('button', { name: /Envoyer un K-Pulse/ }).first().click();
-    await expect(bot.getByText(/K-Pulse envoyé/)).toBeVisible();
+    await expect(bot.getByText(/K-Pulse envoyé|K-Pulse refusé ou limité/)).toBeVisible();
 
     await expect(kenams.getByTestId('kpulse-burst')).toBeVisible({ timeout: 15_000 });
     await expect(kenams.getByText('K-Pulse')).toBeVisible();

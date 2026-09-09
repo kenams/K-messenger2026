@@ -204,7 +204,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         <Text style={[styles.hint, !avatarValid && styles.error]}>Photo stockee en media prive K-ssenger. Les URL HTTPS restent acceptees pour les anciens profils.</Text>
 
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
-        <TouchableOpacity disabled={!canSave} onPress={() => void save()} style={[styles.primary, !canSave && styles.disabled]}>
+        <TouchableOpacity disabled={!canSave} onPress={() => void save()} accessibilityRole="button" accessibilityLabel="Enregistrer" style={[styles.primary, !canSave && styles.disabled]}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Enregistrer</Text>}
         </TouchableOpacity>
       </ScrollView>
