@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { FeedScreen } from './src/features/feed/FeedScreen';
@@ -22,7 +22,7 @@ import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket } from './src/lib/realtime';
 import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from './src/theme/tokens';
-import { Equalizer, NowPlayingSheet, PresenceBadge } from './src/theme/components';
+import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, useAndroidBack } from './src/theme/components';
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
 
@@ -83,6 +83,33 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const [birthDateInput, setBirthDateInput] = useState('');
   const [ageError, setAgeError] = useState('');
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
+
+  // One place to dismiss whatever secondary screen sits above the tab shell.
+  const overlayOpen =
+    !!selected || webLinkScreen || linkedDevices || editingProfile || accountData || privacySettings || groupsScreen;
+
+  const closeOverlays = useCallback(() => {
+    setSelected(null);
+    setWebLinkScreen(false);
+    setLinkedDevices(false);
+    setEditingProfile(false);
+    setAccountData(false);
+    setPrivacySettings(false);
+    setGroupsScreen(false);
+  }, []);
+
+  // Android hardware back closes the current secondary screen instead of the app.
+  useAndroidBack(overlayOpen ? closeOverlays : undefined);
+
+  // On web, the browser Back button mirrors that: opening a secondary screen
+  // pushes one history entry, and popping it returns to the buddy list.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || !overlayOpen) return;
+    window.history.pushState({ kssOverlay: true }, '');
+    const onPop = () => closeOverlays();
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [overlayOpen, closeOverlays]);
 
   const saveNowPlaying = async (title: string, artist: string) => {
     try {
@@ -224,9 +251,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   if (groupsScreen) {
     return (
       <WebShell>
-        <TouchableOpacity style={styles.screenBack} onPress={() => setGroupsScreen(false)} accessibilityRole="button" accessibilityLabel="Retour au profil">
-          <Text style={styles.screenBackText}>‹ Retour au profil</Text>
-        </TouchableOpacity>
+        <ScreenHeader title="Groupes" subtitle="Salons chiffrés" onBack={() => setGroupsScreen(false)} />
         <GroupsScreen />
       </WebShell>
     );
@@ -402,9 +427,6 @@ const styles = StyleSheet.create({
   primary: { minHeight: 52, paddingHorizontal: spacing.xl, alignItems: 'center', justifyContent: 'center' },
   primaryText: { color: palette.white, fontWeight: '900', fontSize: 14.5, letterSpacing: 0.3 },
   disabled: { opacity: 0.4 },
-
-  screenBack: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.lg, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline },
-  screenBackText: { color: palette.azureDeep, fontWeight: '900' },
 
   hero: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

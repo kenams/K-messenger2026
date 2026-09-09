@@ -3,6 +3,7 @@ import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, Touchabl
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { UseWebLink } from '../../lib/deviceLinkClient';
+import { ScreenHeader, useAndroidBack } from '../../theme/components';
 import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 /**
@@ -13,10 +14,18 @@ import { brandGradient, elevation, layout, palette, radius, spacing, type as typ
 export function WebLinkScreen({ webLink, onBack }: { webLink: UseWebLink; onBack?: () => void }) {
   const pairing = webLink.status === 'pairing';
 
+  const goBack = React.useCallback(() => {
+    if (pairing) webLink.cancelPairing();
+    onBack?.();
+  }, [pairing, webLink, onBack]);
+
+  useAndroidBack(onBack ? goBack : undefined);
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <View style={styles.wash} pointerEvents="none" />
+      {onBack ? <ScreenHeader title="Lier mon téléphone" onBack={goBack} /> : null}
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.mark}><Text style={styles.markText}>🔗</Text></View>

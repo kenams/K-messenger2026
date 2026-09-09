@@ -3,9 +3,11 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   Animated,
+  BackHandler,
   Easing,
   Image,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -32,6 +34,22 @@ export function useReducedMotion(): boolean {
     };
   }, []);
   return reduced;
+}
+
+/**
+ * Route the Android hardware back button to an in-app handler while a screen
+ * is mounted, so "back" navigates within K-ssenger instead of leaving the app.
+ * No-op on web / iOS. Pass `undefined` to disable.
+ */
+export function useAndroidBack(handler?: () => void): void {
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !handler) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handler();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handler]);
 }
 
 /** Soft vertical sky wash used behind buddy-list style screens. */

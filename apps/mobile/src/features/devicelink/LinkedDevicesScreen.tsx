@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import { emitAck, getRealtimeSocket } from '../../lib/realtime';
 import { approvePendingLink, linkConfirmationCode } from '../../lib/deviceLinkClient';
+import { ScreenHeader, useAndroidBack } from '../../theme/components';
 import { elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 type LinkRow = { id: string; status: 'pending' | 'approved' | 'revoked'; created_at: string; approved_at: string | null };
@@ -74,10 +75,12 @@ export function LinkedDevicesScreen({ userId, onBack }: { userId: string; onBack
   const approved = rows.filter((r) => r.status === 'approved');
   const pending = rows.filter((r) => r.status === 'pending');
 
+  useAndroidBack(onBack);
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <TouchableOpacity style={styles.back} onPress={onBack} accessibilityRole="button"><Text style={styles.backText}>‹ Retour au profil</Text></TouchableOpacity>
+      <ScreenHeader title="Appareils liés" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.kicker}>APPAREILS LIÉS</Text>
         <Text style={styles.title}>K-ssenger sur le web</Text>
@@ -124,8 +127,6 @@ export function LinkedDevicesScreen({ userId, onBack }: { userId: string; onBack
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
-  back: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.lg, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline },
-  backText: { color: palette.azureDeep, fontWeight: '900' },
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl, maxWidth: layout.maxContent, alignSelf: 'center', width: '100%' },
   kicker: { ...typo.brand },
   title: { marginTop: spacing.xs, ...typo.title },
