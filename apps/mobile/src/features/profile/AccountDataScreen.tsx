@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import { reauthenticateNeonPassword, changeNeonPassword } from '../../lib/neonAuth';
@@ -95,7 +95,22 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
         k_map: { owned_shares: locationShares, owned_share_points: locationPoints },
       };
 
-      await Share.share({ title: `K-ssenger export ${new Date().toISOString().slice(0, 10)}`, message: JSON.stringify(payload, null, 2) });
+      const json = JSON.stringify(payload, null, 2);
+      const filename = `k-ssenger-export-${new Date().toISOString().slice(0, 10)}.json`;
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        // Web: hand the viewer a downloadable file (the Web Share API is for
+        // short text/URLs and is unreliable for a large JSON blob).
+        const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } else {
+        await Share.share({ title: `K-ssenger export ${new Date().toISOString().slice(0, 10)}`, message: json });
+      }
       setNotice('Export complet généré avec les données autorisées par ton compte.');
     } catch {
       setNotice('Export impossible pour le moment. Aucune donnée partielle n’a été partagée.');
