@@ -13,6 +13,8 @@ export type MyProfile = {
   presence: 'online' | 'busy' | 'away' | 'invisible' | 'offline';
   now_playing_title: string | null;
   now_playing_artist: string | null;
+  accent_color: string | null;
+  pinned_moment_id: string | null;
 };
 
 export function useMyProfile(userId: string) {
@@ -26,7 +28,7 @@ export function useMyProfile(userId: string) {
     try {
       const { data, error: queryError } = await getBackend()
         .from('profiles')
-        .select('id,username,display_name,nickname,avatar_url,avatar_media_id,bio,custom_status,presence,now_playing_title,now_playing_artist')
+        .select('id,username,display_name,nickname,avatar_url,avatar_media_id,bio,custom_status,presence,now_playing_title,now_playing_artist,accent_color,pinned_moment_id')
         .eq('id', userId)
         .maybeSingle();
 

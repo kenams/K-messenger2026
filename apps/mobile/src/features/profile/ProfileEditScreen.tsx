@@ -8,6 +8,7 @@ import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../
 import type { MyProfile } from './useMyProfile';
 import { ScreenHeader } from '../../theme/components';
 import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { ACCENT_PRESETS, accentOf, onAccent } from '../../theme/accent';
 import {
   beginSpotifyAuth,
   disconnectLastfm,
@@ -58,6 +59,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
   const [nowPlayingTitle, setNowPlayingTitle] = useState(profile.now_playing_title ?? '');
   const [nowPlayingArtist, setNowPlayingArtist] = useState(profile.now_playing_artist ?? '');
   const [bio, setBio] = useState(profile.bio ?? '');
+  const [accentColor, setAccentColor] = useState(accentOf(profile.accent_color));
   const [avatarUrl, setAvatarUrl] = useState(isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : '');
   const [avatarMediaId, setAvatarMediaId] = useState(profile.avatar_media_id);
   const [avatarPreviewUri, setAvatarPreviewUri] = useState<string | null>(isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : null);
@@ -146,6 +148,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
           now_playing_title: nowPlayingTitle.trim().slice(0, 120) || null,
           now_playing_artist: nowPlayingArtist.trim().slice(0, 120) || null,
           bio: bio.trim().slice(0, 500) || null,
+          accent_color: accentColor,
           avatar_url: avatarMediaId ? `media:${avatarMediaId}` : avatar,
           avatar_media_id: avatarMediaId,
           updated_at: new Date().toISOString(),
@@ -182,6 +185,25 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         <TextInput value={nowPlayingTitle} onChangeText={setNowPlayingTitle} maxLength={120} placeholder="Titre du morceau" style={[styles.input, styles.stackedInput]} />
         <TextInput value={nowPlayingArtist} onChangeText={setNowPlayingArtist} maxLength={120} placeholder="Artiste" style={[styles.input, styles.stackedInput]} />
         <Text style={styles.hint}>♫ Affiché à tes contacts selon tes réglages de confidentialité. La synchro automatique écrase ces champs quand une source est connectée.</Text>
+
+        <Text style={styles.label}>COULEUR D'IDENTITÉ</Text>
+        <View style={styles.accentRow}>
+          {ACCENT_PRESETS.map((preset) => {
+            const selected = accentColor.toLowerCase() === preset.toLowerCase();
+            return (
+              <TouchableOpacity
+                key={preset}
+                accessibilityRole="button"
+                accessibilityLabel={`Couleur ${preset}`}
+                onPress={() => setAccentColor(preset)}
+                style={[styles.accentDot, { backgroundColor: preset }, selected && styles.accentDotSelected]}
+              >
+                {selected ? <Text style={[styles.accentCheck, { color: onAccent(preset) }]}>✓</Text> : null}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.hint}>Ta couleur te suit partout : ton profil, ton nom dans les listes, l'en-tête de tes conversations.</Text>
 
         <Text style={styles.label}>BIO</Text>
         <TextInput value={bio} onChangeText={setBio} maxLength={500} multiline placeholder="Quelques mots sur toi" style={[styles.input, styles.multiline]} />
@@ -323,5 +345,9 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, label: { marginTop: spacing.lg, marginBottom: spacing.xs, ...typo.label, textTransform: 'uppercase' }, input: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink }, stackedInput: { marginTop: spacing.sm }, multiline: { minHeight: 100, textAlignVertical: 'top' }, hint: { ...typo.micro, fontWeight: '500', lineHeight: 14, marginTop: spacing.xs }, error: { color: palette.danger }, notice: { marginTop: spacing.lg, color: palette.azureDeep, fontWeight: '700' },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md }, avatarPreview: { width: 78, height: 78, borderRadius: radius.xl, backgroundColor: palette.azure, borderWidth: 4, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarPreviewText: { color: palette.white, fontSize: 30, fontWeight: '900' }, avatarActions: { flex: 1, gap: spacing.sm }, avatarButton: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azure }, avatarButtonText: { color: palette.white, fontWeight: '900' }, avatarSecondary: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azureSoft, borderWidth: 1, borderColor: palette.hairline }, avatarSecondaryText: { color: palette.inkSoft, fontWeight: '900' },
+  accentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  accentDot: { width: 40, height: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
+  accentDotSelected: { borderColor: palette.ink },
+  accentCheck: { fontWeight: '900', fontSize: 16 },
   primary: { minHeight: 48, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg }, primaryText: { color: palette.white, fontWeight: '900' }, disabled: { opacity: 0.45 },
 });

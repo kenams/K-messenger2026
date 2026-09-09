@@ -19,6 +19,24 @@ test.describe('Profile & settings persist', () => {
     await expect(page.getByText(status).first()).toBeVisible({ timeout: 20_000 });
   });
 
+  test('picking an identity accent colour saves and survives a reload', async ({ page }) => {
+    await page.getByTestId('me-Profil').click();
+    await expect(page.getByText("COULEUR D'IDENTITÉ")).toBeVisible();
+
+    await page.getByRole('button', { name: 'Couleur #7A5BFF' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('Profil enregistré.')).toBeVisible();
+
+    await page.reload();
+    await page.getByTestId('me-Profil').click();
+    await expect(page.getByRole('button', { name: 'Couleur #7A5BFF' })).toContainText('✓', { timeout: 20_000 });
+
+    // restore the default azure so the suite is idempotent
+    await page.getByRole('button', { name: 'Couleur #1C6FD6' }).click();
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('Profil enregistré.')).toBeVisible();
+  });
+
   test('a privacy toggle saves', async ({ page }) => {
     await page.getByTestId('me-Vie privée').click();
     await expect(page.getByText('QUI VOIT QUE JE SUIS EN LIGNE ?')).toBeVisible();

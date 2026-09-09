@@ -11,16 +11,21 @@ import { palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 type MomentVisibility = 'friends' | 'close_friends' | 'public';
 type MomentKind = 'photo' | 'video' | 'text';
-type MomentRow = { id: string; author_id: string; kind: MomentKind; caption: string | null; media_url: string | null; media_object_id: string | null; visibility: MomentVisibility; expires_at: string; created_at: string };
-type Moment = MomentRow & { author: string; isMine: boolean };
+type MomentRow = { id: string; author_id: string; kind: MomentKind; caption: string | null; media_url: string | null; media_object_id: string | null; visibility: MomentVisibility; expires_at: string; created_at: string; is_pinned: boolean };
+type Reactions = { total: number; byEmoji: Record<string, number>; mine: string | null };
+type Moment = MomentRow & { author: string; isMine: boolean; reactions: Reactions };
 const IMAGE_MIMES = new Set<SupportedMediaMime>(['image/jpeg','image/png','image/webp']);
 const VIDEO_MIMES = new Set<SupportedMediaMime>(['video/mp4','video/quicktime']);
+
+export const MOMENT_REACTIONS = ['❤️', '🔥', '😂', '😮', '👏'] as const;
 
 const VISIBILITY_LABEL: Record<MomentVisibility, string> = {
   friends: '👥 Amis',
   close_friends: '💚 Proches',
   public: '🌍 Public',
 };
+
+const emptyReactions = (): Reactions => ({ total: 0, byEmoji: {}, mine: null });
 
 function inferMomentMime(asset: ImagePicker.ImagePickerAsset, kind: 'photo' | 'video'): SupportedMediaMime | null {
   const normalized = asset.mimeType?.toLowerCase();
@@ -38,7 +43,7 @@ function inferMomentMime(asset: ImagePicker.ImagePickerAsset, kind: 'photo' | 'v
   return null;
 }
 
-export function MomentsScreen() {
+export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void }) {
   const [moments, setMoments] = useState<Moment[]>([]);
   const [caption, setCaption] = useState('');
   const [visibility, setVisibility] = useState<MomentVisibility>('friends');
@@ -54,18 +59,42 @@ export function MomentsScreen() {
     try {
       const me = userId || await getAuthenticatedUserId();
       if (!userId) setUserId(me);
+      const now = new Date().toISOString();
       const { data, error } = await getBackend().from('moments')
-        .select('id,author_id,kind,caption,media_url,media_object_id,visibility,expires_at,created_at')
-        .gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100);
+        .select('id,author_id,kind,caption,media_url,media_object_id,visibility,expires_at,created_at,is_pinned')
+        .or(`expires_at.gt.${now},is_pinned.eq.true`)
+        .order('created_at', { ascending: false }).limit(100);
       if (error) throw error;
       const rows = ((data ?? []) as unknown) as MomentRow[];
+
       const authorIds = [...new Set(rows.map((row) => row.author_id))];
       const names = new Map<string, string>();
       if (authorIds.length) {
         const profileResponse = await getBackend().from('profiles').select('id,username,display_name').in('id', authorIds);
         if (!profileResponse.error) for (const profile of ((profileResponse.data ?? []) as unknown) as Array<{ id: string; username?: string; display_name?: string }>) names.set(profile.id, profile.username ? `@${profile.username}` : profile.display_name ?? 'K-ssenger');
       }
-      setMoments(rows.map((row) => ({ ...row, author: row.author_id === me ? '@moi' : names.get(row.author_id) ?? 'Contact K-ssenger', isMine: row.author_id === me })));
+
+      const reactionsByMoment = new Map<string, Reactions>();
+      const momentIds = rows.map((row) => row.id);
+      if (momentIds.length) {
+        const rx = await getBackend().from('moment_reactions').select('moment_id,user_id,reaction').in('moment_id', momentIds);
+        if (!rx.error) {
+          for (const r of ((rx.data ?? []) as unknown) as Array<{ moment_id: string; user_id: string; reaction: string }>) {
+            const bucket = reactionsByMoment.get(r.moment_id) ?? emptyReactions();
+            bucket.total += 1;
+            bucket.byEmoji[r.reaction] = (bucket.byEmoji[r.reaction] ?? 0) + 1;
+            if (r.user_id === me) bucket.mine = r.reaction;
+            reactionsByMoment.set(r.moment_id, bucket);
+          }
+        }
+      }
+
+      setMoments(rows.map((row) => ({
+        ...row,
+        author: row.author_id === me ? '@moi' : names.get(row.author_id) ?? 'Contact K-ssenger',
+        isMine: row.author_id === me,
+        reactions: reactionsByMoment.get(row.id) ?? emptyReactions(),
+      })));
       setNotice('');
     } catch { setMoments([]); setNotice('Moments est momentanément indisponible.'); }
     finally { setLoading(false); setRefreshing(false); }
@@ -108,7 +137,9 @@ export function MomentsScreen() {
       const me = userId || await getAuthenticatedUserId();
       await insertMoment(me, kind, mediaId);
       setCaption('');
-      setNotice(`Moment ${kind === 'photo' ? 'photo' : 'vidéo'} envoyé. Il reste visible seulement par toi tant que la modération ne l’a pas validé.`);
+      setNotice(visibility === 'public'
+        ? `Moment ${kind === 'photo' ? 'photo' : 'vidéo'} envoyé. Il reste visible seulement par toi tant que la modération ne l’a pas validé.`
+        : `Moment ${kind === 'photo' ? 'photo' : 'vidéo'} partagé avec tes ${visibility === 'close_friends' ? 'proches' : 'contacts'}.`);
       await load();
     } catch { setNotice('Publication média impossible. Formats autorisés : JPG/PNG/WebP ou MP4/MOV, 100 Mo maximum.'); }
     finally { setPublishing(false); }
@@ -119,6 +150,48 @@ export function MomentsScreen() {
     const { error } = await getBackend().from('moments').delete().eq('id', moment.id).eq('author_id', userId);
     if (error) { setNotice('Suppression du Moment refusée.'); return; }
     setMoments((current) => current.filter((item) => item.id !== moment.id)); setNotice('Moment supprimé.');
+    onPinnedChange?.();
+  };
+
+  const togglePin = async (moment: Moment) => {
+    if (!moment.isMine) return;
+    const nextPinned = !moment.is_pinned;
+    try {
+      // one pin at a time
+      if (nextPinned) await getBackend().from('moments').update({ is_pinned: false }).eq('author_id', userId).eq('is_pinned', true);
+      await getBackend().from('moments').update({ is_pinned: nextPinned }).eq('id', moment.id).eq('author_id', userId);
+      await getBackend().from('profiles').update({ pinned_moment_id: nextPinned ? moment.id : null, updated_at: new Date().toISOString() }).eq('id', userId);
+      setNotice(nextPinned ? 'Moment épinglé sur ton profil.' : 'Moment désépinglé.');
+      onPinnedChange?.();
+      await load();
+    } catch { setNotice('Impossible d’épingler ce Moment.'); }
+  };
+
+  const react = async (moment: Moment, emoji: string) => {
+    const me = userId || await getAuthenticatedUserId();
+    const current = moment.reactions.mine;
+    // optimistic
+    setMoments((list) => list.map((m) => {
+      if (m.id !== moment.id) return m;
+      const byEmoji = { ...m.reactions.byEmoji };
+      if (current) byEmoji[current] = Math.max(0, (byEmoji[current] ?? 1) - 1);
+      const removing = current === emoji;
+      if (!removing) byEmoji[emoji] = (byEmoji[emoji] ?? 0) + 1;
+      const total = Object.values(byEmoji).reduce((a, b) => a + b, 0);
+      return { ...m, reactions: { total, byEmoji, mine: removing ? null : emoji } };
+    }));
+    try {
+      if (current === emoji) {
+        await getBackend().from('moment_reactions').delete().eq('moment_id', moment.id).eq('user_id', me);
+      } else if (current) {
+        await getBackend().from('moment_reactions').update({ reaction: emoji, created_at: new Date().toISOString() }).eq('moment_id', moment.id).eq('user_id', me);
+      } else {
+        await getBackend().from('moment_reactions').insert({ moment_id: moment.id, user_id: me, reaction: emoji });
+      }
+    } catch {
+      setNotice('Réaction non enregistrée.');
+      await load();
+    }
   };
 
   const reportMoment = async (moment: Moment) => {
@@ -163,7 +236,7 @@ export function MomentsScreen() {
           </View>
         }
         ListEmptyComponent={<EmptyState icon="✨" title="Aucun Moment visible" hint="Publie le premier moment : il disparaît au bout de 24 h." />}
-        renderItem={({ item }) => <MomentCard moment={item} onDelete={deleteMoment} onReport={reportMoment} />}
+        renderItem={({ item }) => <MomentCard moment={item} onDelete={deleteMoment} onReport={reportMoment} onReact={react} onTogglePin={togglePin} />}
       />
     </View>
   );
@@ -187,18 +260,52 @@ function MomentMedia({ moment }: { moment: Moment }) {
   return <View style={styles.textMoment}><Text style={styles.textMomentIcon}>💭</Text><Text style={styles.textMomentCopy}>{moment.caption || 'Moment K-ssenger'}</Text></View>;
 }
 
-function MomentCard({ moment, onDelete, onReport }: { moment: Moment; onDelete: (moment: Moment) => void; onReport: (moment: Moment) => void }) {
+function MomentCard({ moment, onDelete, onReport, onReact, onTogglePin }: {
+  moment: Moment;
+  onDelete: (moment: Moment) => void;
+  onReport: (moment: Moment) => void;
+  onReact: (moment: Moment, emoji: string) => void;
+  onTogglePin: (moment: Moment) => void;
+}) {
   const remainingHours = Math.max(1, Math.ceil(Math.max(0, new Date(moment.expires_at).getTime() - Date.now()) / 3_600_000));
   return (
-    <View style={styles.card}>
-      <View style={styles.cardTop}><Text style={styles.author}>{moment.author}</Text><Text style={styles.time}>⏳ {remainingHours} h</Text></View>
+    <View style={[styles.card, moment.is_pinned && styles.cardPinned]}>
+      <View style={styles.cardTop}>
+        <Text style={styles.author}>{moment.author}</Text>
+        <Text style={styles.time}>{moment.is_pinned ? '📌 épinglé' : `⏳ ${remainingHours} h`}</Text>
+      </View>
       <MomentMedia moment={moment} />
       {moment.kind !== 'text' && !!moment.caption && <Text style={styles.mediaCaption}>{moment.caption}</Text>}
       <Text style={styles.visibility}>{VISIBILITY_LABEL[moment.visibility]}</Text>
+
+      <View style={styles.reactionBar}>
+        {MOMENT_REACTIONS.map((emoji) => {
+          const count = moment.reactions.byEmoji[emoji] ?? 0;
+          const active = moment.reactions.mine === emoji;
+          return (
+            <Pressable
+              key={emoji}
+              onPress={() => onReact(moment, emoji)}
+              accessibilityRole="button"
+              accessibilityLabel={`Réagir ${emoji}`}
+              style={[styles.reaction, active && styles.reactionActive]}
+            >
+              <Text style={styles.reactionEmoji}>{emoji}</Text>
+              {count > 0 ? <Text style={[styles.reactionCount, active && styles.reactionCountActive]}>{count}</Text> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+
       <View style={styles.actions}>
-        {moment.isMine
-          ? <Pressable onPress={() => onDelete(moment)}><Text style={styles.deleteAction}>Supprimer</Text></Pressable>
-          : <Pressable onPress={() => onReport(moment)}><Text style={styles.action}>⚑ Signaler</Text></Pressable>}
+        {moment.isMine ? (
+          <>
+            <Pressable onPress={() => onTogglePin(moment)}><Text style={styles.action}>{moment.is_pinned ? '📌 Désépingler' : '📌 Épingler'}</Text></Pressable>
+            <Pressable onPress={() => onDelete(moment)}><Text style={styles.deleteAction}>Supprimer</Text></Pressable>
+          </>
+        ) : (
+          <Pressable onPress={() => onReport(moment)}><Text style={styles.action}>⚑ Signaler</Text></Pressable>
+        )}
       </View>
     </View>
   );
@@ -222,6 +329,7 @@ const styles = StyleSheet.create({
   notice: { color: palette.azureDeep, fontSize: 11, fontWeight: '700', marginTop: spacing.md },
   list: { padding: spacing.md, gap: spacing.md, flexGrow: 1 },
   card: { backgroundColor: palette.surface, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: palette.hairline },
+  cardPinned: { borderColor: palette.brass, borderWidth: 1.5, backgroundColor: palette.brassSoft },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   author: { ...typo.name },
   time: { ...typo.micro },
@@ -231,7 +339,13 @@ const styles = StyleSheet.create({
   media: { width: '100%', height: 320, marginTop: spacing.md, borderRadius: radius.md, backgroundColor: '#0c1d27' },
   mediaCaption: { color: palette.inkSoft, marginTop: spacing.sm, lineHeight: 18 },
   visibility: { marginTop: spacing.sm, ...typo.micro, fontWeight: '500' },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.md },
+  reactionBar: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.md, flexWrap: 'wrap' },
+  reaction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline },
+  reactionActive: { backgroundColor: palette.azureSoft, borderColor: palette.azure },
+  reactionEmoji: { fontSize: 14 },
+  reactionCount: { fontSize: 11, fontWeight: '800', color: palette.inkSoft },
+  reactionCountActive: { color: palette.azureDeep },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg, marginTop: spacing.md, alignItems: 'center' },
   action: { color: palette.inkSoft, fontWeight: '700', fontSize: 12 },
   deleteAction: { color: palette.danger, fontWeight: '800', fontSize: 12 },
 });

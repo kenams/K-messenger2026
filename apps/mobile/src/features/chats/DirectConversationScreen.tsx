@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import type { Socket } from 'socket.io-client';
 import type { Contact } from '../contacts/MsnContactsScreen';
 import { elevation, layout, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
+import { accentOf } from '../../theme/accent';
 import { getBackend } from '../../lib/backend';
 import { canUnlockPrivateComposer, getKssengerE2eeStatus } from '../../lib/e2ee';
 import { loadLocalMessage, storeLocalMessage } from '../../lib/localMessageStore';
@@ -283,10 +284,10 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
+      <View style={[styles.header, contact.accentColor ? { borderBottomColor: accentOf(contact.accentColor), borderBottomWidth: 2 } : null]}>
         <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
-        <View style={styles.flex}><Text style={styles.name}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
+        <View style={[styles.avatar, contact.accentColor ? { backgroundColor: accentOf(contact.accentColor) } : null]}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
+        <View style={styles.flex}><Text style={[styles.name, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
         <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
       <View style={styles.security}><Text style={styles.securityText}>{e2eeReady ? '🔐 Signal/libsignal · texte et références média chiffrés de bout en bout' : '🛡️ Envoi verrouillé tant que le contrôle E2EE natif n’est pas validé'}</Text></View>

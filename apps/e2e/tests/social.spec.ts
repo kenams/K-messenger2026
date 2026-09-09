@@ -11,6 +11,18 @@ test.describe('Moments', () => {
     await page.getByText('Publier le texte pour 24 h').click();
 
     await expect(page.getByText(text)).toBeVisible();
+
+    // V2 — react to my own Moment, the count shows, then toggle it back off
+    await page.getByRole('button', { name: 'Réagir ❤️' }).first().click();
+    await expect(page.getByRole('button', { name: 'Réagir ❤️' }).first()).toContainText('1');
+    await page.getByRole('button', { name: 'Réagir ❤️' }).first().click();
+
+    // V2 — pin then unpin
+    await page.getByText('📌 Épingler').first().click();
+    await expect(page.getByText('Moment épinglé sur ton profil.')).toBeVisible();
+    await page.getByText('📌 Désépingler').first().click();
+    await expect(page.getByText('Moment désépinglé.')).toBeVisible();
+
     await page.getByText('Supprimer').first().click();
     await expect(page.getByText('Moment supprimé.')).toBeVisible();
   });

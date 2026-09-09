@@ -24,6 +24,7 @@ import { disconnectRealtimeSocket } from './src/lib/realtime';
 import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, useAndroidBack } from './src/theme/components';
+import { accentOf } from './src/theme/accent';
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
 
@@ -357,10 +358,13 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
     }
   };
 
+  const accent = accentOf(profile.accent_color);
+
   return (
     <ScrollView contentContainerStyle={styles.profilePage}>
-      <Avatar profile={profile} size="large" />
+      <View style={[styles.accentRing, { borderColor: accent }]}><Avatar profile={profile} size="large" /></View>
       <Text style={styles.profileName}>{profile.display_name}</Text><Text style={styles.profileHandle}>@{profile.username}</Text>
+      <View style={[styles.accentBar, { backgroundColor: accent }]} />
       <Text style={styles.profilePresence}>{profile.custom_status || 'Disponible'}</Text>
       <TouchableOpacity style={styles.meNowPlaying} onPress={onNowPlaying} accessibilityRole="button">
         {profile.now_playing_title ? <Equalizer size={14} /> : <Text style={styles.nowPlayingIcon}>♪</Text>}
@@ -469,6 +473,8 @@ const styles = StyleSheet.create({
   profilePage: { alignItems: 'center', padding: spacing.xl, paddingBottom: spacing.xxxl, maxWidth: layout.maxContent, alignSelf: 'center', width: '100%' },
   profileAvatar: { width: 104, height: 104, borderRadius: radius.xxl, backgroundColor: palette.azure, borderWidth: 3, borderColor: palette.white, alignItems: 'center', justifyContent: 'center', ...elevation.card },
   profileAvatarText: { color: palette.white, fontSize: 42, fontWeight: '900' },
+  accentRing: { borderWidth: 3, borderRadius: radius.pill, padding: 3 },
+  accentBar: { width: 44, height: 4, borderRadius: radius.pill, marginTop: spacing.sm },
   profileName: { marginTop: spacing.md, ...typo.title, textAlign: 'center' },
   profileHandle: { ...typo.meta, color: palette.inkFaint, marginTop: 2 },
   profilePresence: { color: palette.success, marginTop: spacing.sm, fontWeight: '800', fontSize: 13 },

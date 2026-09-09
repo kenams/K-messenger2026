@@ -29,6 +29,7 @@ export async function listContacts(userId: string) {
     presence: string;
     now_playing_title: string | null;
     now_playing_artist: string | null;
+    accent_color: string | null;
   }>(
     `select c.contact_id,
             c.favorite,
@@ -39,6 +40,7 @@ export async function listContacts(userId: string) {
             p.nickname,
             p.avatar_url,
             p.custom_status,
+            p.accent_color,
             case
               when p.presence = 'invisible' then 'offline'
               when coalesce(ps.show_online, 'contacts') = 'nobody' then 'offline'
@@ -74,6 +76,7 @@ export async function listContacts(userId: string) {
       presence: row.presence,
       now_playing_title: row.now_playing_title,
       now_playing_artist: row.now_playing_artist,
+      accent_color: row.accent_color,
     },
   }));
 }

@@ -6,6 +6,7 @@ import { getMediaDownload } from '../../lib/media';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
 import { elevation, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake } from '../../theme/components';
+import { accentOf } from '../../theme/accent';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
 export type Contact = {
@@ -19,6 +20,7 @@ export type Contact = {
   nowPlaying?: string;
   favorite?: boolean;
   group: string;
+  accentColor?: string | null;
 };
 
 type ContactResponse = {
@@ -37,6 +39,7 @@ type ContactResponse = {
       presence: Presence;
       now_playing_title: string | null;
       now_playing_artist: string | null;
+      accent_color?: string | null;
     };
   }>;
   error?: string;
@@ -163,6 +166,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         nowPlaying,
         favorite: row.favorite,
         group: row.favorite ? 'Favoris' : (row.list_name || 'Amis'),
+        accentColor: row.profiles.accent_color ?? null,
       };
     }));
   };
@@ -516,9 +520,10 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
                   <View key={contact.id}>
                     <View style={styles.contact}>
                       <TouchableOpacity style={styles.contactMain} onPress={() => onOpen(contact)} accessibilityRole="button">
+                        {contact.accentColor ? <View style={[styles.accentEdge, { backgroundColor: accentOf(contact.accentColor) }]} /> : null}
                         <ContactAvatar displayName={contact.displayName} avatarUrl={contact.avatarUrl} presence={contact.presence} />
                         <View style={styles.flex}>
-                          <Text style={styles.nickname} numberOfLines={1}>{contact.nickname}</Text>
+                          <Text style={[styles.nickname, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]} numberOfLines={1}>{contact.nickname}</Text>
                           {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
                           {contact.nowPlaying
                             ? <View style={styles.musicRow}><Equalizer size={12} /><Text style={styles.music} numberOfLines={1}>{contact.nowPlaying}</Text></View>
@@ -585,6 +590,7 @@ const styles = StyleSheet.create({
   avatarBadge: { position: 'absolute', right: -3, bottom: -3 },
 
   nickname: { ...typo.name, maxWidth: '92%' },
+  accentEdge: { width: 3, alignSelf: 'stretch', borderRadius: radius.pill, marginRight: spacing.xs },
   status: { color: palette.inkSoft, marginTop: 2, fontSize: 12 },
   statusFaint: { color: palette.inkFaint, marginTop: 2, fontSize: 11 },
   musicRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 3 },
