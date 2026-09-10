@@ -26,6 +26,7 @@ import {
   messageSendSchema,
   presenceSchema,
   receiptSchema,
+  messageReactSchema,
   wizzSchema,
 } from './validation.js';
 import { createOrGetDirectConversation } from './directConversationStore.js';
@@ -42,7 +43,7 @@ import { registerMediaHandlers } from './mediaSocket.js';
 import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { registerDeviceLinkHandlers } from './deviceLinkSocket.js';
 import { sendConversationPush, sendKPulsePush } from './push.js';
-import { listEncryptedMessages, persistEncryptedMessage } from './messageStore.js';
+import { listEncryptedMessages, persistEncryptedMessage, setMessageReaction } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
   joinLimiter,
@@ -430,6 +431,24 @@ io.on('connection', (socket) => {
       ack?.({ ok: true, receipt: stored });
     } catch (error) {
       logger.warn('message_receipt_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('message:react', async (raw, ack) => {
+    try {
+      if (!messageLimiter.consume(`${userId}:react`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = messageReactSchema.parse(raw);
+      await requireConversationMember(userId, request.conversationId);
+      await requireConversationNotBlocked(userId, request.conversationId);
+      const reactions = await setMessageReaction(userId, request);
+      io.to(`conversation:${request.conversationId}`).emit('message:reaction', {
+        messageId: request.messageId,
+        reactions,
+      });
+      ack?.({ ok: true, reactions });
+    } catch (error) {
+      logger.warn('message_react_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });

@@ -2,10 +2,56 @@ import type { z } from 'zod';
 import { query } from './db.js';
 import { requireGroupCanSend } from './groupModerationStore.js';
 import { sendConversationPush } from './push.js';
-import { messageHistorySchema, messageSendSchema } from './validation.js';
+import { messageHistorySchema, messageReactSchema, messageSendSchema } from './validation.js';
 
 type Envelope = z.infer<typeof messageSendSchema>;
 type HistoryRequest = z.infer<typeof messageHistorySchema>;
+type ReactRequest = z.infer<typeof messageReactSchema>;
+
+export type MessageReaction = { userId: string; reaction: string };
+
+export async function listMessageReactions(messageId: string): Promise<MessageReaction[]> {
+  const { rows } = await query<{ user_id: string; reaction: string }>(
+    `select user_id, reaction from public.message_reactions where message_id = $1 order by created_at asc`,
+    [messageId],
+  );
+  return rows.map((row) => ({ userId: row.user_id, reaction: row.reaction }));
+}
+
+async function reactionsForMessages(messageIds: string[]): Promise<Record<string, MessageReaction[]>> {
+  if (!messageIds.length) return {};
+  const { rows } = await query<{ message_id: string; user_id: string; reaction: string }>(
+    `select message_id, user_id, reaction from public.message_reactions
+      where message_id = any($1::uuid[]) order by created_at asc`,
+    [messageIds],
+  );
+  const grouped: Record<string, MessageReaction[]> = {};
+  for (const row of rows) {
+    (grouped[row.message_id] ??= []).push({ userId: row.user_id, reaction: row.reaction });
+  }
+  return grouped;
+}
+
+/** Set or clear the caller's reaction on a message they can see. Returns the full list. */
+export async function setMessageReaction(userId: string, request: ReactRequest): Promise<MessageReaction[]> {
+  const { rowCount } = await query(
+    `select 1 from public.messages where id = $1 and conversation_id = $2 limit 1`,
+    [request.messageId, request.conversationId],
+  );
+  if (rowCount !== 1) throw new Error('MESSAGE_NOT_IN_CONVERSATION');
+
+  if (request.reaction === null) {
+    await query(`delete from public.message_reactions where message_id = $1 and user_id = $2`, [request.messageId, userId]);
+  } else {
+    await query(
+      `insert into public.message_reactions (message_id, user_id, reaction)
+       values ($1, $2, $3)
+       on conflict (message_id, user_id) do update set reaction = excluded.reaction, created_at = now()`,
+      [request.messageId, userId, request.reaction],
+    );
+  }
+  return listMessageReactions(request.messageId);
+}
 
 // SECURITY NOTE: membership/device/block authorization still belongs to the
 // authenticated Socket.IO call path, but group mute enforcement is repeated
@@ -104,6 +150,7 @@ export async function listEncryptedMessages(request: HistoryRequest) {
   const hasMore = rows.length > request.limit;
   const page = rows.slice(0, request.limit);
   const nextCursor = hasMore && page.length > 0 ? page[page.length - 1].created_at : null;
+  const reactions = await reactionsForMessages(page.map((row) => row.id));
 
   // Send each page oldest -> newest so clients can append/reconcile deterministically.
   return {
@@ -118,6 +165,7 @@ export async function listEncryptedMessages(request: HistoryRequest) {
       nonce: row.nonce,
       aad: row.aad,
       createdAt: row.created_at,
+      reactions: reactions[row.id] ?? [],
     })),
     nextCursor,
     hasMore,

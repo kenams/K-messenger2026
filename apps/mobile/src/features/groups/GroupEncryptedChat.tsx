@@ -3,10 +3,12 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import { launchImageLibrarySafe } from '../../lib/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/chatTransport';
+import { QUICK_REACTIONS, isBigEmoji, isSendKey } from '../../lib/chatExtras';
+import { EmojiPanel } from '../chats/EmojiPanel';
 import { emitAck } from '../../lib/realtime';
 import { palette, radius, spacing } from '../../theme/tokens';
 
@@ -115,6 +117,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages }:
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState('');
+  const [showEmoji, setShowEmoji] = useState(false);
   const deviceIdRef = useRef('');
   const [deviceReady, setDeviceReady] = useState(false);
 
@@ -154,7 +157,13 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages }:
   const send = async () => {
     const body = composer.trim();
     if (!body) return;
+    setShowEmoji(false);
     await sendContent({ v: 1, type: 'text', text: body });
+  };
+
+  const sendQuick = async (emoji: string) => {
+    if (sending || !deviceReady) return;
+    await sendContent({ v: 1, type: 'text', text: emoji });
   };
 
   const pickAndSendMedia = async () => {
@@ -204,18 +213,30 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages }:
       {messages.length === 0 ? <Text style={styles.empty}>Aucun message. Lance la conversation du groupe.</Text> : messages.map((message) => {
         const mine = message.senderUserId === currentUserId;
         const content = parseGroupContent(readMessageText(message));
+        const big = content.type === 'text' && isBigEmoji(content.text);
         return (
-          <View key={message.id} style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
+          <View key={message.id} style={[styles.bubble, mine ? styles.mine : styles.theirs, big && styles.bubbleBig]}>
             {content.type === 'media'
               ? <GroupMedia content={content} />
-              : <Text style={styles.body}>{content.text}</Text>}
+              : <Text style={big ? styles.bigEmoji : styles.body}>{content.text}</Text>}
             <Text style={styles.meta}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
           </View>
         );
       })}
+      <View style={styles.quickRow}>
+        {QUICK_REACTIONS.map((emoji) => (
+          <TouchableOpacity key={emoji} disabled={sending || !deviceReady} onPress={() => void sendQuick(emoji)} accessibilityRole="button" accessibilityLabel={`Envoyer ${emoji}`} style={[styles.quickBtn, (sending || !deviceReady) && styles.disabled]}>
+            <Text style={styles.quickEmoji}>{emoji}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {showEmoji && <EmojiPanel onPick={(emoji) => setComposer((c) => (c + emoji).slice(0, 12000))} />}
       <View style={styles.composer}>
         <TouchableOpacity onPress={() => void pickAndSendMedia()} disabled={sending || !deviceReady} style={[styles.attach, (sending || !deviceReady) && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo au groupe">
           <Text style={styles.attachText}>＋</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setShowEmoji((v) => !v)} accessibilityRole="button" accessibilityLabel="Ouvrir les emojis" style={[styles.attach, showEmoji && styles.attachActive]}>
+          <Text style={styles.attachText}>😊</Text>
         </TouchableOpacity>
         <TextInput
           style={styles.input}
@@ -226,6 +247,13 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages }:
           multiline
           maxLength={12000}
           editable={!sending}
+          onFocus={() => setShowEmoji(false)}
+          onKeyPress={(e) => {
+            if (isSendKey(e.nativeEvent as unknown as { key?: string; shiftKey?: boolean })) {
+              (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+              void send();
+            }
+          }}
         />
         <TouchableOpacity onPress={() => void send()} disabled={!composer.trim() || sending || !deviceReady} accessibilityRole="button" accessibilityLabel="Envoyer au groupe" style={[styles.send, (!composer.trim() || sending || !deviceReady) && styles.disabled]}>
           {sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}
@@ -242,9 +270,15 @@ const styles = StyleSheet.create({
   notice: { color: palette.azureDeep, fontWeight: '700', textAlign: 'center', marginBottom: spacing.sm },
   empty: { color: palette.inkSoft, textAlign: 'center', paddingVertical: spacing.lg },
   bubble: { maxWidth: '84%', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg, marginBottom: spacing.sm },
+  bubbleBig: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 2, paddingVertical: 0 },
   mine: { alignSelf: 'flex-end', backgroundColor: palette.azureSoft, borderBottomRightRadius: 5 },
   theirs: { alignSelf: 'flex-start', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderBottomLeftRadius: 5 },
   body: { color: palette.ink, fontSize: 14, lineHeight: 20 },
+  bigEmoji: { fontSize: 40, lineHeight: 48 },
+  quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 4, marginTop: spacing.xs, borderTopWidth: 1, borderTopColor: palette.hairline },
+  quickBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  quickEmoji: { fontSize: 19 },
+  attachActive: { backgroundColor: palette.azure, borderColor: palette.azure },
   meta: { color: palette.inkFaint, fontSize: 9, marginTop: 5, textAlign: 'right' },
   mediaPreview: { width: 230, height: 230, borderRadius: radius.md, backgroundColor: palette.hairline, marginBottom: 6 },
   mediaError: { color: palette.danger, fontSize: 12, fontWeight: '700' },

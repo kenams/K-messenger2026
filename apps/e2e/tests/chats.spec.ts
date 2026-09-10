@@ -35,6 +35,16 @@ test('two people can send and receive messages', async ({ browser }) => {
     await lea.getByPlaceholder('Écrire un message…').fill(fromLea);
     await lea.getByRole('button', { name: 'Envoyer le message' }).click();
     await expect(kenams.getByText(fromLea)).toBeVisible({ timeout: 20_000 });
+
+    // Léa reacts to Kenams's first message; Kenams sees a ❤️ reaction chip appear
+    // (Kenams's page already shows one ❤️ — the quick-send button — so expect two)
+    await lea.getByText(fromKenams).click();
+    await lea.getByRole('button', { name: 'Réagir ❤️' }).click();
+    await expect(kenams.getByText('❤️', { exact: true })).toHaveCount(2, { timeout: 20_000 });
+
+    // Kenams fires a one-tap emoji; Léa's thread shows it (button + received bubble = two)
+    await kenams.getByRole('button', { name: 'Envoyer 🔥' }).click();
+    await expect(lea.getByText('🔥', { exact: true })).toHaveCount(2, { timeout: 20_000 });
   } finally {
     await kenamsCtx.close();
     await leaCtx.close();

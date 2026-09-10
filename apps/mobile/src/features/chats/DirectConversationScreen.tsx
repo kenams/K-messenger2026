@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import { launchImageLibrarySafe } from '../../lib/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { ActivityIndicator, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import type { Socket } from 'socket.io-client';
 import type { Contact } from '../contacts/MsnContactsScreen';
@@ -12,6 +12,15 @@ import { accentOf } from '../../theme/accent';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/chatTransport';
+import {
+  QUICK_REACTIONS,
+  isBigEmoji,
+  isSendKey,
+  myReaction,
+  summarizeReactions,
+  type MessageReaction,
+} from '../../lib/chatExtras';
+import { EmojiPanel } from './EmojiPanel';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket } from '../../lib/realtime';
 
 type ReceiptState = 'delivered' | 'read';
@@ -30,6 +39,7 @@ type ChatMessage = {
   conversationId: string;
   receiptState?: ReceiptState;
   content?: ChatContent;
+  reactions?: MessageReaction[];
 };
 type HistoryResponse = { ok: boolean; messages?: ChatMessage[]; error?: string };
 type SendResponse = { ok: boolean; id?: string; duplicate?: boolean; error?: string };
@@ -56,7 +66,7 @@ function parseChatContent(value: string): ChatContent {
       };
     }
   } catch {
-    // Plain string message (older format or a legacy note) — show it as text.
+    // Plain string message — show it as text.
   }
   return { v: 1, type: 'text', text: value };
 }
@@ -66,8 +76,7 @@ function serializeChatContent(content: ChatContent) {
 }
 
 function hydrate(message: ChatMessage): ChatMessage {
-  const raw = readMessageText(message);
-  return { ...message, content: parseChatContent(raw) };
+  return { ...message, content: parseChatContent(readMessageText(message)), reactions: message.reactions ?? [] };
 }
 
 function inferChatMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime | null {
@@ -111,6 +120,57 @@ function ChatMedia({ content }: { content: Extract<ChatContent, { type: 'media' 
   );
 }
 
+function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacting, onReact }: {
+  message: ChatMessage;
+  mine: boolean;
+  currentUserId: string;
+  reactingOpen: boolean;
+  onToggleReacting: () => void;
+  onReact: (emoji: string) => void;
+}) {
+  const content = message.content ?? parseChatContent(readMessageText(message));
+  const summary = summarizeReactions(message.reactions, currentUserId);
+  const mineReaction = myReaction(message.reactions, currentUserId);
+  const big = content.type === 'text' && isBigEmoji(content.text);
+
+  return (
+    <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
+      <Pressable onPress={onToggleReacting} style={[styles.bubble, mine ? styles.mine : styles.theirs, big && styles.bubbleBig]}>
+        {content.type === 'media'
+          ? <ChatMedia content={content} />
+          : <Text style={[big ? styles.bigEmoji : styles.bodyText, !big && mine && styles.bodyTextMine]}>{content.text}</Text>}
+        <Text style={[styles.messageMeta, mine && styles.messageMetaMine]}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
+      </Pressable>
+
+      {summary.length > 0 && (
+        <View style={[styles.chips, mine ? styles.chipsMine : styles.chipsTheirs]}>
+          {summary.map((s) => (
+            <TouchableOpacity key={s.emoji} onPress={() => onReact(s.emoji)} style={[styles.chip, s.mine && styles.chipMine]}>
+              <Text style={styles.chipText}>{s.emoji}{s.count > 1 ? ` ${s.count}` : ''}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {reactingOpen && (
+        <View style={[styles.reactBar, mine ? styles.chipsMine : styles.chipsTheirs]}>
+          {QUICK_REACTIONS.map((emoji) => (
+            <TouchableOpacity
+              key={emoji}
+              onPress={() => onReact(emoji)}
+              accessibilityRole="button"
+              accessibilityLabel={`Réagir ${emoji}`}
+              style={[styles.reactBtn, mineReaction === emoji && styles.reactBtnActive]}
+            >
+              <Text style={styles.reactBtnText}>{emoji}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 export function DirectConversationScreen({ contact, onBack }: { contact: Contact; onBack: () => void; onLinkPhone?: () => void }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
@@ -120,7 +180,10 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const [notice, setNotice] = useState('');
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [reactingId, setReactingId] = useState<string | null>(null);
   const deviceIdRef = useRef('');
+  const conversationIdRef = useRef('');
   const scrollRef = useRef<ScrollView>(null);
   const canSend = useMemo(
     () => !!socket && !!conversationId && !!currentUserId && !!deviceIdRef.current && !sending,
@@ -132,6 +195,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     let clientRef: Socket | null = null;
     let messageHandler: ((message: ChatMessage) => void) | null = null;
     let receiptHandler: ((receipt: { messageId?: string; state?: ReceiptState }) => void) | null = null;
+    let reactionHandler: ((payload: { messageId?: string; reactions?: MessageReaction[] }) => void) | null = null;
     let connectHandler: (() => void) | null = null;
     let disconnectHandler: (() => void) | null = null;
 
@@ -148,6 +212,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       if (!direct.ok || !direct.conversationId) throw new Error(direct.error ?? 'DIRECT_CONVERSATION_FAILED');
       const id = direct.conversationId;
       setConversationId(id);
+      conversationIdRef.current = id;
 
       const acknowledge = async (messages: ChatMessage[]) => {
         await Promise.allSettled(messages.filter((message) => message.senderUserId !== userId).map((message) => emitAck(client, 'message:receipt', {
@@ -179,6 +244,10 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         if (!receipt.messageId || !receipt.state) return;
         setHistory((items) => items.map((message) => message.id === receipt.messageId ? { ...message, receiptState: receipt.state } : message));
       };
+      reactionHandler = (payload) => {
+        if (!payload.messageId) return;
+        setHistory((items) => items.map((message) => message.id === payload.messageId ? { ...message, reactions: payload.reactions ?? [] } : message));
+      };
       connectHandler = () => {
         if (!active) return;
         setNotice('Connexion rétablie · resynchronisation…');
@@ -187,6 +256,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       disconnectHandler = () => { if (active) setNotice('Hors ligne · les messages partiront à la reconnexion.'); };
       client.on('message:new', messageHandler);
       client.on('message:receipt', receiptHandler);
+      client.on('message:reaction', reactionHandler);
       client.on('connect', connectHandler);
       client.on('disconnect', disconnectHandler);
     }).catch(() => { if (active) setNotice('Impossible d’ouvrir cette conversation pour le moment.'); }).finally(() => { if (active) setLoading(false); });
@@ -195,6 +265,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       active = false;
       if (clientRef && messageHandler) clientRef.off('message:new', messageHandler);
       if (clientRef && receiptHandler) clientRef.off('message:receipt', receiptHandler);
+      if (clientRef && reactionHandler) clientRef.off('message:reaction', reactionHandler);
       if (clientRef && connectHandler) clientRef.off('connect', connectHandler);
       if (clientRef && disconnectHandler) clientRef.off('disconnect', disconnectHandler);
     };
@@ -212,6 +283,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     if (!canSend || !socket) return;
     setSending(true);
     setNotice('');
+    setShowEmoji(false);
     try {
       const payload = serializeChatContent(content);
       const { algorithm, ciphertext } = encodePlaintext(payload);
@@ -224,7 +296,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       setComposer('');
       setHistory((items) => items.some((item) => item.id === response.id) ? items : [...items, {
         id: response.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: deviceIdRef.current,
-        createdAt, algorithm, ciphertext, conversationId, content,
+        createdAt, algorithm, ciphertext, conversationId, content, reactions: [],
       }]);
     } catch {
       setNotice('Message non envoyé. Réessaie.');
@@ -235,6 +307,35 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     const text = composer.trim();
     if (!text) return;
     await sendContent({ v: 1, type: 'text', text });
+  };
+
+  const sendQuick = async (emoji: string) => {
+    if (!canSend) return;
+    await sendContent({ v: 1, type: 'text', text: emoji });
+  };
+
+  const react = async (messageId: string, emoji: string) => {
+    if (!socket || !conversationIdRef.current) return;
+    const target = history.find((m) => m.id === messageId);
+    const mine = myReaction(target?.reactions, currentUserId);
+    const nextReaction = mine === emoji ? null : emoji;
+    setReactingId(null);
+    // optimistic
+    setHistory((items) => items.map((m) => {
+      if (m.id !== messageId) return m;
+      const without = (m.reactions ?? []).filter((r) => r.userId !== currentUserId);
+      return { ...m, reactions: nextReaction ? [...without, { userId: currentUserId, reaction: nextReaction }] : without };
+    }));
+    try {
+      const res = await emitAck<{ ok: boolean; reactions?: MessageReaction[] }>(socket, 'message:react', {
+        conversationId: conversationIdRef.current, messageId, reaction: nextReaction,
+      });
+      if (res.ok && res.reactions) {
+        setHistory((items) => items.map((m) => m.id === messageId ? { ...m, reactions: res.reactions } : m));
+      }
+    } catch {
+      setNotice('Réaction non enregistrée.');
+    }
   };
 
   const pickAndSendMedia = async () => {
@@ -272,22 +373,54 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
           ref={scrollRef}
           style={styles.body}
           contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
           {!!notice && <Text style={styles.notice}>{notice}</Text>}
-          {!history.length ? <View style={styles.empty}><Text style={styles.emptyIcon}>💬</Text><Text style={styles.emptyTitle}>Conversation prête</Text><Text style={styles.muted}>Envoie ton premier message ou média.</Text></View> : history.map((message) => {
-            const mine = message.senderUserId === currentUserId;
-            const content = message.content ?? parseChatContent(readMessageText(message));
-            return <View key={message.id} style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-              {content.type === 'media' ? <ChatMedia content={content} /> : <Text style={[styles.bodyText, mine && styles.bodyTextMine]}>{content.text}</Text>}
-              <Text style={[styles.messageMeta, mine && styles.messageMetaMine]}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
-            </View>;
-          })}
+          {!history.length ? <View style={styles.empty}><Text style={styles.emptyIcon}>💬</Text><Text style={styles.emptyTitle}>Conversation prête</Text><Text style={styles.muted}>Envoie ton premier message ou média.</Text></View> : history.map((message) => (
+            <MessageRow
+              key={message.id}
+              message={message}
+              mine={message.senderUserId === currentUserId}
+              currentUserId={currentUserId}
+              reactingOpen={reactingId === message.id}
+              onToggleReacting={() => setReactingId((id) => id === message.id ? null : message.id)}
+              onReact={(emoji) => void react(message.id, emoji)}
+            />
+          ))}
         </ScrollView>
       )}
+
+      <View style={styles.quickRow}>
+        {QUICK_REACTIONS.map((emoji) => (
+          <TouchableOpacity key={emoji} disabled={!canSend} onPress={() => void sendQuick(emoji)} accessibilityRole="button" accessibilityLabel={`Envoyer ${emoji}`} style={[styles.quickBtn, !canSend && styles.disabled]}>
+            <Text style={styles.quickEmoji}>{emoji}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {showEmoji && <EmojiPanel onPick={(emoji) => setComposer((c) => (c + emoji).slice(0, 12000))} />}
+
       <View style={styles.composer}>
         <TouchableOpacity disabled={!canSend} onPress={() => void pickAndSendMedia()} style={[styles.attach, !canSend && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo"><Text style={styles.attachText}>＋</Text></TouchableOpacity>
-        <TextInput style={styles.input} value={composer} onChangeText={setComposer} placeholder="Écrire un message…" placeholderTextColor={palette.inkFaint} maxLength={12000} multiline editable={!sending} />
+        <TouchableOpacity onPress={() => setShowEmoji((v) => !v)} accessibilityRole="button" accessibilityLabel="Ouvrir les emojis" style={[styles.attach, showEmoji && styles.attachActive]}><Text style={styles.attachText}>😊</Text></TouchableOpacity>
+        <TextInput
+          style={styles.input}
+          value={composer}
+          onChangeText={setComposer}
+          placeholder="Écrire un message…"
+          placeholderTextColor={palette.inkFaint}
+          maxLength={12000}
+          multiline
+          editable={!sending}
+          onFocus={() => setShowEmoji(false)}
+          onKeyPress={(e) => {
+            if (isSendKey(e.nativeEvent as unknown as { key?: string; shiftKey?: boolean })) {
+              (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+              void sendMessage();
+            }
+          }}
+        />
         <TouchableOpacity disabled={!composer.trim() || sending || !canSend} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSend) && styles.disabled]}>{sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -304,17 +437,37 @@ const styles = StyleSheet.create({
   security: { backgroundColor: palette.surfaceSunken, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: palette.hairline }, securityText: { ...typo.micro, color: palette.inkSoft, textAlign: 'center', lineHeight: 14 },
   body: { flex: 1 }, content: { padding: spacing.lg, paddingBottom: spacing.xl, maxWidth: layout.maxReading, alignSelf: 'center', width: '100%' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, notice: { color: palette.azureDeep, fontWeight: '800', marginBottom: spacing.sm, textAlign: 'center', fontSize: 12 },
   empty: { alignItems: 'center', marginTop: 70, gap: spacing.xs }, emptyIcon: { fontSize: 40 }, emptyTitle: { ...typo.heading }, muted: { ...typo.meta, color: palette.inkFaint },
-  bubble: { maxWidth: '82%', borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, marginBottom: spacing.sm },
-  mine: { backgroundColor: palette.azure, alignSelf: 'flex-end', borderBottomRightRadius: 6, ...elevation.hairline },
-  theirs: { backgroundColor: palette.surface, alignSelf: 'flex-start', borderBottomLeftRadius: 6, borderWidth: 1, borderColor: palette.hairline, ...elevation.hairline },
+  row: { marginBottom: spacing.sm, maxWidth: '86%' },
+  rowMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
+  rowTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
+  bubble: { borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },
+  bubbleBig: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 2, paddingVertical: 0, shadowOpacity: 0, elevation: 0 },
+  mine: { backgroundColor: palette.azure, borderBottomRightRadius: 6, ...elevation.hairline },
+  theirs: { backgroundColor: palette.surface, borderBottomLeftRadius: 6, borderWidth: 1, borderColor: palette.hairline, ...elevation.hairline },
   bodyText: { ...typo.body },
   bodyTextMine: { color: palette.inkOnAzure },
+  bigEmoji: { fontSize: 44, lineHeight: 52 },
   messageMeta: { fontSize: 9.5, marginTop: 5, textAlign: 'right', color: palette.inkFaint, fontWeight: '600' },
   messageMetaMine: { color: 'rgba(244,248,255,0.75)' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  chipsMine: { justifyContent: 'flex-end' },
+  chipsTheirs: { justifyContent: 'flex-start' },
+  chip: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  chipMine: { backgroundColor: palette.azureSoft, borderColor: palette.azure },
+  chipText: { fontSize: 12, fontWeight: '700', color: palette.inkSoft },
+  reactBar: { flexDirection: 'row', gap: 2, marginTop: 4, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.pill, padding: 3, ...elevation.hairline },
+  reactBtn: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  reactBtnActive: { backgroundColor: palette.azureSoft },
+  reactBtnText: { fontSize: 17 },
   mediaPreview: { width: 230, height: 230, borderRadius: radius.sm, backgroundColor: palette.surfaceSunken, marginBottom: 6 }, mediaError: { color: palette.danger, fontSize: 12, fontWeight: '700' },
+  quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline },
+  quickBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  quickEmoji: { fontSize: 20 },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, padding: spacing.sm + 2, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline },
   input: { flex: 1, maxHeight: 120, minHeight: 46, backgroundColor: palette.surfaceSunken, borderWidth: 1.5, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink, fontSize: 15, fontWeight: '500', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : null) },
   send: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, ...elevation.hairline },
-  attach: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline }, attachText: { color: palette.azureDeep, fontSize: 24, lineHeight: 26, fontWeight: '700' },
+  attach: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline },
+  attachActive: { backgroundColor: palette.azureSoft, borderColor: palette.azure },
+  attachText: { color: palette.azureDeep, fontSize: 22, lineHeight: 26, fontWeight: '700' },
   disabled: { opacity: 0.4 }, sendText: { color: palette.white, fontWeight: '900', fontSize: 18 },
 });

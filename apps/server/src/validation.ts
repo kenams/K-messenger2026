@@ -27,6 +27,13 @@ export const receiptSchema = z.object({
   state: z.enum(['delivered', 'read']),
 }).strict();
 
+export const messageReactSchema = z.object({
+  conversationId: z.string().uuid(),
+  messageId: z.string().uuid(),
+  // null removes the caller's reaction on this message
+  reaction: z.string().min(1).max(16).nullable(),
+}).strict();
+
 export const conversationJoinSchema = z.object({
   conversationId: z.string().uuid(),
 }).strict();
