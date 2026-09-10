@@ -26,6 +26,7 @@ const VISIBILITY_LABEL: Record<MomentVisibility, string> = {
 };
 
 const emptyReactions = (): Reactions => ({ total: 0, byEmoji: {}, mine: null });
+const LOAD_ERROR = 'Moments est momentanément indisponible.';
 
 function inferMomentMime(asset: ImagePicker.ImagePickerAsset, kind: 'photo' | 'video'): SupportedMediaMime | null {
   const normalized = asset.mimeType?.toLowerCase();
@@ -95,8 +96,8 @@ export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void 
         isMine: row.author_id === me,
         reactions: reactionsByMoment.get(row.id) ?? emptyReactions(),
       })));
-      setNotice('');
-    } catch { setMoments([]); setNotice('Moments est momentanément indisponible.'); }
+      setNotice((current) => (current === LOAD_ERROR ? '' : current));
+    } catch { setMoments([]); setNotice(LOAD_ERROR); }
     finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -161,9 +162,9 @@ export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void 
       if (nextPinned) await getBackend().from('moments').update({ is_pinned: false }).eq('author_id', userId).eq('is_pinned', true);
       await getBackend().from('moments').update({ is_pinned: nextPinned }).eq('id', moment.id).eq('author_id', userId);
       await getBackend().from('profiles').update({ pinned_moment_id: nextPinned ? moment.id : null, updated_at: new Date().toISOString() }).eq('id', userId);
-      setNotice(nextPinned ? 'Moment épinglé sur ton profil.' : 'Moment désépinglé.');
       onPinnedChange?.();
       await load();
+      setNotice(nextPinned ? 'Moment épinglé sur ton profil.' : 'Moment désépinglé.');
     } catch { setNotice('Impossible d’épingler ce Moment.'); }
   };
 

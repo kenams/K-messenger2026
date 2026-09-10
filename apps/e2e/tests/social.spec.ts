@@ -17,11 +17,11 @@ test.describe('Moments', () => {
     await expect(page.getByRole('button', { name: 'Réagir ❤️' }).first()).toContainText('1');
     await page.getByRole('button', { name: 'Réagir ❤️' }).first().click();
 
-    // V2 — pin then unpin
+    // V2 — pin then unpin (assert the durable state change, not just the toast)
     await page.getByText('📌 Épingler').first().click();
-    await expect(page.getByText('Moment épinglé sur ton profil.')).toBeVisible();
+    await expect(page.getByText('📌 Désépingler').first()).toBeVisible({ timeout: 20_000 });
     await page.getByText('📌 Désépingler').first().click();
-    await expect(page.getByText('Moment désépinglé.')).toBeVisible();
+    await expect(page.getByText('📌 Épingler').first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByText('Supprimer').first().click();
     await expect(page.getByText('Moment supprimé.')).toBeVisible();
