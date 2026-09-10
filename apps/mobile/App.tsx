@@ -237,12 +237,9 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   }
 
   if (selected) {
-    const relay = Platform.OS === 'web' && webLink.status === 'linked';
     return (
       <WebShell>
-        {relay
-          ? <WebRelayConversationScreen contact={selected} webLink={webLink} currentUserId={profile.id} onBack={() => setSelected(null)} />
-          : <DirectConversationScreen contact={selected} onBack={() => setSelected(null)} onLinkPhone={Platform.OS === 'web' ? () => { setSelected(null); setWebLinkScreen(true); } : undefined} />}
+        <DirectConversationScreen contact={selected} onBack={() => setSelected(null)} />
       </WebShell>
     );
   }

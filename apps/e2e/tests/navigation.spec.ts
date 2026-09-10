@@ -29,7 +29,7 @@ test.describe('Navigation — no dead ends', () => {
   test('opening a conversation shows a back control', async ({ page }) => {
     await openTab(page, 'Contacts');
     await page.getByText('Chloé Dubois').first().click();
-    await expect(page.getByText(/Envoi verrouillé|Signal\/libsignal/)).toBeVisible();
+    await expect(page.getByText(/Connexion sécurisée \(TLS\)/)).toBeVisible();
     await page.getByText('‹', { exact: true }).first().click();
     await expect(page.getByTestId('contact-search')).toBeVisible();
   });

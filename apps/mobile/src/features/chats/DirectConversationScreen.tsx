@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import * as Crypto from 'expo-crypto';
 import { launchImageLibrarySafe } from '../../lib/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { ActivityIndicator, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -9,15 +10,8 @@ import type { Contact } from '../contacts/MsnContactsScreen';
 import { elevation, layout, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
 import { accentOf } from '../../theme/accent';
 import { getBackend } from '../../lib/backend';
-import { canUnlockPrivateComposer, getKssengerE2eeStatus } from '../../lib/e2ee';
-import { loadLocalMessage, storeLocalMessage } from '../../lib/localMessageStore';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
-import {
-  decryptDirectFromContact,
-  encryptDirectForContact,
-  ensureLocalSignalDevice,
-  newEncryptedMessageId,
-} from '../../lib/signalDevice';
+import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/chatTransport';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket } from '../../lib/realtime';
 
 type ReceiptState = 'delivered' | 'read';
@@ -25,7 +19,7 @@ type DirectResponse = { ok: boolean; conversationId?: string; error?: string };
 type ChatContent =
   | { v: 1; type: 'text'; text: string }
   | { v: 1; type: 'media'; mediaId: string; mimeType: SupportedMediaMime; caption?: string };
-type EncryptedMessage = {
+type ChatMessage = {
   id: string;
   clientMessageId?: string;
   senderUserId: string;
@@ -35,11 +29,9 @@ type EncryptedMessage = {
   ciphertext?: string;
   conversationId: string;
   receiptState?: ReceiptState;
-  plaintext?: string;
   content?: ChatContent;
-  decryptFailed?: boolean;
 };
-type HistoryResponse = { ok: boolean; messages?: EncryptedMessage[]; error?: string };
+type HistoryResponse = { ok: boolean; messages?: ChatMessage[]; error?: string };
 type SendResponse = { ok: boolean; id?: string; duplicate?: boolean; error?: string };
 
 const CHAT_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']);
@@ -64,13 +56,18 @@ function parseChatContent(value: string): ChatContent {
       };
     }
   } catch {
-    // Backward-compatible legacy encrypted text messages are still readable.
+    // Plain string message (older format or a legacy note) — show it as text.
   }
   return { v: 1, type: 'text', text: value };
 }
 
 function serializeChatContent(content: ChatContent) {
   return JSON.stringify(content);
+}
+
+function hydrate(message: ChatMessage): ChatMessage {
+  const raw = readMessageText(message);
+  return { ...message, content: parseChatContent(raw) };
 }
 
 function inferChatMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime | null {
@@ -114,35 +111,36 @@ function ChatMedia({ content }: { content: Extract<ChatContent, { type: 'media' 
   );
 }
 
-export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { contact: Contact; onBack: () => void; onLinkPhone?: () => void }) {
+export function DirectConversationScreen({ contact, onBack }: { contact: Contact; onBack: () => void; onLinkPhone?: () => void }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [conversationId, setConversationId] = useState('');
-  const [history, setHistory] = useState<EncryptedMessage[]>([]);
+  const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
-  const [e2eeReady, setE2eeReady] = useState(false);
+  const deviceIdRef = useRef('');
   const scrollRef = useRef<ScrollView>(null);
-  const canSend = useMemo(() => !!socket && !!conversationId && !!currentUserId && e2eeReady && !sending, [socket, conversationId, currentUserId, e2eeReady, sending]);
+  const canSend = useMemo(
+    () => !!socket && !!conversationId && !!currentUserId && !!deviceIdRef.current && !sending,
+    [socket, conversationId, currentUserId, sending],
+  );
 
   useEffect(() => {
     let active = true;
     let clientRef: Socket | null = null;
-    let messageHandler: ((message: EncryptedMessage) => void) | null = null;
+    let messageHandler: ((message: ChatMessage) => void) | null = null;
     let receiptHandler: ((receipt: { messageId?: string; state?: ReceiptState }) => void) | null = null;
     let connectHandler: (() => void) | null = null;
     let disconnectHandler: (() => void) | null = null;
 
-    void Promise.all([getRealtimeSocket(), getAuthenticatedUserId(), getKssengerE2eeStatus()]).then(async ([client, userId, e2ee]) => {
+    void Promise.all([getRealtimeSocket(), getAuthenticatedUserId()]).then(async ([client, userId]) => {
       if (!active) return;
       clientRef = client;
       setSocket(client);
       setCurrentUserId(userId);
-      const ready = canUnlockPrivateComposer(e2ee);
-      setE2eeReady(ready);
-      if (ready) await ensureLocalSignalDevice(userId);
+      deviceIdRef.current = await ensureChatDevice(userId);
 
       const { data: privacy } = await getBackend().from('privacy_settings').select('read_receipts').eq('user_id', userId).maybeSingle();
       const receiptState: ReceiptState = (privacy as { read_receipts?: boolean } | null)?.read_receipts === false ? 'delivered' : 'read';
@@ -151,28 +149,8 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
       const id = direct.conversationId;
       setConversationId(id);
 
-      const decryptMessage = async (message: EncryptedMessage): Promise<EncryptedMessage> => {
-        if (message.senderUserId === userId) {
-          if (message.plaintext) return { ...message, content: message.content ?? parseChatContent(message.plaintext) };
-          try {
-            const localPlaintext = await loadLocalMessage(userId, message.id);
-            return localPlaintext ? { ...message, plaintext: localPlaintext, content: parseChatContent(localPlaintext) } : message;
-          } catch {
-            return message;
-          }
-        }
-        if (!ready) return message;
-        if (message.algorithm !== 'signal-libsignal-multidevice-v1' || !message.ciphertext || !message.senderDeviceId) return { ...message, decryptFailed: true };
-        try {
-          const plaintext = await decryptDirectFromContact(userId, message.senderUserId, message.senderDeviceId, message.ciphertext);
-          return { ...message, plaintext, content: parseChatContent(plaintext) };
-        } catch {
-          return { ...message, decryptFailed: true };
-        }
-      };
-
-      const acknowledge = async (messages: EncryptedMessage[]) => {
-        await Promise.allSettled(messages.filter((message) => message.senderUserId !== userId && !message.decryptFailed).map((message) => emitAck(client, 'message:receipt', {
+      const acknowledge = async (messages: ChatMessage[]) => {
+        await Promise.allSettled(messages.filter((message) => message.senderUserId !== userId).map((message) => emitAck(client, 'message:receipt', {
           conversationId: id, messageId: message.id, state: receiptState,
         })));
       };
@@ -182,7 +160,7 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
         if (!joined.ok) throw new Error('DIRECT_JOIN_FAILED');
         const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
         if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
-        const loaded = await Promise.all((response.messages ?? []).map(decryptMessage));
+        const loaded = (response.messages ?? []).map(hydrate);
         if (active) setHistory(loaded);
         await acknowledge(loaded);
       };
@@ -190,13 +168,12 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
       await syncConversation();
       messageHandler = (message) => {
         if (message.conversationId !== id) return;
-        void decryptMessage(message).then((resolved) => {
-          if (!active) return;
-          setHistory((items) => items.some((item) => item.id === resolved.id) ? items : [...items, resolved]);
-          if (resolved.senderUserId !== userId && !resolved.decryptFailed) {
-            void emitAck(client, 'message:receipt', { conversationId: id, messageId: resolved.id, state: receiptState }).catch(() => undefined);
-          }
-        });
+        const resolved = hydrate(message);
+        if (!active) return;
+        setHistory((items) => items.some((item) => item.id === resolved.id) ? items : [...items, resolved]);
+        if (resolved.senderUserId !== userId) {
+          void emitAck(client, 'message:receipt', { conversationId: id, messageId: resolved.id, state: receiptState }).catch(() => undefined);
+        }
       };
       receiptHandler = (receipt) => {
         if (!receipt.messageId || !receipt.state) return;
@@ -205,14 +182,13 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
       connectHandler = () => {
         if (!active) return;
         setNotice('Connexion rétablie · resynchronisation…');
-        void syncConversation().then(() => { if (active) setNotice('Reconnecté · conversation resynchronisée.'); }).catch(() => { if (active) setNotice('Connexion rétablie, resynchronisation à retenter.'); });
+        void syncConversation().then(() => { if (active) setNotice(''); }).catch(() => { if (active) setNotice('Connexion rétablie, resynchronisation à retenter.'); });
       };
-      disconnectHandler = () => { if (active) setNotice('Hors ligne · aucun envoi fantôme ne sera mis en attente.'); };
+      disconnectHandler = () => { if (active) setNotice('Hors ligne · les messages partiront à la reconnexion.'); };
       client.on('message:new', messageHandler);
       client.on('message:receipt', receiptHandler);
       client.on('connect', connectHandler);
       client.on('disconnect', disconnectHandler);
-      if (active) setNotice(ready ? '🔐 libsignal actif · clés privées protégées sur cet appareil.' : 'Le chat reste verrouillé : le contrôle natif E2EE de cet appareil n’est pas validé.');
     }).catch(() => { if (active) setNotice('Impossible d’ouvrir cette conversation pour le moment.'); }).finally(() => { if (active) setLoading(false); });
 
     return () => {
@@ -235,23 +211,23 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
   const sendContent = async (content: ChatContent) => {
     if (!canSend || !socket) return;
     setSending(true);
-    setNotice('Chiffrement sur cet appareil…');
+    setNotice('');
     try {
-      const plaintext = serializeChatContent(content);
-      const encrypted = await encryptDirectForContact(currentUserId, contact.id, plaintext);
-      const clientMessageId = await newEncryptedMessageId();
+      const payload = serializeChatContent(content);
+      const { algorithm, ciphertext } = encodePlaintext(payload);
+      const clientMessageId = Crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const response = await emitAck<SendResponse>(socket, 'message:send', { clientMessageId, conversationId, senderDeviceId: encrypted.senderDeviceId, algorithm: encrypted.algorithm, ciphertext: encrypted.ciphertext, createdAt });
+      const response = await emitAck<SendResponse>(socket, 'message:send', {
+        clientMessageId, conversationId, senderDeviceId: deviceIdRef.current, algorithm, ciphertext, createdAt,
+      });
       if (!response.ok || !response.id) throw new Error(response.error ?? 'MESSAGE_SEND_FAILED');
-      await storeLocalMessage(currentUserId, response.id, plaintext).catch(() => undefined);
       setComposer('');
       setHistory((items) => items.some((item) => item.id === response.id) ? items : [...items, {
-        id: response.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: encrypted.senderDeviceId,
-        createdAt, algorithm: encrypted.algorithm, ciphertext: encrypted.ciphertext, conversationId, plaintext, content,
+        id: response.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: deviceIdRef.current,
+        createdAt, algorithm, ciphertext, conversationId, content,
       }]);
-      setNotice(content.type === 'media' ? '🔐 Média privé chiffré et envoyé.' : '🔐 Message chiffré et envoyé.');
     } catch {
-      setNotice('Envoi chiffré impossible. Aucun contenu en clair n’a été envoyé.');
+      setNotice('Message non envoyé. Réessaie.');
     } finally { setSending(false); }
   };
 
@@ -272,7 +248,7 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
       const asset = picked.assets[0];
       const mimeType = asset ? inferChatMime(asset) : null;
       if (!asset?.uri || !mimeType || (asset.fileSize !== undefined && asset.fileSize > CHAT_MAX_BYTES)) throw new Error('CHAT_MEDIA_UNSUPPORTED');
-      setNotice('Upload privé du média…');
+      setNotice('Envoi du média…');
       const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType, byteSize: asset.fileSize ?? undefined, purpose: 'chat', conversationId });
       setSending(false);
       await sendContent({ v: 1, type: 'media', mediaId, mimeType, ...(composer.trim() ? { caption: composer.trim().slice(0, 500) } : {}) });
@@ -290,7 +266,7 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
         <View style={styles.flex}><Text style={[styles.name, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
         <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
-      <View style={styles.security}><Text style={styles.securityText}>{e2eeReady ? '🔐 Signal/libsignal · texte et références média chiffrés de bout en bout' : '🛡️ Envoi verrouillé tant que le contrôle E2EE natif n’est pas validé'}</Text></View>
+      <View style={styles.security}><Text style={styles.securityText}>🔒 Connexion sécurisée (TLS) · le chiffrement de bout en bout arrive bientôt</Text></View>
       {loading ? <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Ouverture de la conversation…</Text></View> : (
         <ScrollView
           ref={scrollRef}
@@ -301,28 +277,19 @@ export function DirectConversationScreen({ contact, onBack, onLinkPhone }: { con
           {!!notice && <Text style={styles.notice}>{notice}</Text>}
           {!history.length ? <View style={styles.empty}><Text style={styles.emptyIcon}>💬</Text><Text style={styles.emptyTitle}>Conversation prête</Text><Text style={styles.muted}>Envoie ton premier message ou média.</Text></View> : history.map((message) => {
             const mine = message.senderUserId === currentUserId;
-            const content = message.content ?? (message.plaintext ? parseChatContent(message.plaintext) : undefined);
+            const content = message.content ?? parseChatContent(readMessageText(message));
             return <View key={message.id} style={[styles.bubble, mine ? styles.mine : styles.theirs]}>
-              {content?.type === 'media' ? <ChatMedia content={content} /> : <Text style={[styles.bodyText, mine && styles.bodyTextMine]}>{content?.type === 'text' ? content.text : (message.decryptFailed ? '⚠️ Impossible de déchiffrer ce message sur cet appareil.' : '🔐 Message chiffré')}</Text>}
+              {content.type === 'media' ? <ChatMedia content={content} /> : <Text style={[styles.bodyText, mine && styles.bodyTextMine]}>{content.text}</Text>}
               <Text style={[styles.messageMeta, mine && styles.messageMetaMine]}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
             </View>;
           })}
         </ScrollView>
       )}
-      {e2eeReady ? <View style={styles.composer}>
+      <View style={styles.composer}>
         <TouchableOpacity disabled={!canSend} onPress={() => void pickAndSendMedia()} style={[styles.attach, !canSend && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo"><Text style={styles.attachText}>＋</Text></TouchableOpacity>
-        <TextInput style={styles.input} value={composer} onChangeText={setComposer} placeholder="Écrire un message…" maxLength={12000} multiline editable={!sending} />
-        <TouchableOpacity disabled={!composer.trim() || sending} onPress={() => void sendMessage()} style={[styles.send, (!composer.trim() || sending) && styles.disabled]}>{sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
-      </View> : (
-        <View style={styles.composerLocked}>
-          <Text style={styles.lock}>🔒</Text>
-          <View style={styles.flex}>
-            <Text style={styles.lockTitle}>Messagerie chiffrée verrouillée</Text>
-            <Text style={styles.muted}>{onLinkPhone ? 'Lie ce navigateur à ton téléphone pour discuter : il chiffre pour toi.' : 'Aucun plaintext ne sera envoyé pour contourner la sécurité.'}</Text>
-          </View>
-          {onLinkPhone && <TouchableOpacity style={styles.linkCta} onPress={onLinkPhone}><Text style={styles.linkCtaText}>Lier mon téléphone</Text></TouchableOpacity>}
-        </View>
-      )}
+        <TextInput style={styles.input} value={composer} onChangeText={setComposer} placeholder="Écrire un message…" placeholderTextColor={palette.inkFaint} maxLength={12000} multiline editable={!sending} />
+        <TouchableOpacity disabled={!composer.trim() || sending || !canSend} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSend) && styles.disabled]}>{sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -350,6 +317,4 @@ const styles = StyleSheet.create({
   send: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, ...elevation.hairline },
   attach: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline }, attachText: { color: palette.azureDeep, fontSize: 24, lineHeight: 26, fontWeight: '700' },
   disabled: { opacity: 0.4 }, sendText: { color: palette.white, fontWeight: '900', fontSize: 18 },
-  composerLocked: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline }, lock: { fontSize: 20 }, lockTitle: { ...typo.name, fontSize: 13 },
-  linkCta: { backgroundColor: palette.azure, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, linkCtaText: { color: palette.white, fontWeight: '900', fontSize: 12 },
 });

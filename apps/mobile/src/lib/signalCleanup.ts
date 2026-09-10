@@ -10,17 +10,16 @@ const bridge = requireOptionalNativeModule<SignalCleanupBridge>('KssengerSignalB
 
 /**
  * Capture the authenticated account's server device IDs before provider-side
- * deletion removes those rows. The returned function performs only local
- * Android Keystore erasure and is intentionally called after the server has
- * acknowledged permanent account deletion.
+ * deletion removes those rows, then erase any local native key material after
+ * the server acknowledges deletion.
  *
- * Android fails closed before deletion if the device inventory/native bridge
- * cannot be obtained: a successful account deletion must not knowingly leave
- * recoverable Signal identity/session material on this phone.
+ * Native E2EE (libsignal) is not shipped right now, so on a build without the
+ * native bridge there is no local identity/session material to purge and this
+ * is a no-op. When a vetted native bridge returns, Android fails closed if the
+ * device inventory cannot be obtained.
  */
 export async function prepareLocalSignalAccountPurge(userId: string): Promise<() => Promise<void>> {
-  if (Platform.OS !== 'android') return async () => undefined;
-  if (!bridge) throw new Error('KSSENGER_SIGNAL_PURGE_BRIDGE_MISSING');
+  if (Platform.OS !== 'android' || !bridge) return async () => undefined;
 
   const { data, error } = await getBackend()
     .from('devices')

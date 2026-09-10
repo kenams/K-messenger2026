@@ -10,17 +10,9 @@ const cleanupSource = readFileSync(
   resolve(process.cwd(), '../mobile/src/lib/signalCleanup.ts'),
   'utf8',
 );
-const nativeModule = readFileSync(
-  resolve(process.cwd(), '../mobile/modules/kssenger-signal/android/src/main/java/com/kahdigital/kssenger/signal/KssengerSignalModule.kt'),
-  'utf8',
-);
-const blobStore = readFileSync(
-  resolve(process.cwd(), '../mobile/modules/kssenger-signal/android/src/main/java/com/kahdigital/kssenger/signal/KeystoreBlobStore.kt'),
-  'utf8',
-);
 
-describe('account deletion local Signal state purge', () => {
-  it('captures the device inventory before provider deletion and purges only after server success', () => {
+describe('account deletion local state purge', () => {
+  it('deletes on the server first, then purges local state, then signs out — in that order', () => {
     const prepare = accountScreen.indexOf('prepareLocalSignalAccountPurge(profile.id)');
     const deletion = accountScreen.indexOf("emitAck<DeleteAck>(socket, 'account:delete'");
     const ack = accountScreen.indexOf('if (!response.ok)');
@@ -34,16 +26,15 @@ describe('account deletion local Signal state purge', () => {
     expect(signOut).toBeGreaterThan(purge);
   });
 
-  it('fails closed on Android if the native purge bridge or device lookup is unavailable', () => {
-    expect(cleanupSource).toContain("if (!bridge) throw new Error('KSSENGER_SIGNAL_PURGE_BRIDGE_MISSING')");
-    expect(cleanupSource).toContain("throw new Error('KSSENGER_SIGNAL_PURGE_DEVICE_LOOKUP_FAILED')");
-    expect(cleanupSource).toContain('await bridge.clearDeviceState(deviceId)');
+  it('local purge is a safe no-op on builds without a native E2EE bridge', () => {
+    // libsignal was removed (crashed the APK). Account deletion must not throw
+    // just because there is no native key material to erase.
+    expect(cleanupSource).toContain("if (Platform.OS !== 'android' || !bridge) return async () => undefined;");
+    expect(cleanupSource).not.toContain("throw new Error('KSSENGER_SIGNAL_PURGE_BRIDGE_MISSING')");
   });
 
-  it('destroys both encrypted records and the Android Keystore wrapping key', () => {
-    expect(nativeModule).toContain('AsyncFunction("clearDeviceState")');
-    expect(nativeModule).toContain('.clearAndDestroyKey()');
-    expect(blobStore).toContain('preferences.edit().clear().commit()');
-    expect(blobStore).toContain('keyStore.deleteEntry(keyAlias)');
+  it('still fails closed on device lookup errors when a native bridge is present', () => {
+    expect(cleanupSource).toContain("throw new Error('KSSENGER_SIGNAL_PURGE_DEVICE_LOOKUP_FAILED')");
+    expect(cleanupSource).toContain('await bridge.clearDeviceState(deviceId)');
   });
 });

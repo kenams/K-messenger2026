@@ -7,9 +7,9 @@ const mobilePackage = JSON.parse(fs.readFileSync(new URL('../apps/mobile/package
 const serverPackage = JSON.parse(fs.readFileSync(new URL('../apps/server/package.json', import.meta.url), 'utf8'));
 const envExample = fs.readFileSync(new URL('../apps/mobile/.env.example', import.meta.url), 'utf8');
 const serverConfig = fs.readFileSync(new URL('../apps/server/src/config.ts', import.meta.url), 'utf8');
-const androidConfigPlugin = fs.readFileSync(new URL('../apps/mobile/plugins/withKssengerLibsignal.js', import.meta.url), 'utf8');
-const signalModule = JSON.parse(fs.readFileSync(new URL('../apps/mobile/modules/kssenger-signal/expo-module.config.json', import.meta.url), 'utf8'));
-const iosSignalModuleUrl = new URL('../apps/mobile/modules/kssenger-signal/ios', import.meta.url);
+const androidSecurityPlugin = fs.readFileSync(new URL('../apps/mobile/plugins/withKssengerAndroidSecurity.js', import.meta.url), 'utf8');
+const nativeSignalModuleUrl = new URL('../apps/mobile/modules/kssenger-signal', import.meta.url);
+const libsignalPluginUrl = new URL('../apps/mobile/plugins/withKssengerLibsignal.js', import.meta.url);
 
 const EXPECTED = Object.freeze({
   appName: 'K-ssenger',
@@ -75,7 +75,7 @@ check('Android background location is explicitly blocked for K-MAP',
   Array.isArray(expo.android?.blockedPermissions)
   && expo.android.blockedPermissions.includes('android.permission.ACCESS_BACKGROUND_LOCATION'),
   JSON.stringify(expo.android?.blockedPermissions ?? null));
-check('Android native plugin forbids cleartext traffic', androidConfigPlugin.includes("application.$['android:usesCleartextTraffic'] = 'false'"));
+check('Android security plugin forbids cleartext traffic', androidSecurityPlugin.includes("application.$['android:usesCleartextTraffic'] = 'false'"));
 
 const productionEnv = eas?.build?.production?.env ?? {};
 check('production Neon Auth endpoint is dedicated K-ssenger', productionEnv.EXPO_PUBLIC_NEON_AUTH_URL === EXPECTED.authUrl, String(productionEnv.EXPO_PUBLIC_NEON_AUTH_URL ?? 'missing'));
@@ -111,9 +111,14 @@ for (const [key, value] of Object.entries(productionEnv)) {
   check(`${key} is HTTPS without URL credentials`, !!parsed && parsed.protocol === 'https:' && !parsed.username && !parsed.password, String(value));
 }
 
-const signalPlatforms = Array.isArray(signalModule?.platforms) ? signalModule.platforms : [];
-check('native Signal module remains Android-only until vetted iOS parity lands', signalPlatforms.length === 1 && signalPlatforms[0] === 'android', JSON.stringify(signalPlatforms));
-check('no unvalidated iOS Signal bridge is shipped', !fs.existsSync(iosSignalModuleUrl));
+// E2EE (libsignal) was removed until a vetted implementation lands: the native
+// module crashed the APK on launch and was never usable. Chat now travels in
+// clear over TLS with an honest in-app banner. These checks lock that in so no
+// unvetted native crypto sneaks back into a release build.
+check('no native Signal module ships (crashed the APK, unusable)', !fs.existsSync(nativeSignalModuleUrl));
+check('no libsignal config plugin ships', !fs.existsSync(libsignalPluginUrl));
+check('app.json does not reference the removed libsignal plugin', !(app.expo.plugins ?? []).some((p) => String(Array.isArray(p) ? p[0] : p).includes('withKssengerLibsignal')));
+check('chat transport is the declared plaintext-over-TLS module', fs.existsSync(new URL('../apps/mobile/src/lib/chatTransport.ts', import.meta.url)));
 
 if (failed) throw new Error(`KSSENGER_RELEASE_CANDIDATE_STATIC_GATE_FAILED:${failed}`);
 console.log('KSSENGER_RELEASE_CANDIDATE_STATIC_GATE_PASS=true');

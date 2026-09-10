@@ -24,15 +24,18 @@ describe('private chat media client contract', () => {
     expect(directChatSource).toContain("type: 'media'; mediaId: string; mimeType: SupportedMediaMime");
   });
 
-  it('sends only the media reference through the Signal message contract', () => {
+  it('sends only the media reference (never bytes) through the message contract', () => {
     expect(directChatSource).toContain('serializeChatContent(content)');
-    expect(directChatSource).toContain('encryptDirectForContact(currentUserId, contact.id, plaintext)');
+    expect(directChatSource).toContain('encodePlaintext(payload)');
     expect(directChatSource).toContain('mediaId, mimeType');
+    // the raw upload bytes must never be inlined into the wire message
     expect(directChatSource).not.toMatch(/uploadLocalMedia\([\s\S]*?ciphertext\s*:/);
   });
 
-  it('keeps the UI claim scoped to encrypted text and media references', () => {
-    expect(directChatSource).toContain('texte et références média chiffrés de bout en bout');
+  it('makes an honest, non-overstated transport claim in the UI', () => {
+    // E2EE is not shipped; the banner must say TLS-only, not "bout en bout".
+    expect(directChatSource).toContain('Connexion sécurisée (TLS)');
+    expect(directChatSource).not.toContain('chiffrés de bout en bout');
   });
 
   it('fails closed on unsafe or expired presigned media requests before fetch', () => {
