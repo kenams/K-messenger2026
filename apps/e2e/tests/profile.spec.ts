@@ -25,16 +25,18 @@ test.describe('Profile & settings persist', () => {
 
     await page.getByRole('button', { name: 'Couleur #7A5BFF' }).click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
-    await expect(page.getByText('Profil enregistré.')).toBeVisible();
+    // saving returns to the main shell
+    await expect(page.getByTestId('tab-Contacts')).toBeVisible({ timeout: 20_000 });
 
     await page.reload();
+    await openTab(page, 'Moi');
     await page.getByTestId('me-Profil').click();
     await expect(page.getByRole('button', { name: 'Couleur #7A5BFF' })).toContainText('✓', { timeout: 20_000 });
 
     // restore the default azure so the suite is idempotent
     await page.getByRole('button', { name: 'Couleur #1C6FD6' }).click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
-    await expect(page.getByText('Profil enregistré.')).toBeVisible();
+    await expect(page.getByTestId('tab-Contacts')).toBeVisible({ timeout: 20_000 });
   });
 
   test('a privacy toggle saves', async ({ page }) => {
