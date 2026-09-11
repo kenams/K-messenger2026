@@ -141,7 +141,6 @@ jobs:
             apps/mobile/android/app/build/outputs/apk/release/app-release.apk.sha256
           if-no-files-found: error
           retention-days: 7
- /tmp/kssenger-js-bundle-entries.txt
 
       - name: Inspect final APK libsignal resources
         working-directory: apps/mobile/android
