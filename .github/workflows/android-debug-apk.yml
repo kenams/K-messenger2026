@@ -103,7 +103,8 @@ jobs:
         run: |
           set -euo pipefail
           unzip -Z1 app/build/outputs/apk/release/app-release.apk > /tmp/kssenger-js-bundle-entries.txt
-          grep -Eq '^assets/(index\\.android\\.bundle|.*\\.bundle)
+          grep -F 'assets/index.android.bundle' /tmp/kssenger-js-bundle-entries.txt
+
       - name: Inspect final APK libsignal resources
         working-directory: apps/mobile/android
         run: |
