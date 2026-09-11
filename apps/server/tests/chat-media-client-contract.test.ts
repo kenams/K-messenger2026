@@ -33,9 +33,10 @@ describe('private chat media client contract', () => {
   });
 
   it('makes an honest, non-overstated transport claim in the UI', () => {
-    // E2EE is not shipped; the banner must say TLS-only, not "bout en bout".
-    expect(directChatSource).toContain('Connexion sécurisée (TLS)');
-    expect(directChatSource).not.toContain('chiffrés de bout en bout');
+    // E2EE is not shipped; the banner must say TLS-only, never claim E2EE is active.
+    expect(directChatSource).toContain('Connexion sécurisée.');
+    expect(directChatSource).toContain('sera ajouté dans une prochaine version');
+    expect(directChatSource).not.toMatch(/chiffrement de bout en bout actif|Signal sécurisé|chiffrés? de bout en bout/i);
   });
 
   it('fails closed on unsafe or expired presigned media requests before fetch', () => {

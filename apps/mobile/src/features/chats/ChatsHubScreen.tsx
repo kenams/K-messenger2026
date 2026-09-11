@@ -166,7 +166,7 @@ export function ChatsHubScreen() {
                 <View style={styles.flex}>
                   <Text style={styles.name} numberOfLines={1}>{peer.nickname || peer.displayName}</Text>
                   <Text style={styles.preview} numberOfLines={1}>
-                    {conversation.lastMessage ? '🔒 Message chiffré' : 'Nouvelle conversation'}
+                    {conversation.lastMessage ? 'Nouveaux messages' : 'Nouvelle conversation'}
                   </Text>
                   <Text style={styles.handle} numberOfLines={1}>@{peer.username}</Text>
                 </View>
@@ -181,7 +181,7 @@ export function ChatsHubScreen() {
             <EmptyState
               icon="💬"
               title="Aucune conversation privée"
-              hint="Ouvre un contact depuis ta liste pour démarrer une discussion chiffrée."
+              hint="Ouvre un contact depuis ta liste pour démarrer une discussion."
             />
           )}
         </ScrollView>

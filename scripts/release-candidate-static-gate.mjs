@@ -15,7 +15,7 @@ const EXPECTED = Object.freeze({
   appName: 'K-ssenger',
   slug: 'k-ssenger',
   scheme: 'kssenger',
-  version: '1.0.0',
+  version: '2.0.0-beta.1',
   bundleIdentifier: 'com.kahdigital.kssenger',
   androidPackage: 'com.kahdigital.kssenger',
   authUrl: 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth',
@@ -46,7 +46,7 @@ const expo = app?.expo ?? {};
 check('release app name is K-ssenger', expo.name === EXPECTED.appName, String(expo.name ?? 'missing'));
 check('release slug is stable', expo.slug === EXPECTED.slug, String(expo.slug ?? 'missing'));
 check('deep-link scheme is stable', expo.scheme === EXPECTED.scheme, String(expo.scheme ?? 'missing'));
-check('mobile release version is 1.0.0', expo.version === EXPECTED.version, String(expo.version ?? 'missing'));
+check('mobile release version matches expected', expo.version === EXPECTED.version, String(expo.version ?? 'missing'));
 check('mobile release runtime is explicitly Hermes', expo.jsEngine === 'hermes', String(expo.jsEngine ?? 'missing'));
 check('root package version matches release', rootPackage.version === EXPECTED.version, String(rootPackage.version ?? 'missing'));
 check('mobile package version matches release', mobilePackage.version === EXPECTED.version, String(mobilePackage.version ?? 'missing'));

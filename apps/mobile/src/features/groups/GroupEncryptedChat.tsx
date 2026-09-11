@@ -224,7 +224,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
   return (
     <View style={styles.wrap}>
       <View style={styles.security}>
-        <Text style={styles.securityText}>🔒 Connexion sécurisée (TLS) · chiffrement de bout en bout bientôt</Text>
+        <Text style={styles.securityText}>🔒 Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version.</Text>
       </View>
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
       {messages.length === 0 ? <Text style={styles.empty}>Aucun message. Lance la conversation du groupe.</Text> : messages.map((message) => {

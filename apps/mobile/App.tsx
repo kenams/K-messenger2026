@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import Constants from 'expo-constants';
 import { FeedScreen } from './src/features/feed/FeedScreen';
 import { MomentsScreen } from './src/features/moments/MomentsScreen';
 import { KMapScreen } from './src/features/map/KMapScreen';
@@ -11,10 +12,6 @@ import { GroupsScreen } from './src/features/groups/GroupsScreen';
 import { AccountDataScreen } from './src/features/profile/AccountDataScreen';
 import { PrivacySettingsScreen } from './src/features/profile/PrivacySettingsScreen';
 import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
-import { WebLinkScreen } from './src/features/devicelink/WebLinkScreen';
-import { LinkedDevicesScreen } from './src/features/devicelink/LinkedDevicesScreen';
-import { WebRelayConversationScreen } from './src/features/devicelink/WebRelayConversationScreen';
-import { useDeviceLinkRelay, useWebLink } from './src/lib/deviceLinkClient';
 import type { MyProfile } from './src/features/profile/useMyProfile';
 import { useNowPlayingSync } from './src/features/profile/useNowPlayingSync';
 import { unregisterPushForSignOut } from './src/features/push/usePushRegistration';
@@ -25,6 +22,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, useAndroidBack } from './src/theme/components';
 import { accentOf } from './src/theme/accent';
+
+/** "K-ssenger V2 Beta · build 2" — never claims "Production"/"Stable Release". */
+function appVersionLabel(): string {
+  const version = Constants.expoConfig?.version ?? '2.0.0-beta.1';
+  const build = Platform.OS === 'android'
+    ? Constants.expoConfig?.android?.versionCode
+    : Constants.expoConfig?.ios?.buildNumber;
+  const isBeta = /beta/i.test(version);
+  return `K-ssenger V2 ${isBeta ? 'Beta' : ''} · ${version}${build ? ` · build ${build}` : ''}`.replace(/\s+/g, ' ').trim();
+}
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
 
@@ -75,10 +82,6 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const [accountData, setAccountData] = useState(false);
   const [privacySettings, setPrivacySettings] = useState(false);
   const [groupsScreen, setGroupsScreen] = useState(false);
-  const [linkedDevices, setLinkedDevices] = useState(false);
-  const [webLinkScreen, setWebLinkScreen] = useState(false);
-  const webLink = useWebLink();
-  useDeviceLinkRelay(profile.id);
   useNowPlayingSync(profile, onProfileChanged);
   const [userAge, setUserAge] = useState<number | null>(null);
   const [ageLoading, setAgeLoading] = useState(true);
@@ -89,12 +92,10 @@ export default function App({ profile, onProfileChanged }: AppProps) {
 
   // One place to dismiss whatever secondary screen sits above the tab shell.
   const overlayOpen =
-    !!selected || webLinkScreen || linkedDevices || editingProfile || accountData || privacySettings || groupsScreen;
+    !!selected || editingProfile || accountData || privacySettings || groupsScreen;
 
   const closeOverlays = useCallback(() => {
     setSelected(null);
-    setWebLinkScreen(false);
-    setLinkedDevices(false);
     setEditingProfile(false);
     setAccountData(false);
     setPrivacySettings(false);
@@ -243,8 +244,6 @@ export default function App({ profile, onProfileChanged }: AppProps) {
       </WebShell>
     );
   }
-  if (webLinkScreen) return <WebShell><WebLinkScreen webLink={webLink} onBack={() => setWebLinkScreen(false)} /></WebShell>;
-  if (linkedDevices) return <WebShell><LinkedDevicesScreen userId={profile.id} onBack={() => setLinkedDevices(false)} /></WebShell>;
   if (editingProfile) return <WebShell><ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={() => setEditingProfile(false)} /></WebShell>;
   if (accountData) return <WebShell><AccountDataScreen profile={profile} onBack={() => setAccountData(false)} /></WebShell>;
   if (privacySettings) return <WebShell><PrivacySettingsScreen userId={profile.id} onBack={() => setPrivacySettings(false)} /></WebShell>;
@@ -269,7 +268,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
         {tab === 'feed' && <FeedScreen userAge={userAge} />}
         {tab === 'map' && <KMapScreen />}
         {tab === 'moments' && <MomentsScreen />}
-        {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} onLink={() => (Platform.OS === 'web' ? setWebLinkScreen(true) : setLinkedDevices(true))} webLinked={webLink.status === 'linked'} />}
+        {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
         <View style={styles.tabs}>
           <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
           <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
@@ -333,7 +332,7 @@ function ProfileHeader({ profile, onEdit, onNowPlaying }: { profile: MyProfile; 
   );
 }
 
-function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups, onNowPlaying, onLink, webLinked }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void; onNowPlaying: () => void; onLink: () => void; webLinked: boolean }) {
+function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups, onNowPlaying }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void; onNowPlaying: () => void }) {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
 
@@ -373,12 +372,12 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
       </TouchableOpacity>
       {!!profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>}
       <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes" onPress={onGroups}/><ProfileButton icon="🔒" label="Vie privée" onPress={onPrivacy}/></View>
-      <View style={[styles.profileGrid, { marginTop: spacing.sm }]}><ProfileButton icon={Platform.OS === 'web' ? (webLinked ? '🔗' : '📱') : '🖥️'} label={Platform.OS === 'web' ? (webLinked ? 'Téléphone lié' : 'Lier mon tel') : 'Appareils liés'} onPress={onLink}/></View>
       <TouchableOpacity disabled={signingOut} style={[styles.signOutButton, signingOut && styles.disabled]} onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Se déconnecter de K-ssenger">
         {signingOut ? <ActivityIndicator /> : <Text style={styles.signOutText}>Se déconnecter</Text>}
       </TouchableOpacity>
       {!!signOutError && <Text style={styles.error}>{signOutError}</Text>}
       <Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text>
+      <Text style={styles.profileFoot}>{appVersionLabel()}</Text>
     </ScrollView>
   );
 }

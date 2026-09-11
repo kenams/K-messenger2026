@@ -367,7 +367,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         <View style={styles.flex}><Text style={[styles.name, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
         <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
-      <View style={styles.security}><Text style={styles.securityText}>🔒 Connexion sécurisée (TLS) · le chiffrement de bout en bout arrive bientôt</Text></View>
+      <View style={styles.security}><Text style={styles.securityText}>🔒 Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version.</Text></View>
       {loading ? <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Ouverture de la conversation…</Text></View> : (
         <ScrollView
           ref={scrollRef}

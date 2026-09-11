@@ -20,7 +20,7 @@ test('two people can send and receive messages', async ({ browser }) => {
     await openApp(kenams);
     await openTab(kenams, 'Contacts');
     await kenams.getByText(BOTS.lea.name).first().click();
-    await expect(kenams.getByText(/Connexion sécurisée \(TLS\)/)).toBeVisible();
+    await expect(kenams.getByText(/Connexion sécurisée\./)).toBeVisible();
 
     await kenams.getByPlaceholder('Écrire un message…').fill(fromKenams);
     await kenams.getByRole('button', { name: 'Envoyer le message' }).click();

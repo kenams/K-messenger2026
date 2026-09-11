@@ -143,7 +143,7 @@ export function AuthScreen() {
             <BrandMark />
             <Text style={styles.kicker}>K · SSENGER</Text>
             <Text style={styles.title}>{mode === 'login' ? 'Content de te revoir' : 'Rejoins K-ssenger'}</Text>
-            <Text style={styles.lede}>La messagerie qui remet tes contacts au centre. Présence en direct, wizz, moments — chiffré de bout en bout.</Text>
+            <Text style={styles.lede}>La messagerie qui remet tes contacts au centre. Présence en direct, wizz, moments — connexion sécurisée.</Text>
 
             <View style={styles.segment}>
               {(['login', 'signup'] as Mode[]).map((m) => (
@@ -231,9 +231,9 @@ export function AuthScreen() {
             </View>
 
             <View style={styles.trust}>
-              <Text style={styles.trustLock}>🔐</Text>
+              <Text style={styles.trustLock}>🔒</Text>
               <Text style={styles.trustText}>
-                Chiffrement de bout en bout (Signal). Aucun secret serveur n’est embarqué dans l’app.
+                Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version. Aucun secret serveur n’est embarqué dans l’app.
               </Text>
             </View>
           </View>
