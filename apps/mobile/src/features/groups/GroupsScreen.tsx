@@ -117,13 +117,19 @@ export function GroupsScreen() {
       if (!receipt.messageId || !receipt.state) return;
       setHistory((items) => items.map((item) => item.id === receipt.messageId ? { ...item, receiptState: receipt.state } : item));
     };
+    const onReaction = (payload: { messageId?: string; reactions?: GroupEncryptedMessage['reactions'] }) => {
+      if (!payload.messageId) return;
+      setHistory((items) => items.map((item) => item.id === payload.messageId ? { ...item, reactions: payload.reactions ?? [] } : item));
+    };
     const onUpdated = () => void loadData(socket).catch(() => undefined);
     socket.on('message:new', onMessage);
     socket.on('message:receipt', onReceipt);
+    socket.on('message:reaction', onReaction);
     socket.on('group:updated', onUpdated);
     return () => {
       socket.off('message:new', onMessage);
       socket.off('message:receipt', onReceipt);
+      socket.off('message:reaction', onReaction);
       socket.off('group:updated', onUpdated);
     };
   }, [socket, selectedGroup?.id, currentUserId]);
@@ -220,6 +226,7 @@ export function GroupsScreen() {
           currentUserId={currentUserId}
           memberIds={selectedGroup.members.map((member) => member.userId)}
           messages={history}
+          onReact={(messageId, reactions) => setHistory((items) => items.map((item) => item.id === messageId ? { ...item, reactions } : item))}
         />
 
         <View style={styles.panel}>

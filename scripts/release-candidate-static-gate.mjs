@@ -104,8 +104,11 @@ const forbidden = [
 ];
 check('mobile example env contains no backend secret or Supabase runtime marker', forbidden.every((pattern) => !pattern.test(envExample)));
 
+// Opaque IDs (not URLs) among the EXPO_PUBLIC_ vars — e.g. third-party client IDs.
+const nonUrlPublicEnvKeys = new Set(['EXPO_PUBLIC_SPOTIFY_CLIENT_ID', 'EXPO_PUBLIC_LASTFM_API_KEY']);
+
 for (const [key, value] of Object.entries(productionEnv)) {
-  if (!key.startsWith('EXPO_PUBLIC_')) continue;
+  if (!key.startsWith('EXPO_PUBLIC_') || nonUrlPublicEnvKeys.has(key)) continue;
   let parsed;
   try { parsed = new URL(String(value)); } catch { parsed = null; }
   check(`${key} is HTTPS without URL credentials`, !!parsed && parsed.protocol === 'https:' && !parsed.username && !parsed.password, String(value));

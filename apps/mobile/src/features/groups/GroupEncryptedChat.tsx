@@ -7,7 +7,7 @@ import { ActivityIndicator, Image, Platform, StyleSheet, Text, TextInput, Toucha
 import type { Socket } from 'socket.io-client';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/chatTransport';
-import { QUICK_REACTIONS, isBigEmoji, isSendKey } from '../../lib/chatExtras';
+import { QUICK_REACTIONS, isBigEmoji, isSendKey, myReaction, summarizeReactions, type MessageReaction } from '../../lib/chatExtras';
 import { EmojiPanel } from '../chats/EmojiPanel';
 import { emitAck } from '../../lib/realtime';
 import { palette, radius, spacing } from '../../theme/tokens';
@@ -22,6 +22,7 @@ export type GroupEncryptedMessage = {
   ciphertext?: string;
   conversationId: string;
   receiptState?: 'delivered' | 'read';
+  reactions?: MessageReaction[];
 };
 
 type GroupContent =
@@ -34,6 +35,7 @@ type Props = {
   currentUserId: string;
   memberIds: string[];
   messages: GroupEncryptedMessage[];
+  onReact?: (messageId: string, reactions: MessageReaction[]) => void;
 };
 
 const GROUP_MEDIA_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']);
@@ -113,11 +115,12 @@ function GroupMedia({ content }: { content: Extract<GroupContent, { type: 'media
   );
 }
 
-export function GroupEncryptedChat({ socket, groupId, currentUserId, messages }: Props) {
+export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, onReact }: Props) {
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
+  const [reactingId, setReactingId] = useState<string | null>(null);
   const deviceIdRef = useRef('');
   const [deviceReady, setDeviceReady] = useState(false);
 
@@ -164,6 +167,20 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages }:
   const sendQuick = async (emoji: string) => {
     if (sending || !deviceReady) return;
     await sendContent({ v: 1, type: 'text', text: emoji });
+  };
+
+  const react = async (message: GroupEncryptedMessage, emoji: string) => {
+    const mine = myReaction(message.reactions, currentUserId);
+    const nextReaction = mine === emoji ? null : emoji;
+    setReactingId(null);
+    try {
+      const res = await emitAck<{ ok: boolean; reactions?: MessageReaction[] }>(socket, 'message:react', {
+        conversationId: groupId, messageId: message.id, reaction: nextReaction,
+      });
+      if (res.ok && res.reactions) onReact?.(message.id, res.reactions);
+    } catch {
+      setNotice('Réaction non enregistrée.');
+    }
   };
 
   const pickAndSendMedia = async () => {
@@ -214,12 +231,44 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages }:
         const mine = message.senderUserId === currentUserId;
         const content = parseGroupContent(readMessageText(message));
         const big = content.type === 'text' && isBigEmoji(content.text);
+        const summary = summarizeReactions(message.reactions, currentUserId);
+        const mineReaction = myReaction(message.reactions, currentUserId);
         return (
-          <View key={message.id} style={[styles.bubble, mine ? styles.mine : styles.theirs, big && styles.bubbleBig]}>
-            {content.type === 'media'
-              ? <GroupMedia content={content} />
-              : <Text style={big ? styles.bigEmoji : styles.body}>{content.text}</Text>}
-            <Text style={styles.meta}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
+          <View key={message.id} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setReactingId((id) => id === message.id ? null : message.id)}
+              style={[styles.bubble, mine ? styles.mine : styles.theirs, big && styles.bubbleBig]}
+            >
+              {content.type === 'media'
+                ? <GroupMedia content={content} />
+                : <Text style={big ? styles.bigEmoji : styles.body}>{content.text}</Text>}
+              <Text style={styles.meta}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
+            </TouchableOpacity>
+            {summary.length > 0 && (
+              <View style={[styles.chips, mine ? styles.chipsMine : styles.chipsTheirs]}>
+                {summary.map((s) => (
+                  <TouchableOpacity key={s.emoji} onPress={() => void react(message, s.emoji)} style={[styles.chip, s.mine && styles.chipMine]}>
+                    <Text style={styles.chipText}>{s.emoji}{s.count > 1 ? ` ${s.count}` : ''}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {reactingId === message.id && (
+              <View style={[styles.reactBar, mine ? styles.chipsMine : styles.chipsTheirs]}>
+                {QUICK_REACTIONS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    onPress={() => void react(message, emoji)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Réagir ${emoji}`}
+                    style={[styles.reactBtn, mineReaction === emoji && styles.reactBtnActive]}
+                  >
+                    <Text style={styles.reactBtnText}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
         );
       })}
@@ -269,8 +318,21 @@ const styles = StyleSheet.create({
   securityText: { color: palette.azureDeep, textAlign: 'center', fontSize: 11, fontWeight: '800' },
   notice: { color: palette.azureDeep, fontWeight: '700', textAlign: 'center', marginBottom: spacing.sm },
   empty: { color: palette.inkSoft, textAlign: 'center', paddingVertical: spacing.lg },
-  bubble: { maxWidth: '84%', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg, marginBottom: spacing.sm },
+  row: { marginBottom: spacing.sm, maxWidth: '86%' },
+  rowMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
+  rowTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
+  bubble: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg },
   bubbleBig: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 2, paddingVertical: 0 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  chipsMine: { justifyContent: 'flex-end' },
+  chipsTheirs: { justifyContent: 'flex-start' },
+  chip: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  chipMine: { backgroundColor: palette.azureSoft, borderColor: palette.azure },
+  chipText: { fontSize: 12, fontWeight: '700', color: palette.inkSoft },
+  reactBar: { flexDirection: 'row', gap: 2, marginTop: 4, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.pill, padding: 3 },
+  reactBtn: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  reactBtnActive: { backgroundColor: palette.azureSoft },
+  reactBtnText: { fontSize: 17 },
   mine: { alignSelf: 'flex-end', backgroundColor: palette.azureSoft, borderBottomRightRadius: 5 },
   theirs: { alignSelf: 'flex-start', backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderBottomLeftRadius: 5 },
   body: { color: palette.ink, fontSize: 14, lineHeight: 20 },
