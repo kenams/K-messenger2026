@@ -23,14 +23,16 @@ import { brandGradient, elevation, layout, palette, radius, spacing, type as typ
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, useAndroidBack } from './src/theme/components';
 import { accentOf } from './src/theme/accent';
 
-/** "K-ssenger V2 Beta · build 2" — never claims "Production"/"Stable Release". */
+/** "K-ssenger V2 Beta · build 2" — never claims "Production"/"Stable Release".
+ * Fully hardcoded, not read from Constants.expoConfig: on Expo web exports,
+ * expo-constants ships its own internal default manifest (version "1.0.0") instead
+ * of embedding app.json, so reading Constants there silently gives the wrong value.
+ * Bump these two lines in lockstep with app.json on every release. */
+const APP_VERSION = '2.0.0-beta.1';
+const APP_BUILD = 2;
 function appVersionLabel(): string {
-  const version = Constants.expoConfig?.version ?? '2.0.0-beta.1';
-  const build = Platform.OS === 'android'
-    ? Constants.expoConfig?.android?.versionCode
-    : Constants.expoConfig?.ios?.buildNumber;
-  const isBeta = /beta/i.test(version);
-  return `K-ssenger V2 ${isBeta ? 'Beta' : ''} · ${version}${build ? ` · build ${build}` : ''}`.replace(/\s+/g, ' ').trim();
+  const isBeta = /beta/i.test(APP_VERSION);
+  return `K-ssenger V2 ${isBeta ? 'Beta' : ''} · ${APP_VERSION} · build ${APP_BUILD}`.replace(/\s+/g, ' ').trim();
 }
 
 type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
