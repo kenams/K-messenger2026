@@ -96,7 +96,7 @@ jobs:
 
       - name: Build standalone internal release APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleRelease -x createBundleReleaseJsAndAssets --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Reject an APK without its embedded JavaScript bundle
         working-directory: apps/mobile/android
