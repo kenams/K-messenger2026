@@ -36,15 +36,18 @@ test('two people can send and receive messages', async ({ browser }) => {
     await lea.getByRole('button', { name: 'Envoyer le message' }).click();
     await expect(kenams.getByText(fromLea)).toBeVisible({ timeout: 20_000 });
 
-    // Léa reacts to Kenams's first message; Kenams sees a ❤️ reaction chip appear
-    // (Kenams's page already shows one ❤️ — the quick-send button — so expect two)
+    // Léa reacts to Kenams's first message; Kenams sees a new ❤️ reaction chip appear.
+    // The thread accumulates history across runs, so compare against a captured
+    // baseline instead of a hardcoded count.
+    const heartsBefore = await kenams.getByText('❤️', { exact: true }).count();
     await lea.getByText(fromKenams).click();
     await lea.getByRole('button', { name: 'Réagir ❤️' }).click();
-    await expect(kenams.getByText('❤️', { exact: true })).toHaveCount(2, { timeout: 20_000 });
+    await expect(kenams.getByText('❤️', { exact: true })).toHaveCount(heartsBefore + 1, { timeout: 20_000 });
 
-    // Kenams fires a one-tap emoji; Léa's thread shows it (button + received bubble = two)
+    // Kenams fires a one-tap emoji; Léa's thread shows a new 🔥 bubble appear.
+    const firesBefore = await lea.getByText('🔥', { exact: true }).count();
     await kenams.getByRole('button', { name: 'Envoyer 🔥' }).click();
-    await expect(lea.getByText('🔥', { exact: true })).toHaveCount(2, { timeout: 20_000 });
+    await expect(lea.getByText('🔥', { exact: true })).toHaveCount(firesBefore + 1, { timeout: 20_000 });
   } finally {
     await kenamsCtx.close();
     await leaCtx.close();
