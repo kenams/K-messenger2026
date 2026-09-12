@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Platform, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import { reauthenticateNeonPassword, changeNeonPassword } from '../../lib/neonAuth';
@@ -8,6 +8,24 @@ import { prepareLocalSignalAccountPurge } from '../../lib/signalCleanup';
 import type { MyProfile } from './useMyProfile';
 import { ScreenHeader } from '../../theme/components';
 import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+
+function PasswordField(props: React.ComponentProps<typeof TextInput>) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <View style={styles.passwordRow}>
+      <TextInput autoCapitalize="none" autoCorrect={false} {...props} secureTextEntry={!revealed} style={[styles.input, styles.passwordInput, props.style]} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={revealed ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+        hitSlop={10}
+        onPress={() => setRevealed((v) => !v)}
+        style={styles.passwordReveal}
+      >
+        <Text style={styles.passwordRevealIcon}>{revealed ? '🙈' : '👁️'}</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 type ExportRow = Record<string, unknown>;
 type DeleteAck = { ok: boolean; error?: string };
@@ -180,9 +198,9 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
         <View style={styles.card}>
           <Text style={styles.cardTitle}>🔑 Changer mon mot de passe</Text>
           <Text style={styles.copy}>Le changement est vérifié par Neon Auth. Les autres sessions sont révoquées après succès.</Text>
-          <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={currentPassword} onChangeText={setCurrentPassword} placeholder="Mot de passe actuel" style={styles.input} />
-          <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={newPassword} onChangeText={setNewPassword} placeholder="Nouveau mot de passe" style={styles.input} />
-          <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirmer le nouveau mot de passe" style={styles.input} onSubmitEditing={() => void changePassword()} />
+          <PasswordField value={currentPassword} onChangeText={setCurrentPassword} placeholder="Mot de passe actuel" />
+          <PasswordField value={newPassword} onChangeText={setNewPassword} placeholder="Nouveau mot de passe" />
+          <PasswordField value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirmer le nouveau mot de passe" onSubmitEditing={() => void changePassword()} />
           <TouchableOpacity style={[styles.primary, passwordBusy && styles.buttonDisabled]} disabled={passwordBusy} onPress={() => void changePassword()}>
             {passwordBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Modifier mon mot de passe</Text>}
           </TouchableOpacity>
@@ -201,7 +219,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
         <View style={styles.warningCard}>
           <Text style={styles.cardTitle}>🗑️ Supprimer mon compte</Text>
           <Text style={styles.copy}>Action définitive. K-ssenger demande ton mot de passe, obtient un jeton Neon Auth fraîchement émis puis exige la confirmation DELETE. Le serveur ne peut cibler que le projet Neon K-ssenger dédié. Sur Android, les clés et sessions Signal locales sont également détruites après confirmation serveur.</Text>
-          <TextInput secureTextEntry autoCapitalize="none" autoCorrect={false} value={deletePassword} onChangeText={setDeletePassword} placeholder="Mot de passe actuel" style={styles.input} />
+          <PasswordField value={deletePassword} onChangeText={setDeletePassword} placeholder="Mot de passe actuel" />
           <TextInput autoCapitalize="characters" autoCorrect={false} value={deleteConfirmation} onChangeText={setDeleteConfirmation} placeholder="Tape DELETE" style={styles.input} />
           <TouchableOpacity style={[styles.danger, deleteBusy && styles.buttonDisabled]} disabled={deleteBusy} onPress={() => void deleteAccount()}>
             {deleteBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Supprimer définitivement mon compte</Text>}
@@ -217,6 +235,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, card: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, padding: spacing.lg }, sectionGap: { marginTop: spacing.md }, warningCard: { marginTop: spacing.md, backgroundColor: palette.dangerSoft, borderWidth: 1, borderColor: palette.busy, borderRadius: radius.lg, padding: spacing.lg },
   cardTitle: { ...typo.heading }, copy: { color: palette.inkSoft, lineHeight: 19, marginTop: spacing.sm }, input: { minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: palette.sky, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, color: palette.ink },
+  passwordRow: { position: 'relative', justifyContent: 'center' }, passwordInput: { paddingRight: 44 },
+  passwordReveal: { position: 'absolute', right: spacing.sm, top: spacing.sm + 4, padding: 4 }, passwordRevealIcon: { fontSize: 17 },
   primary: { minHeight: 48, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.md }, danger: { minHeight: 48, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.danger, borderRadius: radius.md }, buttonDisabled: { opacity: 0.55 }, primaryText: { color: palette.white, fontWeight: '900', textAlign: 'center' },
   notice: { marginTop: spacing.md, color: palette.azureDeep, fontWeight: '700' }, deleteNotice: { marginTop: spacing.md, color: palette.danger, fontWeight: '700' },
 });

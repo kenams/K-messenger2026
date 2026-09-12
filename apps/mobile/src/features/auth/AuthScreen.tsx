@@ -41,18 +41,32 @@ function BrandMark({ size = 76 }: { size?: number }) {
 }
 
 function AuthField(props: React.ComponentProps<typeof TextInput> & { icon?: string }) {
-  const { icon, style, ...input } = props;
+  const { icon, style, secureTextEntry, ...input } = props;
   const [focused, setFocused] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const canReveal = !!secureTextEntry;
   return (
     <View style={[styles.fieldRow, focused && styles.fieldRowFocused]}>
       {icon ? <Text style={styles.fieldIcon}>{icon}</Text> : null}
       <TextInput
         placeholderTextColor={palette.inkFaint}
         {...input}
+        secureTextEntry={canReveal && !revealed}
         onFocus={(e) => { setFocused(true); input.onFocus?.(e); }}
         onBlur={(e) => { setFocused(false); input.onBlur?.(e); }}
         style={[styles.fieldInput, style]}
       />
+      {canReveal && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={revealed ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+          hitSlop={10}
+          onPress={() => setRevealed((v) => !v)}
+          style={styles.fieldReveal}
+        >
+          <Text style={styles.fieldRevealIcon}>{revealed ? '🙈' : '👁️'}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -144,7 +158,7 @@ export function AuthScreen() {
             <BrandMark />
             <Text style={styles.kicker}>K · SSENGER</Text>
             <Text style={styles.title}>{mode === 'login' ? 'Content de te revoir' : 'Rejoins K-ssenger'}</Text>
-            <Text style={styles.lede}>La messagerie qui remet tes contacts au centre. Présence en direct, wizz, moments — connexion sécurisée.</Text>
+            <Text style={styles.lede}>La messagerie qui remet tes contacts au centre. Présence en direct, K-Pulse, moments — connexion sécurisée.</Text>
 
             <View style={styles.segment}>
               {(['login', 'signup'] as Mode[]).map((m) => (
@@ -313,6 +327,8 @@ const styles = StyleSheet.create({
   fieldRowFocused: { borderColor: palette.azure, backgroundColor: palette.surface },
   fieldIcon: { fontSize: 15, width: 20, textAlign: 'center', color: palette.inkFaint },
   fieldInput: { flex: 1, paddingVertical: spacing.md, color: palette.ink, fontSize: 15, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : null) },
+  fieldReveal: { paddingHorizontal: 4, paddingVertical: 4 },
+  fieldRevealIcon: { fontSize: 17 },
 
   hint: { ...typo.micro, color: palette.away, fontWeight: '700', marginLeft: spacing.xs },
   banner: { backgroundColor: palette.dangerSoft, borderRadius: radius.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
