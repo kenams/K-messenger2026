@@ -126,6 +126,31 @@ export function AuthScreen() {
     }
   };
 
+  // TEMPORARY convenience while Kenams drives the app day-to-day — remove once
+  // the team is done onboarding testers. Fixed credentials for his own working
+  // account (kenams42+app@gmail.com), never shown as plaintext in the UI.
+  const quickLoginKenams = async () => {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const backend = getBackend();
+      const { data, error: authError } = await backend.auth.signInWithPassword({
+        email: 'kenams42+app@gmail.com',
+        password: 'KenamsKAH2026',
+      });
+      if (authError) setError('Connexion rapide indisponible pour le moment.');
+      else if (data.session && Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.reload();
+        return;
+      }
+    } catch {
+      setError('K-ssenger ne peut pas joindre le service de connexion pour le moment.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!isBackendConfigured) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -243,6 +268,18 @@ export function AuthScreen() {
                   )}
                 </LinearGradient>
               </TouchableOpacity>
+
+              {mode === 'login' && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  activeOpacity={0.8}
+                  disabled={busy}
+                  onPress={() => void quickLoginKenams()}
+                  style={styles.quickLogin}
+                >
+                  <Text style={styles.quickLoginText}>🔑 Connexion rapide — Kenams</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.trust}>
@@ -341,6 +378,8 @@ const styles = StyleSheet.create({
   ctaPressed: { opacity: 0.9, transform: [{ scale: 0.995 }] },
   cta: { minHeight: 54, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
   ctaText: { color: palette.white, fontWeight: '900', fontSize: 15, letterSpacing: 0.3 },
+  quickLogin: { marginTop: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center' },
+  quickLoginText: { color: palette.inkSoft, fontWeight: '700', fontSize: 13 },
 
   trust: {
     flexDirection: 'row',
