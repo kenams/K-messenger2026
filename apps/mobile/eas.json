@@ -14,7 +14,7 @@
         "EXPO_PUBLIC_NEON_DATA_API_URL": "https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1",
         "EXPO_PUBLIC_KSSENGER_SOCKET_URL": "https://kssenger-server.onrender.com",
         "EXPO_PUBLIC_SPOTIFY_CLIENT_ID": "acdb17c786eb432aa1ceacbd49a2de88",
-        "EXPO_PUBLIC_LASTFM_API_KEY": "6cf2de22fd7a199162deaeab4b3bcb2d"
+        "EXPO_PUBLIC_LASTFM_CLIENT_ID": "6cf2de22fd7a199162deaeab4b3bcb2d"
       }
     },
     "preview-ios": {
@@ -35,7 +35,7 @@
         "EXPO_PUBLIC_NEON_DATA_API_URL": "https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1",
         "EXPO_PUBLIC_KSSENGER_SOCKET_URL": "https://kssenger-server.onrender.com",
         "EXPO_PUBLIC_SPOTIFY_CLIENT_ID": "acdb17c786eb432aa1ceacbd49a2de88",
-        "EXPO_PUBLIC_LASTFM_API_KEY": "6cf2de22fd7a199162deaeab4b3bcb2d"
+        "EXPO_PUBLIC_LASTFM_CLIENT_ID": "6cf2de22fd7a199162deaeab4b3bcb2d"
       }
     }
   },
