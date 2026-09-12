@@ -28,7 +28,15 @@ export function useRealtimePresence() {
     void getRealtimeSocket().then((client) => {
       if (!active) return;
       socket = client;
-      onConnect = () => void publish(client, AppState.currentState === 'active' ? 'online' : 'away');
+      // AppState.currentState isn't reliably 'active' at first render on web
+      // (react-native-web only sets it once a visibilitychange event fires,
+      // so a tab that's been focused the whole time never gets one) — that
+      // left everyone showing "away" (orange) instead of "online" (green)
+      // until they blurred and refocused the window at least once.
+      // Connecting the realtime socket at all means the user is actively
+      // using the app right now, so publish 'online' unconditionally here;
+      // AppState changes still drive away/offline afterwards.
+      onConnect = () => void publish(client, 'online');
       client.on('connect', onConnect);
       onConnect();
     }).catch(() => undefined);
