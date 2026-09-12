@@ -47,7 +47,17 @@ type AgeProfileRow = {
   birth_date?: string;
 };
 
-function ageFromBirthDate(value: string): number | null {
+// Browser/OS autofill often hands back JJ/MM/AAAA (or JJ-MM-AAAA) instead of
+// the AAAA-MM-JJ we ask for — normalize both to ISO instead of rejecting a
+// value the user never actually typed wrong.
+function normalizeBirthDate(rawValue: string): string {
+  const value = rawValue.trim();
+  const eu = value.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
+  return eu ? `${eu[3]}-${eu[2]}-${eu[1]}` : value;
+}
+
+function ageFromBirthDate(rawValue: string): number | null {
+  const value = normalizeBirthDate(rawValue);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [year, month, day] = value.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -170,7 +180,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
     setAgeSaving(true);
     setAgeError('');
     try {
-      const birthDate = birthDateInput.trim();
+      const birthDate = normalizeBirthDate(birthDateInput);
       const existing = await getBackend()
         .from('user_age_profile')
         .select('user_id')
