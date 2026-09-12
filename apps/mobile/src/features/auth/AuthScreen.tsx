@@ -14,8 +14,12 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
+import QRCode from 'react-native-qrcode-svg';
 import { getBackend, isBackendConfigured } from '../../lib/backend';
 import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
+
+/** Stable link regardless of beta build number — GitHub always resolves this to the latest release asset. */
+const APK_DOWNLOAD_URL = 'https://github.com/kenams/K-messenger2026/releases/latest/download/K-ssenger-latest.apk';
 
 type Mode = 'login' | 'signup';
 
@@ -236,6 +240,20 @@ export function AuthScreen() {
                 Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version. Aucun secret serveur n’est embarqué dans l’app.
               </Text>
             </View>
+
+            {Platform.OS === 'web' && (
+              <View style={styles.qrPanel}>
+                <View style={styles.qrCodeShell}>
+                  <QRCode value={APK_DOWNLOAD_URL} size={104} backgroundColor={palette.surface} color={palette.ink} />
+                </View>
+                <View style={styles.qrCopy}>
+                  <Text style={styles.qrTitle}>📱 K-ssenger sur ton téléphone</Text>
+                  <Text style={styles.qrText}>
+                    Scanne avec l’appareil photo pour télécharger l’app Android. Connecte-toi avec ce même e-mail et mot de passe pour retrouver tes conversations.
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
           <Text style={styles.foot}>K-ssenger — édition Lumière</Text>
@@ -333,6 +351,21 @@ const styles = StyleSheet.create({
   trustText: { flex: 1, ...typo.micro, fontWeight: '600', lineHeight: 15 },
 
   foot: { marginTop: spacing.xl, ...typo.micro, color: palette.inkFaint },
+
+  qrPanel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: palette.hairline,
+    alignSelf: 'stretch',
+  },
+  qrCodeShell: { padding: spacing.sm, borderRadius: radius.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline },
+  qrCopy: { flex: 1, gap: 4 },
+  qrTitle: { ...typo.meta, fontWeight: '800', color: palette.ink },
+  qrText: { ...typo.micro, color: palette.inkSoft, lineHeight: 15 },
 
   codeBlock: { marginTop: spacing.lg, gap: spacing.xs, alignItems: 'center' },
   code: { color: palette.azureDeep, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 },
