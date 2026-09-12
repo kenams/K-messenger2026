@@ -44,7 +44,11 @@ function randomId(): string {
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
-let cachedDeviceId: string | null = null;
+// Keyed by userId — not a single shared value. A bare module-level cache let
+// user B, signing in right after user A signed out (no app restart), reuse
+// A's cached device id: ensureChatDevice(userB) returned it immediately
+// without ever checking B's own devices, a real device-ownership mismatch.
+let cachedDevice: { userId: string; deviceId: string } | null = null;
 
 /**
  * Returns a stable `devices` row id for this install to use as `senderDeviceId`.
@@ -52,7 +56,7 @@ let cachedDeviceId: string | null = null;
  * identity that the server's `requireActiveDevice` check accepts.
  */
 export async function ensureChatDevice(userId: string): Promise<string> {
-  if (cachedDeviceId) return cachedDeviceId;
+  if (cachedDevice && cachedDevice.userId === userId) return cachedDevice.deviceId;
 
   let installId = await readInstallId();
   if (!installId) { installId = randomId(); await writeInstallId(installId); }
@@ -64,14 +68,14 @@ export async function ensureChatDevice(userId: string): Promise<string> {
     .select('id').eq('user_id', userId).eq('name', deviceName).is('revoked_at', null).limit(1);
   if (!existing.error) {
     const id = ((existing.data ?? []) as Array<{ id?: string }>)[0]?.id;
-    if (id) { cachedDeviceId = String(id); return cachedDeviceId; }
+    if (id) { cachedDevice = { userId, deviceId: String(id) }; return cachedDevice.deviceId; }
   }
 
   const inserted = await getBackend().from('devices')
     .insert({ user_id: userId, name: deviceName }).select('id').single();
   if (inserted.error || !inserted.data?.id) throw inserted.error ?? new Error('CHAT_DEVICE_CREATE_FAILED');
-  cachedDeviceId = String(inserted.data.id);
-  return cachedDeviceId;
+  cachedDevice = { userId, deviceId: String(inserted.data.id) };
+  return cachedDevice.deviceId;
 }
 
 export type WireMessage = { algorithm: string; ciphertext?: string | null };
