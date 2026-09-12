@@ -14,9 +14,11 @@ import * as SecureStore from 'expo-secure-store';
  */
 
 export const SPOTIFY_CLIENT_ID = (process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID ?? '').trim();
-export const LASTFM_API_KEY = (process.env.EXPO_PUBLIC_LASTFM_API_KEY ?? '').trim();
+// Last.fm calls this public read identifier an "API key". The separate Last.fm
+// shared secret is never embedded in K-ssenger.
+export const LASTFM_CLIENT_ID = (process.env.EXPO_PUBLIC_LASTFM_CLIENT_ID ?? '').trim();
 export const spotifyConfigured = SPOTIFY_CLIENT_ID.length > 0;
-export const lastfmConfigured = LASTFM_API_KEY.length > 0;
+export const lastfmConfigured = LASTFM_CLIENT_ID.length > 0;
 
 export type NowPlayingTrack = { title: string; artist: string };
 export type MusicSource = 'spotify' | 'lastfm' | null;
@@ -301,7 +303,7 @@ async function fetchLastfmNowPlaying(username: string): Promise<NowPlayingTrack 
     const params = new URLSearchParams({
       method: 'user.getrecenttracks',
       user: username,
-      api_key: LASTFM_API_KEY,
+      api_key: LASTFM_CLIENT_ID,
       format: 'json',
       limit: '1',
     });
