@@ -22,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, useAndroidBack } from './src/theme/components';
 import { accentOf } from './src/theme/accent';
+import { MobileAppQr } from './src/features/profile/MobileAppQr';
 
 /** "K-ssenger V2 Beta · build 2" — never claims "Production"/"Stable Release".
  * Fully hardcoded, not read from Constants.expoConfig: on Expo web exports,
@@ -378,6 +379,11 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
         {signingOut ? <ActivityIndicator /> : <Text style={styles.signOutText}>Se déconnecter</Text>}
       </TouchableOpacity>
       {!!signOutError && <Text style={styles.error}>{signOutError}</Text>}
+      {Platform.OS === 'web' && (
+        <View style={styles.meQrPanel}>
+          <MobileAppQr />
+        </View>
+      )}
       <Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text>
       <Text style={styles.profileFoot}>{appVersionLabel()}</Text>
     </ScrollView>
@@ -482,6 +488,7 @@ const styles = StyleSheet.create({
   profileButtonIcon: { fontSize: 19 },
   profileButtonLabel: { color: palette.inkSoft, fontSize: 10, fontWeight: '800', marginTop: 4 },
   profileFoot: { ...typo.micro, color: palette.inkFaint, marginTop: spacing.xl },
+  meQrPanel: { alignSelf: 'stretch', marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: palette.hairline },
   signOutButton: { marginTop: spacing.xl, minWidth: 190, alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairlineStrong, borderRadius: radius.md },
   signOutText: { color: palette.inkSoft, fontWeight: '900' },
 });
