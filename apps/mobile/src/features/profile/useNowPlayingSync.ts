@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { AppState, Linking, Platform } from 'react-native';
 import { getBackend } from '../../lib/backend';
 import {
   completeSpotifyAuthFromUrl,
@@ -7,13 +8,14 @@ import {
 } from '../../lib/musicNowPlaying';
 import type { MyProfile } from './useMyProfile';
 
-const POLL_MS = 45_000;
+const POLL_MS = 15_000;
 
 /**
  * While a music provider is connected, keeps the profile's "now playing"
- * signature in sync with what the user is actually listening to. Client-driven
- * (the poll only runs while the app is open) and a no-op when nothing is
- * connected.
+ * signature in sync with what the user is actually listening to.
+ *
+ * The client polls while K-ssenger is active, refreshes immediately when the
+ * app returns to foreground, and consumes the native Spotify OAuth deep-link.
  */
 export function useNowPlayingSync(profile: MyProfile, onProfileChanged: () => Promise<void>): void {
   const currentRef = useRef({ title: profile.now_playing_title ?? '', artist: profile.now_playing_artist ?? '' });
@@ -25,20 +27,22 @@ export function useNowPlayingSync(profile: MyProfile, onProfileChanged: () => Pr
 
   useEffect(() => {
     let active = true;
+    let tickInFlight = false;
 
     const tick = async () => {
-      if (!active) return;
-      const source = await getActiveMusicSource();
-      if (!source || !active) return;
-
-      const track = await fetchNowPlaying();
-      if (!active) return;
-      const title = track?.title ?? '';
-      const artist = track?.artist ?? '';
-      if (currentRef.current.title === title && currentRef.current.artist === artist) return;
-
+      if (!active || tickInFlight) return;
+      tickInFlight = true;
       try {
-        await getBackend()
+        const source = await getActiveMusicSource();
+        if (!source || !active) return;
+
+        const track = await fetchNowPlaying();
+        if (!active) return;
+        const title = track?.title ?? '';
+        const artist = track?.artist ?? '';
+        if (currentRef.current.title === title && currentRef.current.artist === artist) return;
+
+        const response = await getBackend()
           .from('profiles')
           .update({
             now_playing_title: title || null,
@@ -46,20 +50,39 @@ export function useNowPlayingSync(profile: MyProfile, onProfileChanged: () => Pr
             updated_at: new Date().toISOString(),
           })
           .eq('id', profileIdRef.current);
+        if (response.error) throw response.error;
+
         currentRef.current = { title, artist };
         await changedRef.current();
       } catch {
-        /* transient — the next poll retries */
+        /* transient — the next poll/foreground event retries */
+      } finally {
+        tickInFlight = false;
       }
     };
 
-    void completeSpotifyAuthFromUrl().then(() => { void tick(); });
+    void completeSpotifyAuthFromUrl().then((connected) => {
+      if (connected) void tick();
+    });
     void tick();
+
     const timer = setInterval(() => { void tick(); }, POLL_MS);
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void tick();
+    });
+    const linkSubscription = Platform.OS === 'web'
+      ? null
+      : Linking.addEventListener('url', ({ url }) => {
+          void completeSpotifyAuthFromUrl(url).then((connected) => {
+            if (connected) void tick();
+          });
+        });
 
     return () => {
       active = false;
       clearInterval(timer);
+      appStateSubscription.remove();
+      linkSubscription?.remove();
     };
   }, []);
 }

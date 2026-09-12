@@ -1,31 +1,30 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 
 /**
  * Automatic "now playing" for the profile signature.
  *
- * Two providers, both read-only and client-driven so the server never holds a
- * music token:
- *  - Spotify: Authorisation Code + PKCE (public client, no secret). We keep the
- *    refresh token in this device's secure storage and poll
- *    `/me/player/currently-playing`.
- *  - Last.fm: an app-level API key + the user's Last.fm name. `getRecentTracks`
- *    exposes the currently scrobbling track, which covers Deezer, Apple Music,
- *    YouTube Music and anything else that scrobbles.
+ * Spotify is the primary one-tap provider. Last.fm remains an optional fallback
+ * for Spotify accounts/API states that do not expose currently-playing, and for
+ * other players that scrobble to Last.fm.
  *
- * Both features hide themselves when their env key is absent.
+ * Tokens/usernames stay on-device. The server only receives the final
+ * title/artist written to the authenticated profile.
  */
 
 export const SPOTIFY_CLIENT_ID = (process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID ?? '').trim();
-export const LASTFM_API_KEY = (process.env.EXPO_PUBLIC_LASTFM_API_KEY ?? '').trim();
+// Last.fm calls this public read identifier an "API key". The separate Last.fm
+// shared secret is never embedded in K-ssenger.
+export const LASTFM_CLIENT_ID = (process.env.EXPO_PUBLIC_LASTFM_CLIENT_ID ?? '').trim();
 export const spotifyConfigured = SPOTIFY_CLIENT_ID.length > 0;
-export const lastfmConfigured = LASTFM_API_KEY.length > 0;
+export const lastfmConfigured = LASTFM_CLIENT_ID.length > 0;
 
 export type NowPlayingTrack = { title: string; artist: string };
 export type MusicSource = 'spotify' | 'lastfm' | null;
 
 const SPOTIFY_SCOPE = 'user-read-currently-playing user-read-playback-state';
+const SPOTIFY_NATIVE_REDIRECT = 'kssenger://spotify-callback';
 const K_SPOTIFY = 'kssenger.music.spotify';
 const K_SPOTIFY_VERIFIER = 'kssenger.music.spotify.verifier';
 const K_LASTFM = 'kssenger.music.lastfm';
@@ -56,7 +55,7 @@ async function writeKey(key: string, value: string | null): Promise<void> {
     if (value === null) await SecureStore.deleteItemAsync(nativeKey);
     else await SecureStore.setItemAsync(nativeKey, value);
   } catch {
-    /* ignore */
+    /* best effort */
   }
 }
 
@@ -67,7 +66,6 @@ async function writeKey(key: string, value: string | null): Promise<void> {
 function base64UrlFromBytes(bytes: Uint8Array): string {
   let binary = '';
   bytes.forEach((b) => { binary += String.fromCharCode(b); });
-  // btoa exists on web and on React Native (Hermes) since RN 0.74.
   const base64 = btoa(binary);
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -84,56 +82,93 @@ async function challengeFromVerifier(verifier: string): Promise<string> {
   return digest.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function webRedirectUri(): string {
+function spotifyRedirectUri(): string {
+  if (Platform.OS !== 'web') return SPOTIFY_NATIVE_REDIRECT;
   if (typeof window === 'undefined') return '';
   return `${window.location.origin}/`;
+}
+
+function currentSpotifyCallbackUrl(explicitUrl?: string): string | null {
+  if (explicitUrl) return explicitUrl;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') return window.location.href;
+  return null;
+}
+
+function clearWebSpotifyQuery(url: URL): void {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  ['code', 'state', 'error'].forEach((key) => url.searchParams.delete(key));
+  window.history.replaceState({}, '', url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : '') + url.hash);
 }
 
 // ---------------------------------------------------------------------------
 // Spotify
 // ---------------------------------------------------------------------------
 
-/** Kick off the Spotify consent redirect (web only for now). */
+/**
+ * Starts Spotify Authorization Code + PKCE.
+ * Web returns to the current Expo origin; Android/iOS return to the K-ssenger
+ * custom scheme declared in app.json. No Spotify secret is embedded.
+ */
 export async function beginSpotifyAuth(): Promise<void> {
-  if (!spotifyConfigured || Platform.OS !== 'web' || typeof window === 'undefined') return;
+  if (!spotifyConfigured) return;
+
   const verifier = await makeVerifier();
   const challenge = await challengeFromVerifier(verifier);
   const state = base64UrlFromBytes(await Crypto.getRandomBytesAsync(12));
   await writeKey(K_SPOTIFY_VERIFIER, JSON.stringify({ verifier, state }));
 
+  const redirectUri = spotifyRedirectUri();
+  if (!redirectUri) return;
+
   const params = new URLSearchParams({
     client_id: SPOTIFY_CLIENT_ID,
     response_type: 'code',
-    redirect_uri: webRedirectUri(),
+    redirect_uri: redirectUri,
     code_challenge_method: 'S256',
     code_challenge: challenge,
     scope: SPOTIFY_SCOPE,
     state,
   });
-  window.location.assign(`https://accounts.spotify.com/authorize?${params.toString()}`);
+  const authorizeUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.location.assign(authorizeUrl);
+    return;
+  }
+  await Linking.openURL(authorizeUrl);
 }
 
 /**
- * On web load, finish the Spotify redirect if `?code=` is present. Returns true
- * when a connection was just established. Always strips the OAuth query params.
+ * Finishes Spotify OAuth from either the web callback or a native deep link.
+ * Pass a URL from React Native Linking on native. On web it can be omitted.
  */
-export async function completeSpotifyAuthFromUrl(): Promise<boolean> {
-  if (!spotifyConfigured || Platform.OS !== 'web' || typeof window === 'undefined') return false;
-  const url = new URL(window.location.href);
+export async function completeSpotifyAuthFromUrl(explicitUrl?: string): Promise<boolean> {
+  if (!spotifyConfigured) return false;
+
+  let rawUrl = currentSpotifyCallbackUrl(explicitUrl);
+  if (!rawUrl && Platform.OS !== 'web') rawUrl = await Linking.getInitialURL();
+  if (!rawUrl) return false;
+  if (Platform.OS !== 'web' && !rawUrl.startsWith(SPOTIFY_NATIVE_REDIRECT)) return false;
+
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   if (!code || !state) return false;
 
-  const clearQuery = () => {
-    ['code', 'state', 'error'].forEach((k) => url.searchParams.delete(k));
-    window.history.replaceState({}, '', url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : '') + url.hash);
-  };
-
   try {
     const stored = await readKey(K_SPOTIFY_VERIFIER);
-    if (!stored) { clearQuery(); return false; }
+    if (!stored) { clearWebSpotifyQuery(url); return false; }
     const { verifier, state: expectedState } = JSON.parse(stored) as { verifier: string; state: string };
-    if (state !== expectedState) { clearQuery(); return false; }
+    if (state !== expectedState) { clearWebSpotifyQuery(url); return false; }
+
+    const redirectUri = spotifyRedirectUri();
+    if (!redirectUri) return false;
 
     const res = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
@@ -142,22 +177,27 @@ export async function completeSpotifyAuthFromUrl(): Promise<boolean> {
         client_id: SPOTIFY_CLIENT_ID,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: webRedirectUri(),
+        redirect_uri: redirectUri,
         code_verifier: verifier,
       }).toString(),
     });
-    if (!res.ok) { clearQuery(); return false; }
-    const json = (await res.json()) as { access_token: string; refresh_token: string; expires_in: number };
+    if (!res.ok) { clearWebSpotifyQuery(url); return false; }
+
+    const json = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
+    if (!json.access_token || !json.refresh_token || !json.expires_in) {
+      clearWebSpotifyQuery(url);
+      return false;
+    }
     await persistSpotifyTokens({
       accessToken: json.access_token,
       refreshToken: json.refresh_token,
-      expiresAt: Date.now() + (json.expires_in - 60) * 1000,
+      expiresAt: Date.now() + Math.max(60, json.expires_in - 60) * 1000,
     });
     await writeKey(K_SPOTIFY_VERIFIER, null);
-    clearQuery();
+    clearWebSpotifyQuery(url);
     return true;
   } catch {
-    clearQuery();
+    clearWebSpotifyQuery(url);
     return false;
   }
 }
@@ -170,7 +210,9 @@ async function readSpotifyTokens(): Promise<SpotifyTokens | null> {
   const raw = await readKey(K_SPOTIFY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as SpotifyTokens;
+    const parsed = JSON.parse(raw) as Partial<SpotifyTokens>;
+    if (!parsed.refreshToken || !parsed.accessToken || typeof parsed.expiresAt !== 'number') return null;
+    return parsed as SpotifyTokens;
   } catch {
     return null;
   }
@@ -194,11 +236,12 @@ async function validSpotifyAccessToken(): Promise<string | null> {
       if (res.status === 400 || res.status === 401) await writeKey(K_SPOTIFY, null);
       return null;
     }
-    const json = (await res.json()) as { access_token: string; refresh_token?: string; expires_in: number };
+    const json = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
+    if (!json.access_token || !json.expires_in) return null;
     const next: SpotifyTokens = {
       accessToken: json.access_token,
       refreshToken: json.refresh_token ?? tokens.refreshToken,
-      expiresAt: Date.now() + (json.expires_in - 60) * 1000,
+      expiresAt: Date.now() + Math.max(60, json.expires_in - 60) * 1000,
     };
     await persistSpotifyTokens(next);
     return next.accessToken;
@@ -246,7 +289,7 @@ export async function getLastfmUsername(): Promise<string | null> {
 }
 
 export async function setLastfmUsername(username: string): Promise<void> {
-  const clean = username.trim().slice(0, 40);
+  const clean = username.trim().replace(/^@/, '').slice(0, 40);
   await writeKey(K_LASTFM, clean.length ? clean : null);
 }
 
@@ -260,7 +303,7 @@ async function fetchLastfmNowPlaying(username: string): Promise<NowPlayingTrack 
     const params = new URLSearchParams({
       method: 'user.getrecenttracks',
       user: username,
-      api_key: LASTFM_API_KEY,
+      api_key: LASTFM_CLIENT_ID,
       format: 'json',
       limit: '1',
     });
@@ -287,10 +330,24 @@ export async function getActiveMusicSource(): Promise<MusicSource> {
   return null;
 }
 
-/** The track playing right now, from whichever provider is connected. */
+/**
+ * Returns the track currently playing.
+ *
+ * Important: a stored Spotify session is not treated as authoritative. Spotify
+ * can legitimately return no track (or deny currently-playing for an account
+ * or app configuration). In that case we immediately fall back to Last.fm so a
+ * valid scrobble is never hidden by a stale/limited Spotify connection.
+ */
 export async function fetchNowPlaying(): Promise<NowPlayingTrack | null> {
-  if (await isSpotifyConnected()) return fetchSpotifyNowPlaying();
+  if (await isSpotifyConnected()) {
+    const spotifyTrack = await fetchSpotifyNowPlaying();
+    if (spotifyTrack) return spotifyTrack;
+  }
+
   const lastfm = await getLastfmUsername();
-  if (lastfm) return fetchLastfmNowPlaying(lastfm);
+  if (lastfm) {
+    const lastfmTrack = await fetchLastfmNowPlaying(lastfm);
+    if (lastfmTrack) return lastfmTrack;
+  }
   return null;
 }
