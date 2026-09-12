@@ -21,4 +21,20 @@ config.resolver.extraNodeModules = {
   vm: emptyModule,
 };
 
+// global.crypto / TextEncoder / TextDecoder polyfill (see shim/crypto-polyfill.js
+// for the full story). This MUST run as a Metro polyfill, not a normal import
+// at the top of src/index.tsx: Expo/RN's bundler always requires
+// InitializeCore and Expo's "winter" runtime before the app's own entry
+// module, no matter how early in that entry file the code appears — verified
+// against a real crash log where the entry module (index.tsx) never executed
+// a single line before the crash. Polyfills are the one thing guaranteed to
+// run before all of that.
+const defaultGetPolyfills = config.serializer.getPolyfills
+  ? config.serializer.getPolyfills.bind(config.serializer)
+  : () => [];
+config.serializer.getPolyfills = (...args) => [
+  require.resolve('./shim/crypto-polyfill.js'),
+  ...defaultGetPolyfills(...args),
+];
+
 module.exports = config;

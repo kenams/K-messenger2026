@@ -1,3 +1,14 @@
+// The global.crypto / TextEncoder / TextDecoder polyfill jose and
+// @better-auth/utils need on Hermes/React Native now lives in
+// shim/crypto-polyfill.js, wired in as a Metro `serializer.getPolyfills`
+// entry (see metro.config.js) instead of an import here. Expo/RN's bundler
+// always requires InitializeCore and Expo's "winter" runtime before this
+// entry module, no matter how early in this file the code appears — a
+// version of this fix placed right here, as literally the first statement,
+// never ran in time (verified against a real crash log where this entry
+// module hadn't executed a single line before the crash). Polyfills are the
+// one thing guaranteed to run before all of that.
+
 import { registerRootComponent } from 'expo';
 import { Root } from './Root';
 
