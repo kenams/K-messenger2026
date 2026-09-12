@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOp
 import type { Socket } from 'socket.io-client';
 import { palette, radius, spacing, type as typo } from '../../theme/tokens';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
+import { onMessageReceived, onSocialPing } from '../../lib/soundKit';
 import type { Presence } from '../contacts/MsnContactsScreen';
 import { GroupEncryptedChat, type GroupEncryptedMessage } from './GroupEncryptedChat';
 import { getGroupModerationCapabilities, type GroupBanSummary } from './groupModeration';
@@ -91,8 +92,13 @@ export function GroupsScreen() {
       setSocket(client);
       setCurrentUserId(userId);
       const refresh = () => void loadData(client).catch(() => undefined);
-      ['connect', 'group:created', 'group:invited', 'group:removed', 'group:left', 'group:updated'].forEach((event) => client.on(event, refresh));
-      cleanup = () => ['connect', 'group:created', 'group:invited', 'group:removed', 'group:left', 'group:updated'].forEach((event) => client.off(event, refresh));
+      const onInvited = () => { onSocialPing(); refresh(); };
+      ['connect', 'group:created', 'group:removed', 'group:left', 'group:updated'].forEach((event) => client.on(event, refresh));
+      client.on('group:invited', onInvited);
+      cleanup = () => {
+        ['connect', 'group:created', 'group:removed', 'group:left', 'group:updated'].forEach((event) => client.off(event, refresh));
+        client.off('group:invited', onInvited);
+      };
       await loadData(client);
       if (active) setNotice('');
     }).catch(() => {
@@ -108,7 +114,11 @@ export function GroupsScreen() {
     const groupId = selectedGroup.id;
     const onMessage = (message: GroupEncryptedMessage) => {
       if (message.conversationId !== groupId) return;
-      setHistory((items) => items.some((item) => item.id === message.id) ? items : [...items, message]);
+      setHistory((items) => {
+        if (items.some((item) => item.id === message.id)) return items;
+        if (message.senderUserId !== currentUserId) onMessageReceived();
+        return [...items, message];
+      });
       if (message.senderUserId !== currentUserId) {
         void emitAck(socket, 'message:receipt', { conversationId: groupId, messageId: message.id, state: 'read' }).catch(() => undefined);
       }

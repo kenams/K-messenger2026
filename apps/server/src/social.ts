@@ -411,3 +411,23 @@ export async function canWizz(senderId: string, recipientId: string) {
   if (policy === 'contacts' && !contact) throw new Error('WIZZ_FORBIDDEN');
   if (policy === 'favorites' && !contact?.favorite) throw new Error('WIZZ_FORBIDDEN');
 }
+
+export async function countMutualContacts(userIdA: string, userIdB: string): Promise<number> {
+  const { rows } = await query<{ mutual: number }>(
+    `select count(*)::int as mutual
+       from public.contacts a
+       join public.contacts b on b.contact_id = a.contact_id
+      where a.owner_id = $1
+        and b.owner_id = $2`,
+    [userIdA, userIdB],
+  );
+  return rows[0]?.mutual ?? 0;
+}
+
+export async function getDisplayName(userId: string): Promise<string | null> {
+  const { rows } = await query<{ display_name: string }>(
+    `select display_name from public.profiles where id = $1 limit 1`,
+    [userId],
+  );
+  return rows[0]?.display_name ?? null;
+}

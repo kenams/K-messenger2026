@@ -22,6 +22,7 @@ import {
 } from '../../lib/chatExtras';
 import { EmojiPanel } from './EmojiPanel';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket } from '../../lib/realtime';
+import { onMessageReceived, onMessageSent } from '../../lib/soundKit';
 
 type ReceiptState = 'delivered' | 'read';
 type DirectResponse = { ok: boolean; conversationId?: string; error?: string };
@@ -235,7 +236,11 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         if (message.conversationId !== id) return;
         const resolved = hydrate(message);
         if (!active) return;
-        setHistory((items) => items.some((item) => item.id === resolved.id) ? items : [...items, resolved]);
+        setHistory((items) => {
+          if (items.some((item) => item.id === resolved.id)) return items;
+          if (resolved.senderUserId !== userId) onMessageReceived();
+          return [...items, resolved];
+        });
         if (resolved.senderUserId !== userId) {
           void emitAck(client, 'message:receipt', { conversationId: id, messageId: resolved.id, state: receiptState }).catch(() => undefined);
         }
@@ -298,6 +303,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         id: response.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: deviceIdRef.current,
         createdAt, algorithm, ciphertext, conversationId, content, reactions: [],
       }]);
+      onMessageSent();
     } catch {
       setNotice('Message non envoyé. Réessaie.');
     } finally { setSending(false); }

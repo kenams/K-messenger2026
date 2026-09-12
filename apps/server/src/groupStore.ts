@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { transaction } from './db.js';
+import { query, transaction } from './db.js';
 
 type GroupRole = 'member' | 'admin' | 'owner';
 
@@ -210,4 +210,12 @@ export async function leaveGroup(userId: string, conversationId: string) {
     );
     return { conversationId, userId };
   });
+}
+
+export async function getGroupTitle(conversationId: string): Promise<string | null> {
+  const { rows } = await query<{ title: string | null }>(
+    `select title from public.conversations where id = $1 limit 1`,
+    [conversationId],
+  );
+  return rows[0]?.title ?? null;
 }

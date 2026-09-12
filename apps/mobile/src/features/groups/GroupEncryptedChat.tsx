@@ -10,6 +10,7 @@ import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/ch
 import { QUICK_REACTIONS, isBigEmoji, isSendKey, myReaction, summarizeReactions, type MessageReaction } from '../../lib/chatExtras';
 import { EmojiPanel } from '../chats/EmojiPanel';
 import { emitAck } from '../../lib/realtime';
+import { onMessageSent } from '../../lib/soundKit';
 import { palette, radius, spacing } from '../../theme/tokens';
 
 export type GroupEncryptedMessage = {
@@ -150,6 +151,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
       });
       if (!response.ok || !response.id) throw new Error(response.error ?? 'GROUP_SEND_FAILED');
       setComposer('');
+      onMessageSent();
     } catch {
       setNotice('Message non envoyé. Réessaie.');
     } finally {

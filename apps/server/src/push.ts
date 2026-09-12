@@ -24,8 +24,8 @@ const MAX_BATCH = 100;
 const MAX_PUSH_TITLE_LENGTH = 64;
 const MAX_PUSH_BODY_LENGTH = 160;
 const MAX_PUSH_DATA_VALUE_LENGTH = 128;
-const ALLOWED_PUSH_DATA_KEYS = new Set(['type', 'conversationId', 'messageId', 'senderId']);
-const ALLOWED_PUSH_TYPES = new Set(['message', 'kpulse']);
+const ALLOWED_PUSH_DATA_KEYS = new Set(['type', 'conversationId', 'messageId', 'senderId', 'requestId']);
+const ALLOWED_PUSH_TYPES = new Set(['message', 'kpulse', 'contact_request', 'group_invite']);
 
 function assertMetadataOnlyPushPayload(payload: PushPayload) {
   if (!payload.title || payload.title.length > MAX_PUSH_TITLE_LENGTH) {
@@ -174,6 +174,43 @@ export async function sendKPulsePush(recipientId: string, senderId: string) {
     data: {
       type: 'kpulse',
       senderId,
+    },
+  });
+}
+
+export async function sendContactRequestPush(
+  recipientId: string,
+  senderId: string,
+  senderName: string,
+  requestId: string,
+  mutualCount: number,
+) {
+  const suffix = mutualCount > 0 ? ` · ${mutualCount} ami${mutualCount > 1 ? 's' : ''} en commun` : '';
+  await sendPushToUsers([recipientId], {
+    title: 'K-ssenger',
+    body: `👋 ${senderName} veut t'ajouter${suffix}`,
+    data: {
+      type: 'contact_request',
+      senderId,
+      requestId,
+    },
+  });
+}
+
+export async function sendGroupInvitePush(
+  recipientId: string,
+  actorId: string,
+  actorName: string,
+  conversationId: string,
+  groupTitle: string,
+) {
+  await sendPushToUsers([recipientId], {
+    title: 'K-ssenger',
+    body: `👥 ${actorName} t'a ajouté au groupe "${groupTitle}"`,
+    data: {
+      type: 'group_invite',
+      senderId: actorId,
+      conversationId,
     },
   });
 }

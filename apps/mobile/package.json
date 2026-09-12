@@ -13,9 +13,11 @@
   "dependencies": {
     "@neondatabase/neon-js": "0.7.0-beta",
     "expo": "~54.0.0",
+    "expo-audio": "~1.1.1",
     "expo-constants": "~18.0.14",
     "expo-crypto": "~15.0.9",
     "expo-device": "~8.0.10",
+    "expo-haptics": "~15.0.8",
     "expo-image-picker": "~17.0.11",
     "expo-linear-gradient": "~15.0.8",
     "expo-location": "~19.0.8",

@@ -33,6 +33,7 @@ import { createOrGetDirectConversation } from './directConversationStore.js';
 import {
   addGroupMember,
   createGroup,
+  getGroupTitle,
   leaveGroup,
   removeGroupMember,
   setGroupMemberRole,
@@ -42,7 +43,7 @@ import { registerGroupBanListHandler } from './groupModerationSocket.js';
 import { registerMediaHandlers } from './mediaSocket.js';
 import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { registerDeviceLinkHandlers } from './deviceLinkSocket.js';
-import { sendConversationPush, sendKPulsePush } from './push.js';
+import { sendConversationPush, sendContactRequestPush, sendGroupInvitePush, sendKPulsePush } from './push.js';
 import { listEncryptedMessages, persistEncryptedMessage, setMessageReaction } from './messageStore.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -60,8 +61,10 @@ import {
   blockUser,
   cancelContactRequest,
   canWizz,
+  countMutualContacts,
   declineContact,
   getContactAudience,
+  getDisplayName,
   listBlockedUsers,
   listContactRequests,
   listContacts,
@@ -255,6 +258,14 @@ io.on('connection', (socket) => {
           memberIds: group.memberIds,
         });
       }
+      void (async () => {
+        const actorName = (await getDisplayName(userId)) ?? 'Quelqu\'un';
+        await Promise.all(group.memberIds.map((memberId) =>
+          sendGroupInvitePush(memberId, userId, actorName, group.conversationId, group.title)));
+      })().catch((error) => logger.warn('group_create_push_failed', {
+        userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      }));
       ack?.({ ok: true, conversationId: group.conversationId });
     } catch (error) {
       logger.warn('group_create_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
@@ -270,6 +281,16 @@ io.on('connection', (socket) => {
       io.in(`user:${request.userId}`).socketsJoin(`conversation:${request.conversationId}`);
       io.to(`user:${request.userId}`).emit('group:invited', { ...result, actorId: userId });
       io.to(`conversation:${request.conversationId}`).emit('group:updated', { ...result, action: 'member-added', actorId: userId });
+      void (async () => {
+        const [actorName, title] = await Promise.all([
+          getDisplayName(userId),
+          getGroupTitle(request.conversationId),
+        ]);
+        await sendGroupInvitePush(request.userId, userId, actorName ?? 'Quelqu\'un', request.conversationId, title ?? 'un groupe');
+      })().catch((error) => logger.warn('group_member_add_push_failed', {
+        userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      }));
       ack?.({ ok: true, ...result });
     } catch (error) {
       logger.warn('group_member_add_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
@@ -500,6 +521,16 @@ io.on('connection', (socket) => {
       const { userId: recipientId } = contactTargetSchema.parse(raw);
       const request = await requestContact(userId, recipientId);
       io.to(`user:${recipientId}`).emit('contact:request', { requestId: request.id, senderId: userId });
+      void (async () => {
+        const [senderName, mutualCount] = await Promise.all([
+          getDisplayName(userId),
+          countMutualContacts(userId, recipientId),
+        ]);
+        await sendContactRequestPush(recipientId, userId, senderName ?? 'Quelqu\'un', request.id, mutualCount);
+      })().catch((error) => logger.warn('contact_request_push_failed', {
+        userId,
+        error: error instanceof Error ? error.message : 'unknown',
+      }));
       ack?.({ ok: true, requestId: request.id });
     } catch {
       ack?.({ ok: false, error: 'REJECTED' });
