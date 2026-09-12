@@ -12,11 +12,21 @@ import { isNeonBackendConfigured, requireNeonBackend } from './neonConfig';
  */
 export const isBackendConfigured = isNeonBackendConfigured;
 
+// Neon Auth (better-auth) rejects requests with no Origin header
+// ("MISSING_ORIGIN") once callbackURL isn't absolute. Browsers set Origin
+// automatically; React Native's fetch never does, so every native sign-up/
+// sign-in call failed server-side with a generic error before this. The
+// value must match a trusted origin already configured in the Neon Auth
+// dashboard (the same one the web build serves from).
+const NATIVE_AUTH_ORIGIN = 'https://k-ssenger.expo.app';
+
 function createKssengerClient() {
   const { authUrl, dataApiUrl } = requireNeonBackend();
   return createClient({
     auth: {
-      adapter: SupabaseAuthAdapter(),
+      adapter: SupabaseAuthAdapter({
+        fetchOptions: { headers: { Origin: NATIVE_AUTH_ORIGIN } },
+      }),
       url: authUrl,
     },
     dataApi: {
