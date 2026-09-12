@@ -62,7 +62,7 @@ jobs:
           test -f "$MANIFEST"
           grep -E 'android:allowBackup="false"' "$MANIFEST"
           grep -E 'android:usesCleartextTraffic="false"' "$MANIFEST"
-          ! grep -F 'android.permission.ACCESS_BACKGROUND_LOCATION' "$MANIFEST"
+          grep -E 'ACCESS_BACKGROUND_LOCATION.*tools:node="remove"' "$MANIFEST"
 
       - name: Enforce removed libsignal runtime stays removed
         run: |
