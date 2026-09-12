@@ -18,18 +18,30 @@ var g = typeof global !== 'undefined' ? global : globalThis;
 if (typeof g.crypto !== 'object') g.crypto = {};
 if (typeof g.crypto.getRandomValues !== 'function') {
   g.crypto.getRandomValues = function (arr) {
-    var secure = null;
-    try {
-      // Deferred require — safe here too, but kept lazy since expo-crypto's
-      // own native module may not be linked yet this early in some builds.
-      secure = require('expo-crypto').getRandomBytes(arr.length);
-    } catch (e) {
-      secure = null;
+    // Polyfill files (unlike normal __d()-registered modules) get no `require`
+    // in scope at all, so expo-crypto's own JS wrapper can't be used here —
+    // reach its native module directly via Expo's own global registry, the
+    // same mechanism expo-modules-core's requireNativeModule() uses under the
+    // hood (and the exact fallback react-native-get-random-values itself
+    // uses for "Expo SDK 45+").
+    // No Math.random() fallback: this backs PKCE verifiers and other
+    // security-sensitive randomness. A silent fallback to a non-CSPRNG would
+    // be a real weakness, not a graceful degradation — fail loud instead so
+    // a missing/unlinked expo-crypto is caught immediately, not silently
+    // weakened.
+    var native = g.expo && g.expo.modules && g.expo.modules.ExpoCrypto;
+    if (!native) throw new Error('crypto.getRandomValues: ExpoCrypto native module unavailable');
+    if (typeof native.getRandomValues === 'function') {
+      native.getRandomValues(arr);
+      return arr;
     }
-    for (var i = 0; i < arr.length; i++) {
-      arr[i] = secure ? secure[i] : Math.floor(Math.random() * 256);
+    if (typeof native.getRandomBase64String === 'function') {
+      var binary = g.atob ? g.atob(native.getRandomBase64String(arr.length)) : null;
+      if (!binary) throw new Error('crypto.getRandomValues: no base64 decoder available to finish decoding native output');
+      for (var i = 0; i < arr.length; i++) arr[i] = binary.charCodeAt(i);
+      return arr;
     }
-    return arr;
+    throw new Error('crypto.getRandomValues: ExpoCrypto native module exposes neither getRandomValues nor getRandomBase64String');
   };
 }
 // Not a real WebCrypto SubtleCrypto implementation — just enough that a
