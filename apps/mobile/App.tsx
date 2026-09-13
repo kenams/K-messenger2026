@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { FeedScreen } from './src/features/feed/FeedScreen';
@@ -284,7 +284,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
       <StatusBar style="dark" />
       <View style={[styles.shell, immersive && styles.shellImmersive]}>
         {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
-        {liveBroadcasts.size > 0 && tab !== 'feed' && (
+        {liveBroadcasts.size > 0 && tab !== 'feed' && Platform.OS === 'web' && (
           <TouchableOpacity
             style={styles.liveBanner}
             onPress={() => setLiveScreen({ broadcasterId: [...liveBroadcasts.keys()][0] })}
@@ -298,7 +298,16 @@ export default function App({ profile, onProfileChanged }: AppProps) {
         {tab === 'feed' && <FeedScreen userAge={userAge} />}
         {tab === 'map' && <KMapScreen />}
         {tab === 'moments' && <MomentsScreen />}
-        {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} onLive={() => setLiveScreen({ broadcasterId: null })} />}
+        {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} onLive={() => {
+          // K-Live's native video module (react-native-webrtc) is temporarily
+          // pulled from Android/iOS builds — it broke unrelated networking
+          // (profile/auth fetches) on real devices even though it never got
+          // opened; the JS screen is still here for web, which doesn't need
+          // that native module and isn't affected. Re-add the config plugins
+          // in app.json once that conflict is root-caused and fixed.
+          if (Platform.OS === 'web') setLiveScreen({ broadcasterId: null });
+          else Alert.alert('K-Live', 'Le live vidéo arrive bientôt sur mobile. Disponible dès maintenant sur la version web.');
+        }} />}
         <View style={styles.tabs}>
           <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
           <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
