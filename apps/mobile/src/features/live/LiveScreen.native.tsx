@@ -8,7 +8,8 @@
 // @livekit/react-native, @livekit/react-native-webrtc, and the two config
 // plugins in app.json once that native networking conflict is root-caused.
 import React from 'react';
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { palette, radius, spacing, type as typo } from '../../theme/tokens';
 

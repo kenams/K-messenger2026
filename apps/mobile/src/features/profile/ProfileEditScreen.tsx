@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { launchImageLibrarySafe } from '../../lib/pickMedia';
-import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';

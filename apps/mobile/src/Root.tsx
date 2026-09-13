@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import App from '../App';
 import { AuthScreen } from './features/auth/AuthScreen';
@@ -37,9 +38,11 @@ class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, {
 
 export function Root() {
   return (
-    <RootErrorBoundary>
-      <RootInner />
-    </RootErrorBoundary>
+    <SafeAreaProvider>
+      <RootErrorBoundary>
+        <RootInner />
+      </RootErrorBoundary>
+    </SafeAreaProvider>
   );
 }
 

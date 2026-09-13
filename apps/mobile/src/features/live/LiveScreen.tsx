@@ -4,7 +4,8 @@
 // so it drops straight into this RN screen without a native bridge.
 import '@livekit/components-styles';
 import React, { useState } from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import { StatusBar } from 'expo-status-bar';
 import { useLiveSocket, type LiveSession } from './useLiveSocket';
