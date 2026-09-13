@@ -16,6 +16,12 @@ const schema = z.object({
   // Server-only Neon Console API token. Never expose this through an EXPO_PUBLIC variable.
   // Account self-delete remains unavailable until this secret is configured on the K-ssenger server.
   NEON_API_KEY: z.string().min(20).optional(),
+  // K-Live (LiveKit Cloud, free tier). Optional: absent in dev/preview envs,
+  // live:* socket handlers fail closed with LIVE_NOT_CONFIGURED rather than
+  // crashing boot.
+  LIVEKIT_URL: z.string().url().optional(),
+  LIVEKIT_API_KEY: z.string().min(1).optional(),
+  LIVEKIT_API_SECRET: z.string().min(1).optional(),
   // Comma-separated allowlist of exact https origins. Rejects "*" (which the
   // cors package would otherwise happily echo back even with credentials:
   // true, defeating same-origin protection for cookie/credentialed requests)

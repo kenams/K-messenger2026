@@ -45,6 +45,7 @@ import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { registerDeviceLinkHandlers } from './deviceLinkSocket.js';
 import { sendConversationPush, sendContactRequestPush, sendGroupInvitePush, sendKPulsePush } from './push.js';
 import { listEncryptedMessages, persistEncryptedMessage, setMessageReaction } from './messageStore.js';
+import { endLiveRoom, isLiveConfigured, liveRoomName, mintLiveToken } from './live.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
   joinLimiter,
@@ -644,6 +645,48 @@ io.on('connection', (socket) => {
 
   socket.on('nudge:send', (raw, ack) => {
     void handleKPulseSend(userId, raw, ack, true);
+  });
+
+  socket.on('live:start', async (_raw, ack) => {
+    try {
+      if (!isLiveConfigured) return ack?.({ ok: false, error: 'LIVE_NOT_CONFIGURED' });
+      if (!socialLimiter.consume(`${userId}:live-start`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const displayName = (await getDisplayName(userId)) ?? 'Quelqu\'un';
+      const token = await mintLiveToken({ userId, displayName, broadcasterId: userId, publish: true });
+      const audience = await getContactAudience(userId);
+      for (const contactId of audience) {
+        io.to(`user:${contactId}`).emit('live:started', { broadcasterId: userId, broadcasterName: displayName });
+      }
+      ack?.({ ok: true, token, url: config.LIVEKIT_URL, roomName: liveRoomName(userId) });
+    } catch {
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('live:join', async (raw, ack) => {
+    try {
+      if (!isLiveConfigured) return ack?.({ ok: false, error: 'LIVE_NOT_CONFIGURED' });
+      if (!socialLimiter.consume(`${userId}:live-join`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const { userId: broadcasterId } = contactTargetSchema.parse(raw);
+      const displayName = (await getDisplayName(userId)) ?? 'Quelqu\'un';
+      const token = await mintLiveToken({ userId, displayName, broadcasterId, publish: false });
+      ack?.({ ok: true, token, url: config.LIVEKIT_URL, roomName: liveRoomName(broadcasterId) });
+    } catch {
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('live:stop', async (_raw, ack) => {
+    try {
+      await endLiveRoom(userId);
+      const audience = await getContactAudience(userId);
+      for (const contactId of audience) {
+        io.to(`user:${contactId}`).emit('live:stopped', { broadcasterId: userId });
+      }
+      ack?.({ ok: true });
+    } catch {
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
   });
 
   socket.on('disconnect', (reason) => {

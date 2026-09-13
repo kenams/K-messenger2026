@@ -33,6 +33,8 @@
       ],
       "./plugins/withKssengerAndroidSecurity.js",
       "./plugins/withKssengerReleaseBundleRoot.js",
+      "@config-plugins/react-native-webrtc",
+      "@livekit/react-native-expo-plugin",
       "expo-secure-store",
       "expo-audio"
     ],

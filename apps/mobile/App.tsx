@@ -9,6 +9,8 @@ import { MsnContactsScreen, type Contact } from './src/features/contacts/MsnCont
 import { ChatsHubScreen } from './src/features/chats/ChatsHubScreen';
 import { DirectConversationScreen } from './src/features/chats/DirectConversationScreen';
 import { GroupsScreen } from './src/features/groups/GroupsScreen';
+import { LiveScreen } from './src/features/live/LiveScreen';
+import { useLiveBroadcasts } from './src/features/live/useLiveBroadcasts';
 import { AccountDataScreen } from './src/features/profile/AccountDataScreen';
 import { PrivacySettingsScreen } from './src/features/profile/PrivacySettingsScreen';
 import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
@@ -95,6 +97,8 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const [accountData, setAccountData] = useState(false);
   const [privacySettings, setPrivacySettings] = useState(false);
   const [groupsScreen, setGroupsScreen] = useState(false);
+  const [liveScreen, setLiveScreen] = useState<{ broadcasterId: string | null } | null>(null);
+  const liveBroadcasts = useLiveBroadcasts();
   useNowPlayingSync(profile, onProfileChanged);
   const [userAge, setUserAge] = useState<number | null>(null);
   const [ageLoading, setAgeLoading] = useState(true);
@@ -105,7 +109,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
 
   // One place to dismiss whatever secondary screen sits above the tab shell.
   const overlayOpen =
-    !!selected || editingProfile || accountData || privacySettings || groupsScreen;
+    !!selected || editingProfile || accountData || privacySettings || groupsScreen || !!liveScreen;
 
   const closeOverlays = useCallback(() => {
     setSelected(null);
@@ -113,6 +117,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
     setAccountData(false);
     setPrivacySettings(false);
     setGroupsScreen(false);
+    setLiveScreen(null);
   }, []);
 
   // Android hardware back closes the current secondary screen instead of the app.
@@ -268,6 +273,9 @@ export default function App({ profile, onProfileChanged }: AppProps) {
       </WebShell>
     );
   }
+  if (liveScreen) {
+    return <LiveScreen broadcasterId={liveScreen.broadcasterId} onClose={() => setLiveScreen(null)} />;
+  }
 
   const immersive = tab === 'feed';
 
@@ -276,12 +284,21 @@ export default function App({ profile, onProfileChanged }: AppProps) {
       <StatusBar style="dark" />
       <View style={[styles.shell, immersive && styles.shellImmersive]}>
         {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
+        {liveBroadcasts.size > 0 && tab !== 'feed' && (
+          <TouchableOpacity
+            style={styles.liveBanner}
+            onPress={() => setLiveScreen({ broadcasterId: [...liveBroadcasts.keys()][0] })}
+            accessibilityRole="button"
+          >
+            <Text style={styles.liveBannerText}>🔴 {[...liveBroadcasts.values()][0]} est en direct — rejoindre</Text>
+          </TouchableOpacity>
+        )}
         {tab === 'contacts' && <MsnContactsScreen onOpen={setSelected} />}
         {tab === 'chats' && <ChatsHubScreen />}
         {tab === 'feed' && <FeedScreen userAge={userAge} />}
         {tab === 'map' && <KMapScreen />}
         {tab === 'moments' && <MomentsScreen />}
-        {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
+        {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} onLive={() => setLiveScreen({ broadcasterId: null })} />}
         <View style={styles.tabs}>
           <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
           <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
@@ -345,7 +362,7 @@ function ProfileHeader({ profile, onEdit, onNowPlaying }: { profile: MyProfile; 
   );
 }
 
-function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups, onNowPlaying }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void; onNowPlaying: () => void }) {
+function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups, onNowPlaying, onLive }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void; onNowPlaying: () => void; onLive: () => void }) {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
 
@@ -389,7 +406,7 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
         </Text>
       </TouchableOpacity>
       {!!profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>}
-      <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes" onPress={onGroups}/><ProfileButton icon="🔒" label="Vie privée" onPress={onPrivacy}/></View>
+      <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes" onPress={onGroups}/><ProfileButton icon="🔒" label="Vie privée" onPress={onPrivacy}/><ProfileButton icon="🔴" label="K-Live" onPress={onLive}/></View>
       <TouchableOpacity disabled={signingOut} style={[styles.signOutButton, signingOut && styles.disabled]} onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Se déconnecter de K-ssenger">
         {signingOut ? <ActivityIndicator /> : <Text style={styles.signOutText}>Se déconnecter</Text>}
       </TouchableOpacity>
@@ -471,6 +488,8 @@ const styles = StyleSheet.create({
   headerAction: { fontSize: 17, color: palette.inkSoft },
 
   nowPlayingPill: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs, alignSelf: 'flex-start', backgroundColor: palette.musicSoft, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 4, maxWidth: '100%' },
+  liveBanner: { backgroundColor: palette.danger, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
+  liveBannerText: { color: palette.white, fontWeight: '900', fontSize: 13 },
   nowPlayingIcon: { color: palette.music, fontSize: 12, fontWeight: '900' },
   nowPlayingText: { color: palette.music, fontSize: 11, fontWeight: '800', flexShrink: 1 },
 
