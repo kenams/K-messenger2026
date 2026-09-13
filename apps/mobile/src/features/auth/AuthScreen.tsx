@@ -127,10 +127,16 @@ export function AuthScreen() {
           notifyAuthStateMayHaveChanged();
         }
       }
-    } catch {
-      setError(mode === 'login'
+    } catch (e) {
+      // The generic message alone made every real cause (native crypto
+      // bridge missing, DNS block, server down, ...) look identical and
+      // cost real time chasing the wrong one blind — show the actual error
+      // too so a screenshot is enough to know what broke.
+      const detail = e instanceof Error ? e.message : String(e);
+      setError((mode === 'login'
         ? 'K-ssenger ne peut pas joindre le service de connexion pour le moment.'
-        : 'K-ssenger ne peut pas créer le compte pour le moment. Réessaie quand la connexion est rétablie.');
+        : 'K-ssenger ne peut pas créer le compte pour le moment. Réessaie quand la connexion est rétablie.'
+      ) + `\n[détail: ${detail}]`);
     } finally {
       setBusy(false);
     }
@@ -155,8 +161,9 @@ export function AuthScreen() {
         return;
       }
       if (data.session && !authError && Platform.OS !== 'web') notifyAuthStateMayHaveChanged();
-    } catch {
-      setError('K-ssenger ne peut pas joindre le service de connexion pour le moment.');
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      setError(`K-ssenger ne peut pas joindre le service de connexion pour le moment.\n[détail: ${detail}]`);
     } finally {
       setBusy(false);
     }
