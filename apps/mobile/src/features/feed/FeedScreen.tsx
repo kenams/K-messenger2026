@@ -139,9 +139,13 @@ export function FeedScreen({ userAge = 18 }: { userAge?: number }) {
 function NativeKClip({ uri, active }: { uri: string; active: boolean }) {
   const player = useVideoPlayer(uri, (instance) => { instance.loop = true; });
   useEffect(() => {
-    if (active) player.play();
-    else player.pause();
-    return () => { player.pause(); };
+    // useVideoPlayer releases the native player on unmount; its own cleanup
+    // effect can run before this one, so pause() here can hit an
+    // already-released shared object and throw uncaught — always guard it.
+    const safePause = () => { try { player.pause(); } catch { /* already released */ } };
+    if (active) { try { player.play(); } catch { /* already released */ } }
+    else safePause();
+    return safePause;
   }, [active, player]);
   return <VideoView player={player} style={styles.nativeVideo} nativeControls allowsFullscreen allowsPictureInPicture contentFit="contain" />;
 }
