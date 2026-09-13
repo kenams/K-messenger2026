@@ -73,6 +73,7 @@ export function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
 
   const normalizedUsername = normalizeUsername(username);
   const signupIdentityValid = mode === 'login' || (normalizedUsername.length >= 3 && displayName.trim().length >= 1);
@@ -154,6 +155,28 @@ export function AuthScreen() {
       setError(`K-ssenger ne peut pas joindre le service de connexion pour le moment.\n[détail: ${detail}]`);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const forgotPassword = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!emailValid) {
+      setEmailTouched(true);
+      setError('Saisis ton e-mail ci-dessus pour recevoir le lien de réinitialisation.');
+      return;
+    }
+    setResetBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const backend = getBackend();
+      await backend.auth.resetPasswordForEmail(normalizedEmail);
+      setNotice('Si ce compte existe, un e-mail de réinitialisation vient d’être envoyé.');
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      setError(`Impossible d’envoyer l’e-mail de réinitialisation pour le moment.\n[détail: ${detail}]`);
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -258,6 +281,19 @@ export function AuthScreen() {
               />
 
               <Text style={styles.passwordHint}>8 caractères minimum.</Text>
+              {mode === 'login' && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={resetBusy}
+                  onPress={() => void forgotPassword()}
+                  style={styles.forgotLink}
+                  hitSlop={6}
+                >
+                  <Text style={styles.forgotLinkText}>
+                    {resetBusy ? 'Envoi en cours…' : 'Mot de passe oublié ?'}
+                  </Text>
+                </Pressable>
+              )}
               {emailTouched && email.length > 0 && !emailValid && (
                 <Text accessibilityRole="alert" style={styles.hint}>Saisis une adresse e-mail valide, par exemple nom@exemple.fr.</Text>
               )}
@@ -310,7 +346,7 @@ export function AuthScreen() {
             )}
           </View>
 
-          <Text style={styles.foot}>K-ssenger — édition Lumière</Text>
+          <Text style={styles.foot}>K-ssenger — édition Lumière · une application KAH Digital</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -325,6 +361,8 @@ const styles = StyleSheet.create({
   scrollCompact: { padding: spacing.md, paddingVertical: spacing.lg, justifyContent: 'flex-start' },
   cardCompact: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   passwordHint: { ...typo.micro, color: palette.inkSoft, marginLeft: spacing.xs },
+  forgotLink: { alignSelf: 'flex-end', marginTop: spacing.xs, paddingVertical: spacing.xs },
+  forgotLinkText: { ...typo.micro, color: palette.azureDeep, fontWeight: '700' },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
 
   card: {

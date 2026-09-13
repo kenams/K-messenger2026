@@ -5,6 +5,7 @@
     "scheme": "kssenger",
     "version": "2.0.0-beta.1",
     "jsEngine": "hermes",
+    "newArchEnabled": false,
     "runtimeVersion": {
       "policy": "appVersion"
     },
