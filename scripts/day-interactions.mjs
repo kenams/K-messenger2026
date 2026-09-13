@@ -148,9 +148,22 @@ async function main() {
     await sleep(500);
   }
   if (!bots.length) { log('No bot connected, aborting.'); process.exit(1); }
-  log(`\n${bots.length} bots online and listening. Ctrl+C to stop.\n`);
+  log(`\n${bots.length} bots online and listening.\n`);
 
-  // Kick things off soon after start, then keep going all day.
+  if (process.env.DAY_INTERACTIONS_ONCE === '1') {
+    // CI mode (GitHub Actions cron): no long-lived process between runs, so
+    // stay connected just long enough to catch + reply to anything recent
+    // (the message:new listener above needs the socket open when it lands),
+    // then do one proactive ping and exit.
+    await sleep(90_000);
+    await proactivePing(pick(bots));
+    await sleep(3_000);
+    for (const b of bots) b.socket.close();
+    log('One-shot tick done.');
+    return;
+  }
+
+  // Local long-running mode: kick off soon after start, then keep going all day.
   const HOURS = Number(process.env.DAY_INTERACTIONS_HOURS ?? 10);
   const endAt = Date.now() + HOURS * 3600_000;
   while (Date.now() < endAt) {

@@ -1,0 +1,24 @@
+name: Bot interactions (Kenams test)
+
+# Keeps the 8 K-ssenger bot contacts reactive so Kenams' account stays alive
+# during a multi-day manual test: every run connects them briefly, replies to
+# anything he sent since the last tick, and has one bot proactively ping him
+# (DM / K-Pulse / status / now-playing).
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install socket.io-client
+      - run: node scripts/day-interactions.mjs
+        env:
+          DAY_INTERACTIONS_ONCE: '1'
