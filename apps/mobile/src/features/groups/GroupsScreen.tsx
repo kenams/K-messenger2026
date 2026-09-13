@@ -154,7 +154,7 @@ export function GroupsScreen() {
       if (!result.ok) throw new Error(result.error ?? 'GROUP_CREATE_FAILED');
       setTitle(''); setSelectedIds([]); setCreating(false);
       await loadData(socket);
-      setNotice('Groupe créé. Tous les membres devront avoir un appareil E2EE actif pour envoyer des messages.');
+      setNotice('Groupe créé.');
     } catch {
       setNotice('Création refusée. Vérifie les contacts et blocages.');
     } finally { setBusy(false); }
