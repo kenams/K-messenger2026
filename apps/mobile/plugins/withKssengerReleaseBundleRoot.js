@@ -12,11 +12,27 @@ const { withAppBuildGradle } = require('expo/config-plugins');
 module.exports = function withKssengerReleaseBundleRoot(config) {
   return withAppBuildGradle(config, (buildGradleConfig) => {
     const marker = 'root = file("../../../../")';
-    if (buildGradleConfig.modResults.contents.includes(marker)) return buildGradleConfig;
-    buildGradleConfig.modResults.contents = buildGradleConfig.modResults.contents.replace(
-      /react\s*\{/,
-      `react {\n    ${marker}`,
-    );
+    // Pointing `root` at the repo root makes Expo CLI's own project-root
+    // detection ambiguous for export:embed (the repo root has its own
+    // package.json too) — it can silently fall back to bare Metro defaults
+    // instead of apps/mobile/metro.config.js, dropping the crypto polyfill
+    // wired there (shim/crypto-polyfill.js) with no build-time error: the
+    // app just crashes on launch with "ReferenceError: Property 'crypto'
+    // doesn't exist" before rendering anything. Force the real config by
+    // absolute path so there is no ambiguity.
+    const bundleConfigLine = 'bundleConfig = file(new File(projectRoot, "metro.config.js"))';
+    if (!buildGradleConfig.modResults.contents.includes(marker)) {
+      buildGradleConfig.modResults.contents = buildGradleConfig.modResults.contents.replace(
+        /react\s*\{/,
+        `react {\n    ${marker}`,
+      );
+    }
+    if (!buildGradleConfig.modResults.contents.includes(bundleConfigLine)) {
+      buildGradleConfig.modResults.contents = buildGradleConfig.modResults.contents.replace(
+        marker,
+        `${marker}\n    ${bundleConfigLine}`,
+      );
+    }
     return buildGradleConfig;
   });
 };
