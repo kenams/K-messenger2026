@@ -11,6 +11,7 @@ import { DirectConversationScreen } from './src/features/chats/DirectConversatio
 import { GroupsScreen } from './src/features/groups/GroupsScreen';
 import { LiveScreen } from './src/features/live/LiveScreen';
 import { useLiveBroadcasts } from './src/features/live/useLiveBroadcasts';
+import { useWebNotifications } from './src/features/notifications/useWebNotifications';
 import { AccountDataScreen } from './src/features/profile/AccountDataScreen';
 import { PrivacySettingsScreen } from './src/features/profile/PrivacySettingsScreen';
 import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
@@ -100,6 +101,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const [liveScreen, setLiveScreen] = useState<{ broadcasterId: string | null } | null>(null);
   const liveBroadcasts = useLiveBroadcasts();
   useNowPlayingSync(profile, onProfileChanged);
+  useWebNotifications(profile.id);
   const [userAge, setUserAge] = useState<number | null>(null);
   const [ageLoading, setAgeLoading] = useState(true);
   const [ageSaving, setAgeSaving] = useState(false);
