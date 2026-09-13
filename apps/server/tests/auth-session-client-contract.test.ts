@@ -9,7 +9,7 @@ const source = readFileSync(
 
 describe('mobile auth session lifecycle contract', () => {
   it('revalidates Neon Auth when K-ssenger returns to the foreground', () => {
-    expect(source).toContain("import { AppState } from 'react-native'");
+    expect(source).toMatch(/import \{[^}]*\bAppState\b[^}]*\} from 'react-native'/);
     expect(source).toContain("AppState.addEventListener('change'");
     expect(source).toContain("nextState === 'active'");
     expect(source).toContain('void refreshSession(false, true)');
