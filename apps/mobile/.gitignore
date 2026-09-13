@@ -9,3 +9,5 @@ dist-android/
 prebuilt-bundle/
 *.apk
 public/downloads/
+
+.vercel

@@ -1,19 +1,12 @@
-// Keeps the bot contacts alive and interacting with Kenams all day: they
-// reply when he messages them, and every 20-40 min one of them proactively
-// pings him (DM, K-Pulse, or a status/now-playing update) so the app feels
-// like a real, active buddy list during a long test session.
-//   KENAMS_QUICKLOGIN_PASSWORD=... node scripts/day-interactions.mjs
-//
-// Same auth dance as liven-up-kenams.mjs (raw fetch, not the SDK — see that
-// file's header comment for why).
+// QA bots: catch up on recent Kenams messages, then run one rotating social action.
+// One-shot cron: DAY_INTERACTIONS_ONCE=1; local polling: DAY_INTERACTIONS_HOURS=10.
 import { io } from 'socket.io-client';
-import { randomUUID } from 'node:crypto';
+import { KENAMS_ID, stableMessageId, testConversation, latestUnanswered, emitAck } from './bot-interactions-core.mjs';
 
 const AUTH_URL = 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth';
 const DATA_API_URL = 'https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1';
 const SOCKET_URL = 'https://kssenger-server.onrender.com';
-const KENAMS_ID = '85db1ffe-6c17-468f-8aca-aba9987aadef';
-const BOT_PASSWORD = 'KssBot2026!';
+const BOT_PASSWORD = process.env.BOT_PASSWORD || 'KssBot2026!';
 
 const REPLIES = [
   "Haha carrément 😂", "Grave !", "Tu fais quoi de beau aujourd'hui ?", "Ça marche, on se dit ça",
@@ -40,7 +33,7 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function signIn(email, password) {
   const res = await fetch(`${AUTH_URL}/sign-in/email`, {
-    method: 'POST',
+    method: 'POST', signal: AbortSignal.timeout(20_000),
     headers: { 'Content-Type': 'application/json', Origin: 'https://k-ssenger.expo.app' },
     body: JSON.stringify({ email, password }),
   });
@@ -48,7 +41,7 @@ async function signIn(email, password) {
   if (!res.ok || !json.token) return null;
   const cookie = (res.headers.get('set-cookie') ?? '').split(';')[0];
   if (!cookie) return null;
-  const jwtRes = await fetch(`${AUTH_URL}/token`, { headers: { Origin: 'https://k-ssenger.expo.app', Cookie: cookie } });
+  const jwtRes = await fetch(`${AUTH_URL}/token`, { signal: AbortSignal.timeout(20_000), headers: { Origin: 'https://k-ssenger.expo.app', Cookie: cookie } });
   const jwtJson = await jwtRes.json();
   if (!jwtRes.ok || !jwtJson.token) return null;
   return { jwt: jwtJson.token, userId: json.user.id };
@@ -56,123 +49,148 @@ async function signIn(email, password) {
 
 async function dataApi(token, method, path, body) {
   const res = await fetch(`${DATA_API_URL}${path}`, {
-    method,
+    method, signal: AbortSignal.timeout(20_000),
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, Prefer: method === 'POST' ? 'return=representation' : 'return=minimal' },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status} ${text}`);
+  if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}`);
   return text ? JSON.parse(text) : null;
 }
 
-function emitAck(socket, event, payload) {
-  return new Promise((resolve) => socket.emit(event, payload, resolve));
-}
 
 async function connectBot(slug) {
   const session = await signIn(`kenams42+kss-${slug}@gmail.com`, BOT_PASSWORD);
-  if (!session) { log(`❌ ${slug} sign-in failed`); return null; }
+  if (!session) throw new Error(`${slug}: authentication failed`);
   const { jwt: token, userId } = session;
-
-  const deviceName = `K-ssenger Bot ${slug}`;
-  const existing = await dataApi(token, 'GET', `/devices?user_id=eq.${userId}&name=eq.${encodeURIComponent(deviceName)}&revoked_at=is.null&select=id&limit=1`);
-  const deviceId = existing?.[0]?.id ?? (await dataApi(token, 'POST', '/devices', { user_id: userId, name: deviceName }))?.[0]?.id;
-  if (!deviceId) { log(`❌ ${slug} no device id`); return null; }
-
-  const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'], auth: { accessToken: token }, reconnection: true, reconnectionDelay: 5000 });
-  await new Promise((resolve, reject) => {
-    socket.once('connect', resolve);
-    socket.once('connect_error', reject);
-    setTimeout(() => reject(new Error('timeout')), 15000);
-  });
-
-  let directConversationId = null;
-  socket.on('message:new', async (msg) => {
-    if (msg?.senderId !== KENAMS_ID) return;
-    directConversationId = directConversationId ?? msg.conversationId;
-    const delay = 20_000 + Math.random() * 100_000; // feels human: 20s-2min
-    await sleep(delay);
-    await emitAck(socket, 'message:send', {
-      clientMessageId: randomUUID(),
-      conversationId: msg.conversationId,
-      senderDeviceId: deviceId,
-      algorithm: 'kssenger-plaintext-v1',
-      ciphertext: pick(REPLIES),
-      createdAt: new Date().toISOString(),
+  const name = `K-ssenger Bot ${slug}`;
+  const existing = await dataApi(token, 'GET', `/devices?user_id=eq.${userId}&name=eq.${encodeURIComponent(name)}&revoked_at=is.null&select=id&limit=1`);
+  const deviceId = existing?.[0]?.id ?? (await dataApi(token, 'POST', '/devices', { user_id: userId, name }))?.[0]?.id;
+  if (!deviceId) throw new Error(`${slug}: no device`);
+  const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'], auth: { accessToken: token }, reconnection: false });
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => finish(new Error('connection timeout')), 20_000);
+      const finish = error => { clearTimeout(timer); socket.off('connect', connected); socket.off('connect_error', failed); error ? reject(error) : resolve(); };
+      const connected = () => finish();
+      const failed = () => finish(new Error('socket connection failed'));
+      socket.once('connect', connected); socket.once('connect_error', failed);
     });
-    log(`  ${slug} replied to Kenams`);
-  });
-
-  log(`✅ ${slug} online`);
-  return { slug, socket, userId, token, deviceId, getDirectConversationId: () => directConversationId, setDirectConversationId: (id) => { directConversationId = id; } };
+    const { contacts } = await emitAck(socket, 'contacts:list', {});
+    const isKenamsContact = contacts.some(c => c.contact_id === KENAMS_ID);
+    log(`${slug}: connected; Kenams contact=${isKenamsContact}`);
+    return { slug, socket, userId, token, deviceId, isKenamsContact };
+  } catch (error) { socket.close(); throw error; }
 }
 
-async function proactivePing(bot) {
-  const action = pick(['dm', 'kpulse', 'status', 'music']);
-  try {
-    if (action === 'dm') {
-      let conversationId = bot.getDirectConversationId();
-      if (!conversationId) {
-        const direct = await emitAck(bot.socket, 'conversation:direct', { userId: KENAMS_ID });
-        if (!direct?.ok) return log(`  ${bot.slug} dm setup failed`, direct);
-        conversationId = direct.conversationId;
-        bot.setDirectConversationId(conversationId);
-      }
-      const text = pick(PROACTIVE);
-      await emitAck(bot.socket, 'message:send', {
-        clientMessageId: randomUUID(), conversationId, senderDeviceId: bot.deviceId,
-        algorithm: 'kssenger-plaintext-v1', ciphertext: text, createdAt: new Date().toISOString(),
-      });
-      log(`  ${bot.slug} → "${text}"`);
-    } else if (action === 'kpulse') {
-      await emitAck(bot.socket, 'kpulse:send', { recipientId: KENAMS_ID, variant: 'classic' });
-      log(`  ${bot.slug} sent a K-Pulse`);
-    } else if (action === 'status') {
-      await dataApi(bot.token, 'PATCH', `/profiles?id=eq.${bot.userId}`, { custom_status: pick(STATUSES), updated_at: new Date().toISOString() });
-      log(`  ${bot.slug} updated status`);
-    } else {
-      const t = pick(TRACKS);
-      await dataApi(bot.token, 'PATCH', `/profiles?id=eq.${bot.userId}`, { now_playing_title: t.title, now_playing_artist: t.artist, updated_at: new Date().toISOString() });
-      log(`  ${bot.slug} now playing ${t.title} — ${t.artist}`);
-    }
-  } catch (e) {
-    log(`  ${bot.slug} action failed`, e.message);
+async function sendText(bot, conversationId, text, id) {
+  return emitAck(bot.socket, 'message:send', {
+    clientMessageId: id, conversationId, senderDeviceId: bot.deviceId,
+    algorithm: 'kssenger-plaintext-v1', ciphertext: text, createdAt: new Date().toISOString(),
+  });
+}
+
+async function catchUp(bot, botIds) {
+  const { conversations } = await emitAck(bot.socket, 'conversations:list', {});
+  for (const conversation of conversations.filter(c => testConversation(c, botIds)).slice(0,20)) {
+    // One test bot replies per group to avoid eight replies to every message.
+    const responder = conversation.members.map(m=>m.userId).filter(id=>botIds.has(id)).sort()[0];
+    if (conversation.kind === 'group' && responder !== bot.userId) continue;
+    await emitAck(bot.socket, 'conversation:join', { conversationId: conversation.id });
+    const { messages } = await emitAck(bot.socket, 'conversation:history', { conversationId: conversation.id, limit: 100 });
+    const message = latestUnanswered(messages, bot.userId);
+    if (!message) continue;
+    await emitAck(bot.socket, 'message:receipt', { conversationId: conversation.id, messageId: message.id, state: 'read' });
+    await emitAck(bot.socket, 'message:react', { conversationId: conversation.id, messageId: message.id, reaction: '👍' });
+    await sendText(bot, conversation.id, pick(REPLIES), stableMessageId(bot.userId, message.id, 'reply'));
+    log(`${bot.slug}: replied, read receipt and reaction confirmed (${conversation.kind})`);
   }
+  return conversations;
+}
+
+const ACTIONS = ['dm','kpulse','status','music','group','moment','moment-reaction','presence'];
+async function proactivePing(bot, bots, slot, action) {
+  if (!ACTIONS.includes(action)) throw new Error('Unknown DAY_INTERACTIONS_ACTION');
+  const botIds = new Set(bots.map(b=>b.userId));
+  if (action === 'dm') {
+    const existing = bot.conversations?.find(c => c.kind === 'direct' && testConversation(c, botIds));
+    const conversationId = existing?.id ?? (await emitAck(bot.socket, 'conversation:direct', { userId: KENAMS_ID })).conversationId;
+    await emitAck(bot.socket, 'conversation:join', { conversationId });
+    await sendText(bot, conversationId, pick(PROACTIVE), stableMessageId(bot.userId, slot, 'proactive-dm'));
+  } else if (action === 'kpulse') {
+    await emitAck(bot.socket, 'kpulse:send', { recipientId: KENAMS_ID, variant: 'classic' });
+  } else if (action === 'status' || action === 'music') {
+    const track = pick(TRACKS);
+    await dataApi(bot.token, 'PATCH', `/profiles?id=eq.${bot.userId}`, {
+      ...(action === 'status' ? { custom_status: pick(STATUSES) } : { now_playing_title: track.title, now_playing_artist: track.artist }),
+      updated_at: new Date().toISOString(),
+    });
+  } else if (action === 'presence') {
+    await emitAck(bot.socket, 'presence:update', { status: 'away' });
+  } else if (action === 'group') {
+    // Stable creator and title: reuse one group instead of creating a group every tick.
+    const creator = bots[0];
+    const { conversations } = await emitAck(creator.socket, 'conversations:list', {});
+    let group = conversations.find(c=>c.kind==='group' && c.title==='K-ssenger — Bots QA' && testConversation(c, botIds));
+    if (!group) {
+      const result = await emitAck(creator.socket, 'group:create', { title:'K-ssenger — Bots QA', memberIds:[KENAMS_ID,...bots.slice(1).map(b=>b.userId)] });
+      group = { id:result.conversationId };
+    }
+    await emitAck(creator.socket, 'conversation:join', { conversationId:group.id });
+    await sendText(creator, group.id, '🧪 Test de groupe : réponds ici pour tester la lecture et les réactions.', stableMessageId(creator.userId, slot, 'group'));
+  } else if (action === 'moment') {
+    // At most one active QA text Moment per bot; no media uploads or public posts.
+    const active = await dataApi(bot.token, 'GET', `/moments?author_id=eq.${bot.userId}&kind=eq.text&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id&limit=1`);
+    if (!active?.length) await dataApi(bot.token, 'POST', '/moments', {
+      author_id:bot.userId, kind:'text', caption:'🧪 Moment de test — tu peux réagir ici !', visibility:'friends',
+      moderation_status:'pending', expires_at:new Date(Date.now()+86400_000).toISOString(),
+    });
+  } else if (action === 'moment-reaction') {
+    const moments = await dataApi(bot.token, 'GET', `/moments?author_id=eq.${KENAMS_ID}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&order=created_at.desc&select=id&limit=1`);
+    if (!moments?.length) { log(`${bot.slug}: no visible Kenams Moment to react to`); return; }
+    const momentId = moments[0].id;
+    const existing = await dataApi(bot.token, 'GET', `/moment_reactions?moment_id=eq.${momentId}&user_id=eq.${bot.userId}&select=reaction`);
+    if (!existing?.length) await dataApi(bot.token, 'POST', '/moment_reactions', { moment_id:momentId, user_id:bot.userId, reaction:'❤️' });
+  }
+  log(`${bot.slug}: ${action} confirmed`);
+}
+
+async function tick(proactive) {
+  const bots = [];
+  const failures = [];
+  try {
+    for (const { slug } of BOTS) {
+      try { bots.push(await connectBot(slug)); } catch(error) { failures.push(error.message); log(error.message); }
+    }
+    if (!bots.length) throw new Error('No bot connected');
+    const botIds = new Set(bots.map(b=>b.userId));
+    for (const bot of bots) {
+      try { bot.conversations = await catchUp(bot, botIds); } catch(error) { failures.push(`${bot.slug}: ${error.message}`); log(`${bot.slug}: ${error.message}`); }
+    }
+    if (proactive) {
+      const slot = Math.floor(Date.now()/1800_000);
+      const eligible = bots.filter(b => b.isKenamsContact);
+      if (!eligible.length) throw new Error('No bot has Kenams as an accepted contact');
+      const requested = process.env.DAY_INTERACTIONS_ACTION || 'rotate';
+      const actions = requested === 'all' ? ACTIONS : [requested === 'rotate' ? ACTIONS[slot % ACTIONS.length] : requested];
+      for (const action of actions) await proactivePing(eligible[slot % eligible.length], eligible, slot, action);
+    }
+    if (failures.length) throw new Error(`${failures.length} bot operation(s) failed; see action names above`);
+    log('Tick complete: acknowledgements checked, sockets closing.');
+  } finally { for (const bot of bots) bot.socket.close(); }
 }
 
 async function main() {
-  const bots = [];
-  for (const { slug } of BOTS) {
-    const b = await connectBot(slug);
-    if (b) bots.push(b);
-    await sleep(500);
-  }
-  if (!bots.length) { log('No bot connected, aborting.'); process.exit(1); }
-  log(`\n${bots.length} bots online and listening.\n`);
-
-  if (process.env.DAY_INTERACTIONS_ONCE === '1') {
-    // CI mode (GitHub Actions cron): no long-lived process between runs, so
-    // stay connected just long enough to catch + reply to anything recent
-    // (the message:new listener above needs the socket open when it lands),
-    // then do one proactive ping and exit.
-    await sleep(90_000);
-    await proactivePing(pick(bots));
-    await sleep(3_000);
-    for (const b of bots) b.socket.close();
-    log('One-shot tick done.');
-    return;
-  }
-
-  // Local long-running mode: kick off soon after start, then keep going all day.
-  const HOURS = Number(process.env.DAY_INTERACTIONS_HOURS ?? 10);
-  const endAt = Date.now() + HOURS * 3600_000;
+  if (process.env.DAY_INTERACTIONS_ONCE === '1') return tick(true);
+  const hours = Number(process.env.DAY_INTERACTIONS_HOURS ?? 10);
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 24) throw new Error('DAY_INTERACTIONS_HOURS must be between 0 and 24');
+  const endAt = Date.now() + hours*3600_000;
+  let lastSlot = -1;
   while (Date.now() < endAt) {
-    await sleep(5_000 + Math.random() * 15_000);
-    await proactivePing(pick(bots));
-    await sleep(20 * 60_000 + Math.random() * 20 * 60_000); // next ping in 20-40 min
+    const slot = Math.floor(Date.now()/1800_000);
+    await tick(slot !== lastSlot);
+    lastSlot = slot;
+    await sleep(Math.min(30_000, Math.max(0,endAt-Date.now())));
   }
-  log('Day-interactions window elapsed, exiting.');
-  for (const b of bots) b.socket.close();
 }
-
-main().catch((error) => { console.error(error); process.exit(1); });
+main().catch(error=>{ console.error(error.message); process.exitCode=1; });

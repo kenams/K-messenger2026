@@ -11,10 +11,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getBackend, isBackendConfigured } from '../../lib/backend';
+import { getBackend, isBackendConfigured, notifyAuthStateMayHaveChanged } from '../../lib/backend';
 import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
 import { MobileAppQr } from '../profile/MobileAppQr';
 
@@ -51,6 +52,7 @@ function AuthField(props: React.ComponentProps<typeof TextInput> & { icon?: stri
       <TextInput
         placeholderTextColor={palette.inkFaint}
         {...input}
+        accessibilityLabel={input.accessibilityLabel ?? input.placeholder}
         secureTextEntry={canReveal && !revealed}
         onFocus={(e) => { setFocused(true); input.onFocus?.(e); }}
         onBlur={(e) => { setFocused(false); input.onBlur?.(e); }}
@@ -72,6 +74,9 @@ function AuthField(props: React.ComponentProps<typeof TextInput> & { icon?: stri
 }
 
 export function AuthScreen() {
+  const { width } = useWindowDimensions();
+  const compact = width < 480;
+  const [emailTouched, setEmailTouched] = useState(false);
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -83,9 +88,10 @@ export function AuthScreen() {
 
   const normalizedUsername = normalizeUsername(username);
   const signupIdentityValid = mode === 'login' || (normalizedUsername.length >= 3 && displayName.trim().length >= 1);
-  const canSubmit = !!email.trim() && password.length >= 8 && signupIdentityValid && !busy && isBackendConfigured;
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const canSubmit = emailValid && password.length >= 8 && signupIdentityValid && !busy && isBackendConfigured;
 
-  const setModeSafe = (next: Mode) => { setMode(next); setError(''); setNotice(''); };
+  const setModeSafe = (next: Mode) => { setMode(next); setError(''); setNotice(''); setEmailTouched(false); };
 
   const submit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -103,6 +109,8 @@ export function AuthScreen() {
           // The web auth adapter doesn't reliably emit onAuthStateChange; reload to enter the app.
           window.location.reload();
           return;
+        } else if (data.session) {
+          notifyAuthStateMayHaveChanged();
         }
       } else {
         const { data, error: authError } = await backend.auth.signUp({
@@ -115,6 +123,8 @@ export function AuthScreen() {
         else if (Platform.OS === 'web' && typeof window !== 'undefined') {
           window.location.reload();
           return;
+        } else if (data.session) {
+          notifyAuthStateMayHaveChanged();
         }
       }
     } catch {
@@ -144,6 +154,7 @@ export function AuthScreen() {
         window.location.reload();
         return;
       }
+      if (data.session && !authError && Platform.OS !== 'web') notifyAuthStateMayHaveChanged();
     } catch {
       setError('K-ssenger ne peut pas joindre le service de connexion pour le moment.');
     } finally {
@@ -178,9 +189,9 @@ export function AuthScreen() {
       <StatusBar style="dark" />
       <View style={styles.wash} pointerEvents="none" />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.card}>
-            <BrandMark />
+        <ScrollView contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={[styles.card, compact && styles.cardCompact]}>
+            <BrandMark size={compact ? 52 : 76} />
             <Text style={styles.kicker}>K · SSENGER</Text>
             <Text style={styles.title}>{mode === 'login' ? 'Content de te revoir' : 'Rejoins K-ssenger'}</Text>
             <Text style={styles.lede}>La messagerie qui remet tes contacts au centre. Présence en direct, K-Pulse, moments — connexion sécurisée.</Text>
@@ -233,6 +244,8 @@ export function AuthScreen() {
                 placeholder="E-mail"
                 value={email}
                 onChangeText={setEmail}
+                autoComplete="email"
+                onBlur={() => setEmailTouched(true)}
               />
               <AuthField
                 icon="🔒"
@@ -240,13 +253,19 @@ export function AuthScreen() {
                 autoCorrect={false}
                 secureTextEntry
                 textContentType={mode === 'login' ? 'password' : 'newPassword'}
-                placeholder="Mot de passe (8 caractères min.)"
+                placeholder="Mot de passe"
+                accessibilityLabel="Mot de passe, 8 caractères minimum"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 value={password}
                 onChangeText={setPassword}
                 onSubmitEditing={() => void submit()}
                 returnKeyType="go"
               />
 
+              <Text style={styles.passwordHint}>8 caractères minimum.</Text>
+              {emailTouched && email.length > 0 && !emailValid && (
+                <Text accessibilityRole="alert" style={styles.hint}>Saisis une adresse e-mail valide, par exemple nom@exemple.fr.</Text>
+              )}
               {mode === 'signup' && normalizedUsername.length > 0 && normalizedUsername.length < 3 && (
                 <Text style={styles.hint}>Le pseudo doit contenir au moins 3 caractères.</Text>
               )}
@@ -285,7 +304,7 @@ export function AuthScreen() {
             <View style={styles.trust}>
               <Text style={styles.trustLock}>🔒</Text>
               <Text style={styles.trustText}>
-                Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version. Aucun secret serveur n’est embarqué dans l’app.
+                Le chiffrement de bout en bout n’est pas encore disponible dans cette version.
               </Text>
             </View>
 
@@ -308,6 +327,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   wash: { position: 'absolute', top: 0, left: 0, right: 0, height: 320, backgroundColor: palette.skyTop },
   scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, paddingVertical: spacing.xxxl },
+  scrollCompact: { padding: spacing.md, paddingVertical: spacing.lg, justifyContent: 'flex-start' },
+  cardCompact: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  passwordHint: { ...typo.micro, color: palette.inkSoft, marginLeft: spacing.xs },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
 
   card: {
@@ -363,7 +385,7 @@ const styles = StyleSheet.create({
   },
   fieldRowFocused: { borderColor: palette.azure, backgroundColor: palette.surface },
   fieldIcon: { fontSize: 15, width: 20, textAlign: 'center', color: palette.inkFaint },
-  fieldInput: { flex: 1, paddingVertical: spacing.md, color: palette.ink, fontSize: 15, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : null) },
+  fieldInput: { flex: 1, minWidth: 0, paddingVertical: spacing.md, color: palette.ink, fontSize: 15, fontWeight: '600', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : null) },
   fieldReveal: { paddingHorizontal: 4, paddingVertical: 4 },
   fieldRevealIcon: { fontSize: 17 },
 
@@ -378,6 +400,7 @@ const styles = StyleSheet.create({
   ctaPressed: { opacity: 0.9, transform: [{ scale: 0.995 }] },
   cta: { minHeight: 54, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
   ctaText: { color: palette.white, fontWeight: '900', fontSize: 15, letterSpacing: 0.3 },
+
   quickLogin: { marginTop: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center' },
   quickLoginText: { color: palette.inkSoft, fontWeight: '700', fontSize: 13 },
 

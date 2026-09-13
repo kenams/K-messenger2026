@@ -1,24 +1,37 @@
 name: Bot interactions (Kenams test)
 
-# Keeps the 8 K-ssenger bot contacts reactive so Kenams' account stays alive
-# during a multi-day manual test: every run connects them briefly, replies to
-# anything he sent since the last tick, and has one bot proactively ping him
-# (DM / K-Pulse / status / now-playing).
+# Catch up on recent test messages and rotate supported social features.
 on:
   schedule:
     - cron: '*/30 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Test action (all sends a bounded QA sequence)
+        type: choice
+        default: rotate
+        options: [rotate, dm, kpulse, status, music, group, moment, moment-reaction, presence, all]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kenams-bot-interactions
+  cancel-in-progress: false
 
 jobs:
   tick:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm install socket.io-client
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node --test scripts/bot-interactions.test.mjs
       - run: node scripts/day-interactions.mjs
         env:
           DAY_INTERACTIONS_ONCE: '1'
+          DAY_INTERACTIONS_ACTION: ${{ inputs.action || 'rotate' }}
