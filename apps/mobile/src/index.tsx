@@ -12,6 +12,23 @@
 import { registerRootComponent } from 'expo';
 import { Root } from './Root';
 
+// @neondatabase/auth's adapter builds responses via the WHATWG static helper
+// `Response.json(data, init)` (a spec addition, not an instance method) —
+// present in browsers and Node 18+, absent from React Native's fetch/Response
+// polyfill. Missing it throws "Response.json is not a function" on every
+// Data API / auth call on native, closing over the real error and surfacing
+// as a generic "erreur réseau" — never caught because prior test passes were
+// web-only (browser fetch has this natively). RN's own fetch polyfill (loaded
+// by InitializeCore, before this entry module runs) already defines global
+// Response, so patching it here — unlike the crypto polyfill above, which
+// must run before Response itself exists — is safe.
+if (typeof Response === 'function' && typeof Response.json !== 'function') {
+  Response.json = (data: unknown, init?: ResponseInit) => {
+    const headers = { 'content-type': 'application/json', ...(init?.headers as Record<string, string> | undefined) };
+    return new Response(JSON.stringify(data), { ...init, headers });
+  };
+}
+
 // Last-resort visibility: if something throws outside React's render tree
 // (an async task, a bad import), surface it instead of a silent white screen.
 // React render errors are still caught by RootErrorBoundary inside <Root/>.
