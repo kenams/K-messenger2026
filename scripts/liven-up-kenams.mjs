@@ -117,10 +117,14 @@ async function sendDm({ socket, deviceId }, text) {
 }
 
 async function connectKenams() {
+  if (!process.env.KENAMS_QUICKLOGIN_PASSWORD) {
+    log('❌ set KENAMS_QUICKLOGIN_PASSWORD env var to run the Kenams contact-accept step');
+    return null;
+  }
   const res = await fetch(`${AUTH_URL}/sign-in/email`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: 'https://k-ssenger.expo.app' },
-    body: JSON.stringify({ email: 'kenams42+app@gmail.com', password: 'KenamsKAH2026' }),
+    body: JSON.stringify({ email: 'kenams42+app@gmail.com', password: process.env.KENAMS_QUICKLOGIN_PASSWORD }),
   });
   const json = await res.json();
   if (!res.ok || !json.token) { log('❌ Kenams sign-in failed', json); return null; }
