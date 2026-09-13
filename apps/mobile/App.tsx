@@ -15,7 +15,7 @@ import { ProfileEditScreen } from './src/features/profile/ProfileEditScreen';
 import type { MyProfile } from './src/features/profile/useMyProfile';
 import { useNowPlayingSync } from './src/features/profile/useNowPlayingSync';
 import { unregisterPushForSignOut } from './src/features/push/usePushRegistration';
-import { getBackend } from './src/lib/backend';
+import { getBackend, notifyAuthStateMayHaveChanged } from './src/lib/backend';
 import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket } from './src/lib/realtime';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -358,9 +358,14 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
       const { error } = await getBackend().auth.signOut();
       if (error) throw error;
       disconnectRealtimeSocket();
-      // The web auth adapter doesn't always emit onAuthStateChange, which left
-      // the app stuck on the spinner. Reloading lands cleanly on the sign-in screen.
-      if (Platform.OS === 'web' && typeof window !== 'undefined') window.location.reload();
+      // The auth adapter doesn't always emit onAuthStateChange after signOut,
+      // which left the app stuck on the spinner forever (setSigningOut(false)
+      // was only ever called in the catch branch). Web reloads to force a
+      // clean landing on the sign-in screen; native has no equivalent, so it
+      // pokes useAuthSession to re-check the (now cleared) session directly.
+      if (Platform.OS === 'web' && typeof window !== 'undefined') { window.location.reload(); return; }
+      notifyAuthStateMayHaveChanged();
+      setSigningOut(false);
     } catch {
       setSignOutError('Déconnexion sécurisée impossible pour le moment. Réessaie avec une connexion réseau afin de couper aussi les notifications de ce compte.');
       setSigningOut(false);

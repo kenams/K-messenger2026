@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { getBackend, isBackendConfigured } from '../../lib/backend';
+import { getBackend, isBackendConfigured, onAuthStateMayHaveChanged } from '../../lib/backend';
 
 export type KssengerSession = {
   user: { id: string; email?: string | null };
@@ -61,6 +61,8 @@ export function useAuthSession(): AuthSessionState {
       setState({ loading: false, configured: true, session: (session as KssengerSession | null) ?? null });
     });
 
+    const unsubscribeAuthEvents = onAuthStateMayHaveChanged(() => { void refreshSession(false, false); });
+
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         // Mobile OSes can suspend K-ssenger long enough for an auth session to
@@ -76,6 +78,7 @@ export function useAuthSession(): AuthSessionState {
       active = false;
       refreshSequence += 1;
       listener.subscription.unsubscribe();
+      unsubscribeAuthEvents();
       appStateSubscription.remove();
     };
   }, []);
