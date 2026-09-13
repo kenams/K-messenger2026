@@ -33,10 +33,10 @@ export function useNowPlayingSync(profile: MyProfile, onProfileChanged: () => Pr
       if (!active || tickInFlight) return;
       tickInFlight = true;
       try {
-        const source = await getActiveMusicSource();
+        const source = await getActiveMusicSource(profileIdRef.current);
         if (!source || !active) return;
 
-        const track = await fetchNowPlaying();
+        const track = await fetchNowPlaying(profileIdRef.current);
         if (!active) return;
         const title = track?.title ?? '';
         const artist = track?.artist ?? '';

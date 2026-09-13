@@ -1,6 +1,7 @@
 import { Linking, Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
+import { getBackend } from './backend';
 
 /**
  * Automatic "now playing" for the profile signature.
@@ -27,7 +28,6 @@ const SPOTIFY_SCOPE = 'user-read-currently-playing user-read-playback-state';
 const SPOTIFY_NATIVE_REDIRECT = 'kssenger://spotify-callback';
 const K_SPOTIFY = 'kssenger.music.spotify';
 const K_SPOTIFY_VERIFIER = 'kssenger.music.spotify.verifier';
-const K_LASTFM = 'kssenger.music.lastfm';
 
 type SpotifyTokens = { refreshToken: string; accessToken: string; expiresAt: number };
 
@@ -284,17 +284,23 @@ async function fetchSpotifyNowPlaying(): Promise<NowPlayingTrack | null> {
 // Last.fm
 // ---------------------------------------------------------------------------
 
-export async function getLastfmUsername(): Promise<string | null> {
-  return (await readKey(K_LASTFM)) || null;
+// Stored on the profile row (not per-device SecureStore/localStorage) so
+// setting it once works from any device signed into the same account — a
+// phone-only Last.fm username left the web build with nothing to sync from,
+// even though the sync logic itself is fully cross-platform.
+export async function getLastfmUsername(userId: string): Promise<string | null> {
+  const { data } = await getBackend().from('profiles').select('lastfm_username').eq('id', userId).maybeSingle();
+  return (data as { lastfm_username: string | null } | null)?.lastfm_username ?? null;
 }
 
-export async function setLastfmUsername(username: string): Promise<void> {
+export async function setLastfmUsername(userId: string, username: string): Promise<void> {
   const clean = username.trim().replace(/^@/, '').slice(0, 40);
-  await writeKey(K_LASTFM, clean.length ? clean : null);
+  const { error } = await getBackend().from('profiles').update({ lastfm_username: clean.length ? clean : null }).eq('id', userId);
+  if (error) throw error;
 }
 
-export async function disconnectLastfm(): Promise<void> {
-  await writeKey(K_LASTFM, null);
+export async function disconnectLastfm(userId: string): Promise<void> {
+  await setLastfmUsername(userId, '');
 }
 
 async function fetchLastfmNowPlaying(username: string): Promise<NowPlayingTrack | null> {
@@ -324,9 +330,9 @@ async function fetchLastfmNowPlaying(username: string): Promise<NowPlayingTrack 
 // unified
 // ---------------------------------------------------------------------------
 
-export async function getActiveMusicSource(): Promise<MusicSource> {
+export async function getActiveMusicSource(userId: string): Promise<MusicSource> {
   if (await isSpotifyConnected()) return 'spotify';
-  if (await getLastfmUsername()) return 'lastfm';
+  if (await getLastfmUsername(userId)) return 'lastfm';
   return null;
 }
 
@@ -338,13 +344,13 @@ export async function getActiveMusicSource(): Promise<MusicSource> {
  * or app configuration). In that case we immediately fall back to Last.fm so a
  * valid scrobble is never hidden by a stale/limited Spotify connection.
  */
-export async function fetchNowPlaying(): Promise<NowPlayingTrack | null> {
+export async function fetchNowPlaying(userId: string): Promise<NowPlayingTrack | null> {
   if (await isSpotifyConnected()) {
     const spotifyTrack = await fetchSpotifyNowPlaying();
     if (spotifyTrack) return spotifyTrack;
   }
 
-  const lastfm = await getLastfmUsername();
+  const lastfm = await getLastfmUsername(userId);
   if (lastfm) {
     const lastfmTrack = await fetchLastfmNowPlaying(lastfm);
     if (lastfmTrack) return lastfmTrack;

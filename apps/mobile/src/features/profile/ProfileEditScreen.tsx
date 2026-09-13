@@ -181,7 +181,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         <TextInput value={customStatus} onChangeText={setCustomStatus} maxLength={140} placeholder="Quoi de neuf ?" style={styles.input} />
 
         <Text style={styles.label}>MUSIQUE EN COURS</Text>
-        <MusicSyncCard />
+        <MusicSyncCard userId={profile.id} initialLastfm={profile.lastfm_username} />
         <TextInput value={nowPlayingTitle} onChangeText={setNowPlayingTitle} maxLength={120} placeholder="Titre du morceau" style={[styles.input, styles.stackedInput]} />
         <TextInput value={nowPlayingArtist} onChangeText={setNowPlayingArtist} maxLength={120} placeholder="Artiste" style={[styles.input, styles.stackedInput]} />
         <Text style={styles.hint}>♫ Affiché à tes contacts selon tes réglages de confidentialité. La synchro automatique écrase ces champs quand une source est connectée.</Text>
@@ -234,19 +234,16 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
   );
 }
 
-function MusicSyncCard() {
+function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastfm: string | null }) {
   const [spotifyOn, setSpotifyOn] = useState(false);
-  const [lastfm, setLastfm] = useState('');
-  const [savedLastfm, setSavedLastfm] = useState('');
+  const [lastfm, setLastfm] = useState(initialLastfm ?? '');
+  const [savedLastfm, setSavedLastfm] = useState(initialLastfm ?? '');
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     void (async () => {
-      const [connected, name] = await Promise.all([isSpotifyConnected(), getLastfmUsername()]);
-      setSpotifyOn(connected);
-      setLastfm(name ?? '');
-      setSavedLastfm(name ?? '');
+      setSpotifyOn(await isSpotifyConnected());
       setReady(true);
     })();
   }, []);
@@ -256,7 +253,7 @@ function MusicSyncCard() {
   const saveLastfm = async () => {
     setBusy(true);
     try {
-      await setLastfmUsername(lastfm);
+      await setLastfmUsername(userId, lastfm);
       setSavedLastfm(lastfm.trim());
     } finally {
       setBusy(false);
@@ -313,7 +310,7 @@ function MusicSyncCard() {
             </TouchableOpacity>
           </View>
           {savedLastfm ? (
-            <TouchableOpacity onPress={async () => { await disconnectLastfm(); setLastfm(''); setSavedLastfm(''); }}>
+            <TouchableOpacity onPress={async () => { await disconnectLastfm(userId); setLastfm(''); setSavedLastfm(''); }}>
               <Text style={mstyles.unlink}>Retirer Last.fm</Text>
             </TouchableOpacity>
           ) : null}
