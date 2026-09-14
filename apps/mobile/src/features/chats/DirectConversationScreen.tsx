@@ -383,7 +383,12 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         createdAt, algorithm, ciphertext, conversationId, content, reactions: [],
       }]);
       onMessageSent();
-    } catch {
+    } catch (error) {
+      if (isText && Platform.OS === 'android') {
+        // Fail-closed diagnostics only — never shown to the user, never
+        // carries plaintext/keys, just the thrown error's own message.
+        console.error('[kssenger-e2ee] send failed:', JSON.stringify(error, Object.getOwnPropertyNames(error ?? {})));
+      }
       setNotice(isText && Platform.OS === 'android'
         ? '🔒 Impossible d’établir la session sécurisée. Message non envoyé.'
         : 'Message non envoyé. Réessaie.');
