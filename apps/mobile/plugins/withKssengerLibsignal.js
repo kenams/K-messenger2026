@@ -95,6 +95,26 @@ function addSignalDependencies(contents) {
   return `${contents.slice(0, insertAt)}${lines}${contents.slice(insertAt)}`;
 }
 
+// libsignal-client/-android ship all 4 Android ABIs regardless of the app's
+// own -PreactNativeArchitectures gradle property (that flag only splits the
+// app's own native code, not third-party AARs) — ~70MB of unused .so files
+// in every build. Distribution here is arm64-v8a only; pin it explicitly.
+function restrictToArm64(contents) {
+  if (contents.includes("abiFilters 'arm64-v8a'")) return contents;
+  const defaultConfig = contents.match(/defaultConfig\s*\{/m);
+  if (!defaultConfig || defaultConfig.index == null) {
+    throw new Error('KSSENGER_LIBSIGNAL_DEFAULT_CONFIG_NOT_FOUND');
+  }
+  const insertAt = defaultConfig.index + defaultConfig[0].length;
+  const block = [
+    '',
+    '        ndk {',
+    "            abiFilters 'arm64-v8a'",
+    '        }',
+  ].join('\n');
+  return `${contents.slice(0, insertAt)}${block}${contents.slice(insertAt)}`;
+}
+
 function addSignalPackagingExcludes(contents) {
   if (SIGNAL_NON_ANDROID_RESOURCES.every((resource) => contents.includes(resource))) return contents;
 
@@ -152,6 +172,7 @@ module.exports = function withKssengerLibsignal(config) {
     appConfig.modResults.contents = enableCoreLibraryDesugaring(appConfig.modResults.contents);
     appConfig.modResults.contents = addSignalDependencies(appConfig.modResults.contents);
     appConfig.modResults.contents = addSignalPackagingExcludes(appConfig.modResults.contents);
+    appConfig.modResults.contents = restrictToArm64(appConfig.modResults.contents);
     return appConfig;
   });
 
