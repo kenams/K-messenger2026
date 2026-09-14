@@ -98,9 +98,13 @@ function addSignalDependencies(contents) {
 // libsignal-client/-android ship all 4 Android ABIs regardless of the app's
 // own -PreactNativeArchitectures gradle property (that flag only splits the
 // app's own native code, not third-party AARs) — ~70MB of unused .so files
-// in every build. Distribution here is arm64-v8a only; pin it explicitly.
+// in every build. Mirror whatever ABI(s) the build actually requested
+// (defaults to arm64-v8a, the only one shipped to physical devices) instead
+// of hardcoding arm64-v8a — a hardcoded value broke `-PreactNativeArchitectures=x86_64`
+// debug builds used for local emulator testing (SoLoader found no
+// compatible native libs and crashed on launch).
 function restrictToArm64(contents) {
-  if (contents.includes("abiFilters 'arm64-v8a'")) return contents;
+  if (contents.includes('abiFilters.addAll(reactNativeArchitectures)')) return contents;
   const defaultConfig = contents.match(/defaultConfig\s*\{/m);
   if (!defaultConfig || defaultConfig.index == null) {
     throw new Error('KSSENGER_LIBSIGNAL_DEFAULT_CONFIG_NOT_FOUND');
@@ -108,8 +112,9 @@ function restrictToArm64(contents) {
   const insertAt = defaultConfig.index + defaultConfig[0].length;
   const block = [
     '',
+    '        def reactNativeArchitectures = (findProperty("reactNativeArchitectures") ?: "arm64-v8a").split(",")',
     '        ndk {',
-    "            abiFilters 'arm64-v8a'",
+    '            abiFilters.addAll(reactNativeArchitectures)',
     '        }',
   ].join('\n');
   return `${contents.slice(0, insertAt)}${block}${contents.slice(insertAt)}`;
