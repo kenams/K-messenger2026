@@ -13,6 +13,10 @@ import { getBackend } from './backend';
  * carries the message text verbatim under this algorithm tag.
  */
 export const PLAINTEXT_ALGO = 'kssenger-plaintext-v1';
+// Live E2EE wire identifier (see signalDevice.ts). Never encoded by
+// encodePlaintext() below — DirectConversationScreen routes new Android DM
+// text through signalDevice.ts's own encrypt path instead, or fails closed.
+export const SIGNAL_V2_ALGO = 'kssenger-signal-v2';
 const LEGACY_SIGNAL_ALGOS = new Set([
   'signal-libsignal-multidevice-v1',
   'signal-libsignal',
@@ -83,6 +87,7 @@ export type WireMessage = { algorithm: string; ciphertext?: string | null };
 /** The readable text of a message, or a placeholder for messages we can't show. */
 export function readMessageText(message: WireMessage): string {
   if (message.algorithm === PLAINTEXT_ALGO) return message.ciphertext ?? '';
+  if (message.algorithm === SIGNAL_V2_ALGO) return '🔒 Déchiffrement…';
   if (LEGACY_SIGNAL_ALGOS.has(message.algorithm)) return '🔒 Message chiffré (version précédente, non lisible)';
   return message.ciphertext ?? '';
 }

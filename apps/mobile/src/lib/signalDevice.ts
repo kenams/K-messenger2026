@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { getBackend } from './backend';
 
+export const SIGNAL_V2_ALGO = 'kssenger-signal-v2';
+
 export type LocalSignalDevice = { deviceId: string; userId: string; signalDeviceId: number };
 type ProvisionedBundle = {
   bundleVersion: number; registrationId: number; identityKey: string;
@@ -160,7 +162,10 @@ export async function encryptForUsers(userId: string, recipientUserIds: string[]
     recipients[remote.id] = { kind: encrypted.kind, ciphertext: encrypted.ciphertext };
   }
   const envelope: MultiDeviceEnvelope = { v: 1, scheme: 'signal-libsignal', recipients };
-  return { senderDeviceId: local.deviceId, algorithm: 'signal-libsignal-multidevice-v1', ciphertext: JSON.stringify(envelope) };
+  // kssenger-signal-v2: the current, live E2EE wire identifier. The pre-existing
+  // 'signal-libsignal-multidevice-v1'/'signal-libsignal' tags stay readable as
+  // legacy history only (see chatTransport.ts) — never written by new sends.
+  return { senderDeviceId: local.deviceId, algorithm: SIGNAL_V2_ALGO, ciphertext: JSON.stringify(envelope) };
 }
 
 export async function encryptDirectForContact(userId: string, contactId: string, plaintext: string) {

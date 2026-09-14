@@ -12,7 +12,10 @@ import { elevation, layout, palette, presenceLabel, radius, spacing, type as typ
 import { accentOf } from '../../theme/accent';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
-import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/chatTransport';
+import { ensureChatDevice, encodePlaintext, readMessageText, SIGNAL_V2_ALGO } from '../../lib/chatTransport';
+import { canUnlockPrivateComposer, getKssengerE2eeStatus } from '../../lib/e2ee';
+import { decryptDirectFromContact, encryptDirectForContact } from '../../lib/signalDevice';
+import { loadLocalMessage, storeLocalMessage } from '../../lib/localMessageStore';
 import {
   QUICK_REACTIONS,
   isBigEmoji,
@@ -42,6 +45,7 @@ type ChatMessage = {
   receiptState?: ReceiptState;
   content?: ChatContent;
   reactions?: MessageReaction[];
+  decryptFailed?: boolean;
 };
 type HistoryResponse = { ok: boolean; messages?: ChatMessage[]; error?: string };
 type SendResponse = { ok: boolean; id?: string; duplicate?: boolean; error?: string };
@@ -77,8 +81,39 @@ function serializeChatContent(content: ChatContent) {
   return JSON.stringify(content);
 }
 
-function hydrate(message: ChatMessage): ChatMessage {
-  return { ...message, content: parseChatContent(readMessageText(message)), reactions: message.reactions ?? [] };
+/**
+ * Own kssenger-signal-v2 sends are encrypted FOR the recipient device only —
+ * the sender's libsignal session cannot decrypt its own outbound envelope
+ * (matches real Signal semantics). Own sent text is instead cached locally,
+ * encrypted at rest via Android Keystore (localMessageStore.ts), and looked
+ * up by message id here. If that local cache is gone (reinstall, cleared
+ * storage), the message honestly shows as unavailable rather than guessing.
+ */
+async function hydrate(message: ChatMessage, currentUserId: string): Promise<ChatMessage> {
+  if (message.algorithm !== SIGNAL_V2_ALGO) {
+    return { ...message, content: parseChatContent(readMessageText(message)), reactions: message.reactions ?? [] };
+  }
+  if (message.senderUserId === currentUserId) {
+    const cached = await loadLocalMessage(currentUserId, message.id).catch(() => null);
+    if (cached) return { ...message, content: parseChatContent(cached), reactions: message.reactions ?? [] };
+    return {
+      ...message,
+      content: { v: 1, type: 'text', text: '🔒 Message envoyé (indisponible sur cet appareil)' },
+      reactions: message.reactions ?? [],
+      decryptFailed: true,
+    };
+  }
+  try {
+    const plaintext = await decryptDirectFromContact(currentUserId, message.senderUserId, message.senderDeviceId ?? '', message.ciphertext ?? '');
+    return { ...message, content: parseChatContent(plaintext), reactions: message.reactions ?? [] };
+  } catch {
+    return {
+      ...message,
+      content: { v: 1, type: 'text', text: '🔒 Message chiffré illisible (session indisponible)' },
+      reactions: message.reactions ?? [],
+      decryptFailed: true,
+    };
+  }
 }
 
 function inferChatMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime | null {
@@ -184,13 +219,19 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const [sending, setSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [reactingId, setReactingId] = useState<string | null>(null);
+  const [e2eeReady, setE2eeReady] = useState(false);
   const deviceIdRef = useRef('');
   const conversationIdRef = useRef('');
+  const e2eeReadyRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
   const canSend = useMemo(
     () => !!socket && !!conversationId && !!currentUserId && !!deviceIdRef.current && !sending,
     [socket, conversationId, currentUserId, sending],
   );
+  // Android must actually prove the native E2EE engine before text can be
+  // composed at all — no silent plaintext downgrade. Media stays out of
+  // scope for this phase and is unaffected (still plaintext-over-TLS).
+  const canSendText = canSend && (Platform.OS !== 'android' || e2eeReady);
 
   useEffect(() => {
     let active = true;
@@ -207,6 +248,12 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       setSocket(client);
       setCurrentUserId(userId);
       deviceIdRef.current = await ensureChatDevice(userId);
+      if (Platform.OS === 'android') {
+        const status = await getKssengerE2eeStatus();
+        const ready = canUnlockPrivateComposer(status);
+        e2eeReadyRef.current = ready;
+        if (active) setE2eeReady(ready);
+      }
 
       const { data: privacy } = await getBackend().from('privacy_settings').select('read_receipts').eq('user_id', userId).maybeSingle();
       const receiptState: ReceiptState = (privacy as { read_receipts?: boolean } | null)?.read_receipts === false ? 'delivered' : 'read';
@@ -227,7 +274,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         if (!joined.ok) throw new Error('DIRECT_JOIN_FAILED');
         const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
         if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
-        const loaded = (response.messages ?? []).map(hydrate);
+        const loaded = await Promise.all((response.messages ?? []).map((message) => hydrate(message, userId)));
         if (active) setHistory(loaded);
         await acknowledge(loaded);
       };
@@ -235,16 +282,17 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       await syncConversation();
       messageHandler = (message) => {
         if (message.conversationId !== id) return;
-        const resolved = hydrate(message);
-        if (!active) return;
-        setHistory((items) => {
-          if (items.some((item) => item.id === resolved.id)) return items;
-          if (resolved.senderUserId !== userId) onMessageReceived();
-          return [...items, resolved];
+        void hydrate(message, userId).then((resolved) => {
+          if (!active) return;
+          setHistory((items) => {
+            if (items.some((item) => item.id === resolved.id)) return items;
+            if (resolved.senderUserId !== userId) onMessageReceived();
+            return [...items, resolved];
+          });
+          if (resolved.senderUserId !== userId) {
+            void emitAck(client, 'message:receipt', { conversationId: id, messageId: resolved.id, state: receiptState }).catch(() => undefined);
+          }
         });
-        if (resolved.senderUserId !== userId) {
-          void emitAck(client, 'message:receipt', { conversationId: id, messageId: resolved.id, state: receiptState }).catch(() => undefined);
-        }
       };
       receiptHandler = (receipt) => {
         if (!receipt.messageId || !receipt.state) return;
@@ -285,39 +333,72 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     } catch { setNotice('K-Pulse impossible hors ligne.'); }
   };
 
+  /**
+   * FAIL CLOSED — absolute. For text on Android, encryption is attempted and
+   * on ANY failure (engine not ready, session establishment failed, remote
+   * has no device) the message is NOT sent and NEVER falls back to
+   * plaintext. Media stays out of this phase's scope and keeps using the
+   * existing plaintext-over-TLS transport untouched.
+   */
   const sendContent = async (content: ChatContent) => {
     if (!canSend || !socket) return;
+    const isText = content.type === 'text';
+    if (isText && Platform.OS === 'android' && !e2eeReadyRef.current) {
+      setNotice('🔒 Impossible d’établir la session sécurisée. Message non envoyé.');
+      return;
+    }
     setSending(true);
     setNotice('');
     setShowEmoji(false);
     try {
       const payload = serializeChatContent(content);
-      const { algorithm, ciphertext } = encodePlaintext(payload);
+      let algorithm: string;
+      let ciphertext: string;
+      let senderDeviceId: string;
+      if (isText && Platform.OS === 'android') {
+        const encrypted = await encryptDirectForContact(currentUserId, contact.id, payload);
+        algorithm = encrypted.algorithm;
+        ciphertext = encrypted.ciphertext;
+        senderDeviceId = encrypted.senderDeviceId;
+      } else {
+        const encoded = encodePlaintext(payload);
+        algorithm = encoded.algorithm;
+        ciphertext = encoded.ciphertext;
+        senderDeviceId = deviceIdRef.current;
+      }
       const clientMessageId = Crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const response = await emitAck<SendResponse>(socket, 'message:send', {
-        clientMessageId, conversationId, senderDeviceId: deviceIdRef.current, algorithm, ciphertext, createdAt,
+        clientMessageId, conversationId, senderDeviceId, algorithm, ciphertext, createdAt,
       });
       if (!response.ok || !response.id) throw new Error(response.error ?? 'MESSAGE_SEND_FAILED');
+      if (algorithm === SIGNAL_V2_ALGO) {
+        // Sender can't decrypt its own outbound Signal envelope (see hydrate());
+        // cache the plaintext locally, encrypted at rest, keyed by the real id.
+        await storeLocalMessage(currentUserId, response.id, payload).catch(() => undefined);
+      }
       setComposer('');
       setHistory((items) => items.some((item) => item.id === response.id) ? items : [...items, {
-        id: response.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: deviceIdRef.current,
+        id: response.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId,
         createdAt, algorithm, ciphertext, conversationId, content, reactions: [],
       }]);
       onMessageSent();
     } catch {
-      setNotice('Message non envoyé. Réessaie.');
+      setNotice(isText && Platform.OS === 'android'
+        ? '🔒 Impossible d’établir la session sécurisée. Message non envoyé.'
+        : 'Message non envoyé. Réessaie.');
     } finally { setSending(false); }
   };
 
   const sendMessage = async () => {
     const text = composer.trim();
     if (!text) return;
+    if (!canSendText) { setNotice('🔒 Impossible d’établir la session sécurisée. Message non envoyé.'); return; }
     await sendContent({ v: 1, type: 'text', text });
   };
 
   const sendQuick = async (emoji: string) => {
-    if (!canSend) return;
+    if (!canSendText) return;
     await sendContent({ v: 1, type: 'text', text: emoji });
   };
 
@@ -374,7 +455,13 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         <View style={styles.flex}><Text style={[styles.name, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
         <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
-      <View style={styles.security}><Text style={styles.securityText}>🔒 Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version.</Text></View>
+      <View style={styles.security}>
+        <Text style={styles.securityText}>
+          {Platform.OS === 'android' && e2eeReady
+            ? '🔒 Chiffrement de bout en bout'
+            : '🔒 Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version.'}
+        </Text>
+      </View>
       {loading ? <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Ouverture de la conversation…</Text></View> : (
         <ScrollView
           ref={scrollRef}
@@ -400,7 +487,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
 
       <View style={styles.quickRow}>
         {QUICK_REACTIONS.map((emoji) => (
-          <TouchableOpacity key={emoji} disabled={!canSend} onPress={() => void sendQuick(emoji)} accessibilityRole="button" accessibilityLabel={`Envoyer ${emoji}`} style={[styles.quickBtn, !canSend && styles.disabled]}>
+          <TouchableOpacity key={emoji} disabled={!canSendText} onPress={() => void sendQuick(emoji)} accessibilityRole="button" accessibilityLabel={`Envoyer ${emoji}`} style={[styles.quickBtn, !canSendText && styles.disabled]}>
             <Text style={styles.quickEmoji}>{emoji}</Text>
           </TouchableOpacity>
         ))}
@@ -428,7 +515,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
             }
           }}
         />
-        <TouchableOpacity disabled={!composer.trim() || sending || !canSend} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSend) && styles.disabled]}>{sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
+        <TouchableOpacity disabled={!composer.trim() || sending || !canSendText} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSendText) && styles.disabled]}>{sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
       </View>
     </SafeAreaView>
   );
