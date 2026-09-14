@@ -42,11 +42,11 @@ export const palette = {
   invisible: '#93A3AF',
   offline: '#B7C4CE',
 
-  // Signature accents
+  // Signature accents — brass tuned to the KAH Digital gold (#D6B36A)
   music: '#7A5BFF',
   musicSoft: '#EEEAFF',
-  brass: '#C8941E',
-  brassSoft: '#FBEFD6',
+  brass: '#C99A4A',
+  brassSoft: '#FBF1DE',
   wizz: '#FFB020',
   wizzSoft: '#FFF1D6',
 
