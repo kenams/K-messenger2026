@@ -5,8 +5,9 @@ import { getBackend } from '../../lib/backend';
 import { getMediaDownload } from '../../lib/media';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
 import { elevation, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
-import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake } from '../../theme/components';
+import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
+import { clearContactAttention, useContactAttention, wireContactAttention } from '../attention/contactAttention';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
 export type Contact = {
@@ -115,6 +116,83 @@ function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: stri
         ? <Image source={{ uri: resolvedUrl }} style={[styles.avatar, online && styles.avatarOnline]} />
         : <View style={[styles.avatar, online && styles.avatarOnline]}><Text style={styles.avatarText}>{displayName[0]?.toUpperCase() ?? '?'}</Text></View>}
       {presence && <View style={styles.avatarBadge}><PresenceBadge presence={presence} size={13} /></View>}
+    </View>
+  );
+}
+
+function ContactRow({
+  contact,
+  managing,
+  onOpen,
+  onToggleFavorite,
+  onSendPulse,
+  onToggleManage,
+  onRemove,
+  onBlock,
+}: {
+  contact: Contact;
+  managing: boolean;
+  onOpen: (contact: Contact) => void;
+  onToggleFavorite: (contact: Contact) => void;
+  onSendPulse: (contact: Contact) => void;
+  onToggleManage: () => void;
+  onRemove: () => void;
+  onBlock: () => void;
+}) {
+  const { unread, pulse } = useContactAttention(contact.id);
+  const reducedMotion = useReducedMotion();
+  const attention = unread > 0 || pulse;
+  const blink = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!attention || reducedMotion) {
+      blink.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blink, { toValue: 0.35, duration: 500, useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [attention, reducedMotion, blink]);
+
+  return (
+    <View>
+      <View style={styles.contact}>
+        <TouchableOpacity style={styles.contactMain} onPress={() => { clearContactAttention(contact.id); onOpen(contact); }} accessibilityRole="button">
+          {contact.accentColor ? <View style={[styles.accentEdge, { backgroundColor: accentOf(contact.accentColor) }]} /> : null}
+          <Animated.View style={{ opacity: attention ? blink : 1 }}>
+            <ContactAvatar displayName={contact.displayName} avatarUrl={contact.avatarUrl} presence={contact.presence} />
+          </Animated.View>
+          <View style={styles.flex}>
+            <View style={styles.attentionNameRow}>
+              <Text style={[styles.nickname, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]} numberOfLines={1}>{contact.nickname}</Text>
+              {pulse && <Text style={styles.attentionPulseIcon} accessibilityLabel={`${contact.displayName} t'a envoyé un K-Pulse`}>⚡</Text>}
+              {unread > 0 && (
+                <View style={styles.attentionBadge}>
+                  <Text style={styles.attentionBadgeText}>{unread > 9 ? '9+' : unread}</Text>
+                </View>
+              )}
+            </View>
+            {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
+            {contact.nowPlaying
+              ? <View style={styles.musicRow}><Equalizer size={12} /><Text style={styles.music} numberOfLines={1}>{contact.nowPlaying}</Text></View>
+              : !contact.statusMessage && <Text style={styles.statusFaint}>{presenceLabel[contact.presence]}</Text>}
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.iconBtn, contact.favorite && styles.favoriteActive]} onPress={() => onToggleFavorite(contact)} accessibilityLabel={contact.favorite ? `Retirer ${contact.displayName} des favoris` : `Ajouter ${contact.displayName} aux favoris`}><Text style={[styles.iconBtnText, contact.favorite && styles.favoriteActiveText]}>{contact.favorite ? '★' : '☆'}</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.iconBtn, styles.pulseBtn]} onPress={() => onSendPulse(contact)} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.iconBtnText}>⚡</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.iconBtn} onPress={onToggleManage} accessibilityLabel={`Gérer ${contact.displayName}`}><Text style={styles.iconBtnText}>•••</Text></TouchableOpacity>
+      </View>
+      {managing && (
+        <View style={styles.manageRow}>
+          <TouchableOpacity style={styles.secondaryAction} onPress={onRemove}><Text style={styles.secondaryActionText}>Retirer le contact</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.dangerAction} onPress={onBlock}><Text style={styles.dangerActionText}>Bloquer</Text></TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -248,7 +326,9 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       client.on('contact:blocked', onBlockedChanged);
       client.on('contact:unblocked', onBlockedChanged);
       client.on('kpulse:receive', onKPulse);
+      const unwireAttention = wireContactAttention(client, userId, () => new Set(contactsRef.current.map((c) => c.id)));
       cleanupListeners = () => {
+        unwireAttention();
         client.off('connect', refresh);
         client.off('presence:changed', onPresence);
         client.off('presence:login', onPresenceLogin);
@@ -517,30 +597,17 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
                   <Text style={styles.groupCount}>{onlineHere}/{items.length}</Text>
                 </TouchableOpacity>
                 {!isCollapsed && items.map((contact) => (
-                  <View key={contact.id}>
-                    <View style={styles.contact}>
-                      <TouchableOpacity style={styles.contactMain} onPress={() => onOpen(contact)} accessibilityRole="button">
-                        {contact.accentColor ? <View style={[styles.accentEdge, { backgroundColor: accentOf(contact.accentColor) }]} /> : null}
-                        <ContactAvatar displayName={contact.displayName} avatarUrl={contact.avatarUrl} presence={contact.presence} />
-                        <View style={styles.flex}>
-                          <Text style={[styles.nickname, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]} numberOfLines={1}>{contact.nickname}</Text>
-                          {!!contact.statusMessage && <Text style={styles.status} numberOfLines={1}>{contact.statusMessage}</Text>}
-                          {contact.nowPlaying
-                            ? <View style={styles.musicRow}><Equalizer size={12} /><Text style={styles.music} numberOfLines={1}>{contact.nowPlaying}</Text></View>
-                            : !contact.statusMessage && <Text style={styles.statusFaint}>{presenceLabel[contact.presence]}</Text>}
-                        </View>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.iconBtn, contact.favorite && styles.favoriteActive]} onPress={() => void toggleFavorite(contact)} accessibilityLabel={contact.favorite ? `Retirer ${contact.displayName} des favoris` : `Ajouter ${contact.displayName} aux favoris`}><Text style={[styles.iconBtnText, contact.favorite && styles.favoriteActiveText]}>{contact.favorite ? '★' : '☆'}</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.iconBtn, styles.pulseBtn]} onPress={() => void sendKPulse(contact)} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.iconBtnText}>⚡</Text></TouchableOpacity>
-                      <TouchableOpacity style={styles.iconBtn} onPress={() => setManagingContactId((id) => id === contact.id ? null : contact.id)} accessibilityLabel={`Gérer ${contact.displayName}`}><Text style={styles.iconBtnText}>•••</Text></TouchableOpacity>
-                    </View>
-                    {managingContactId === contact.id && (
-                      <View style={styles.manageRow}>
-                        <TouchableOpacity style={styles.secondaryAction} onPress={() => void removeContact(contact)}><Text style={styles.secondaryActionText}>Retirer le contact</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.dangerAction} onPress={() => void blockContact(contact)}><Text style={styles.dangerActionText}>Bloquer</Text></TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
+                  <ContactRow
+                    key={contact.id}
+                    contact={contact}
+                    managing={managingContactId === contact.id}
+                    onOpen={onOpen}
+                    onToggleFavorite={(c) => void toggleFavorite(c)}
+                    onSendPulse={(c) => void sendKPulse(c)}
+                    onToggleManage={() => setManagingContactId((id) => id === contact.id ? null : contact.id)}
+                    onRemove={() => void removeContact(contact)}
+                    onBlock={() => void blockContact(contact)}
+                  />
                 ))}
               </View>
             );
@@ -590,6 +657,10 @@ const styles = StyleSheet.create({
   avatarBadge: { position: 'absolute', right: -3, bottom: -3 },
 
   nickname: { ...typo.name, maxWidth: '92%' },
+  attentionNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  attentionPulseIcon: { fontSize: 13 },
+  attentionBadge: { backgroundColor: palette.danger, borderRadius: radius.pill, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
+  attentionBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   accentEdge: { width: 3, alignSelf: 'stretch', borderRadius: radius.pill, marginRight: spacing.xs },
   status: { color: palette.inkSoft, marginTop: 2, fontSize: 12 },
   statusFaint: { color: palette.inkFaint, marginTop: 2, fontSize: 11 },
