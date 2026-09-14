@@ -1,3 +1,5 @@
+> ⚠️ HISTORIQUE — peut décrire un ancien état (E2EE/libsignal actif) qui ne correspond plus au runtime actuel. Voir `docs/PROJECT_STATE.md` pour l'état réel.
+
 # K-ssenger — Rapport d'avancement V1
 
 Date : 2026-09-07. Branche `feature/device-linking-scaffold`.

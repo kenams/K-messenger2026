@@ -1,3 +1,5 @@
+> ⚠️ HISTORIQUE — peut décrire un ancien état (E2EE/libsignal actif) qui ne correspond plus au runtime actuel. Voir `docs/PROJECT_STATE.md` pour l'état réel.
+
 # Implementation Status
 
 ## Implemented On `fix/feed-kmap-contact-security`

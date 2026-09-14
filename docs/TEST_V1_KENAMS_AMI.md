@@ -1,3 +1,5 @@
+> ⚠️ HISTORIQUE — peut décrire un ancien état (E2EE/libsignal actif) qui ne correspond plus au runtime actuel. Voir `docs/PROJECT_STATE.md` pour l'état réel.
+
 # K-ssenger V1 — protocole de test (Kenams + 1 ami)
 
 But : valider que l'app est **stable à 100 %** avant de prendre les comptes

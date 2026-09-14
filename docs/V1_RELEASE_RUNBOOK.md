@@ -1,3 +1,5 @@
+> ⚠️ HISTORIQUE — peut décrire un ancien état (E2EE/libsignal actif) qui ne correspond plus au runtime actuel. Voir `docs/PROJECT_STATE.md` pour l'état réel.
+
 # K-ssenger V1 — Release runbook
 
 Ce document liste ce qui reste **strictement** à faire pour livrer la V1 `1.0.0`,
