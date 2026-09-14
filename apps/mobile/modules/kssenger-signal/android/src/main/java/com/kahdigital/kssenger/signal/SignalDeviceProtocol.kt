@@ -109,18 +109,21 @@ internal class SignalDeviceProtocol(
   ) {
     val localAddress = address(localUserId, localSignalDeviceId)
     val remoteAddress = address(remoteUserId, remoteSignalDeviceId)
-    val preKeyBytes = oneTimePreKeyPublicB64?.let(::decode)
+    val oneTimePublic = oneTimePreKeyPublicB64?.let { ECPublicKey(decode(it)) }
+    val signedPublic = ECPublicKey(decode(signedPreKeyPublicB64))
+    val identityKey = IdentityKey(decode(identityKeyB64))
+    val pqPublic = KEMPublicKey(decode(pqPreKeyPublicB64))
     val bundle = PreKeyBundle(
       registrationId,
       remoteSignalDeviceId,
       oneTimePreKeyId ?: PreKeyBundle.NULL_PRE_KEY_ID,
-      preKeyBytes?.let(::ECPublicKey),
+      oneTimePublic,
       signedPreKeyId,
-      ECPublicKey(decode(signedPreKeyPublicB64)),
+      signedPublic,
       decode(signedPreKeySignatureB64),
-      IdentityKey(decode(identityKeyB64)),
+      identityKey,
       pqPreKeyId,
-      KEMPublicKey(decode(pqPreKeyPublicB64)),
+      pqPublic,
       decode(pqPreKeySignatureB64),
     )
     SessionBuilder(sessions, preKeys, signedPreKeys, identity, remoteAddress, localAddress).process(bundle)
