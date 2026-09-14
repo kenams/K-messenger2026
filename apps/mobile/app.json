@@ -50,6 +50,7 @@
     },
     "android": {
       "package": "com.kahdigital.kssenger",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 2,
       "allowBackup": false,
       "blockedPermissions": [

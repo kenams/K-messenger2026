@@ -1,15 +1,11 @@
+import { SignJWT, importPKCS8 } from 'jose';
 import { query } from './db.js';
 import { logger } from './logger.js';
+import { config } from './config.js';
 
 type PushSubscriptionRow = {
   user_id: string;
   expo_push_token: string;
-};
-
-type ExpoTicket = {
-  status?: 'ok' | 'error';
-  message?: string;
-  details?: { error?: string };
 };
 
 type PushPayload = {
@@ -18,9 +14,80 @@ type PushPayload = {
   data?: Record<string, string>;
 };
 
-const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
-const EXPO_TOKEN_PATTERN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/;
+// Direct FCM HTTP v1 delivery (not Expo's hosted push relay): the relay
+// requires uploading an FCM service account through `eas credentials`, an
+// interactive-only wizard with no non-interactive/CI path. Minting our own
+// OAuth2 access token from the Firebase service account keeps this fully
+// scriptable and removes a dependency on Expo's push infrastructure.
+const FCM_TOKEN_PATTERN = /^[A-Za-z0-9_:.-]{50,4096}$/;
+const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
+const FCM_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const MAX_BATCH = 100;
+const FCM_CONCURRENCY = 20;
+
+let serviceAccount: { project_id: string; client_email: string; private_key: string } | null | undefined;
+let cachedAccessToken: { token: string; expiresAt: number } | null = null;
+
+function getServiceAccount() {
+  if (serviceAccount !== undefined) return serviceAccount;
+  if (!config.FCM_SERVICE_ACCOUNT_JSON) {
+    serviceAccount = null;
+    return serviceAccount;
+  }
+  try {
+    const parsed = JSON.parse(config.FCM_SERVICE_ACCOUNT_JSON) as Record<string, unknown>;
+    if (typeof parsed.project_id !== 'string' || typeof parsed.client_email !== 'string' || typeof parsed.private_key !== 'string') {
+      throw new Error('missing fields');
+    }
+    serviceAccount = { project_id: parsed.project_id, client_email: parsed.client_email, private_key: parsed.private_key };
+  } catch (error) {
+    logger.warn('fcm_service_account_invalid', { error: error instanceof Error ? error.message : 'unknown' });
+    serviceAccount = null;
+  }
+  return serviceAccount;
+}
+
+export const isPushConfigured = () => getServiceAccount() !== null;
+
+// Test-only: module-level caches (service account parse result, OAuth
+// access token) otherwise leak across test cases sharing this module instance.
+export function resetPushClientForTests() {
+  serviceAccount = undefined;
+  cachedAccessToken = null;
+}
+
+async function getAccessToken(): Promise<string> {
+  const account = getServiceAccount();
+  if (!account) throw new Error('FCM_NOT_CONFIGURED');
+
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedAccessToken && cachedAccessToken.expiresAt - 60 > now) return cachedAccessToken.token;
+
+  const key = await importPKCS8(account.private_key, 'RS256');
+  const assertion = await new SignJWT({ scope: FCM_SCOPE })
+    .setProtectedHeader({ alg: 'RS256' })
+    .setIssuer(account.client_email)
+    .setAudience(FCM_TOKEN_URL)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .sign(key);
+
+  const response = await fetch(FCM_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`FCM_TOKEN_HTTP_${response.status}`);
+  const json = await response.json() as { access_token?: string; expires_in?: number };
+  if (!json.access_token) throw new Error('FCM_TOKEN_MISSING');
+
+  cachedAccessToken = { token: json.access_token, expiresAt: now + (json.expires_in ?? 3600) };
+  return cachedAccessToken.token;
+}
 const MAX_PUSH_TITLE_LENGTH = 64;
 const MAX_PUSH_BODY_LENGTH = 160;
 const MAX_PUSH_DATA_VALUE_LENGTH = 128;
@@ -71,7 +138,7 @@ async function listEnabledSubscriptions(userIds: string[]): Promise<PushSubscrip
         and enabled = true`,
     [userIds],
   );
-  return rows.filter((row) => EXPO_TOKEN_PATTERN.test(row.expo_push_token));
+  return rows.filter((row) => FCM_TOKEN_PATTERN.test(row.expo_push_token));
 }
 
 async function disableSubscription(token: string) {
@@ -84,48 +151,56 @@ async function disableSubscription(token: string) {
   );
 }
 
-async function postBatch(rows: PushSubscriptionRow[], payload: PushPayload) {
-  const messages = rows.map((row) => ({
-    to: row.expo_push_token,
-    title: payload.title,
-    body: payload.body,
-    data: payload.data ?? {},
-    sound: 'default',
-    priority: 'high',
-  }));
-
-  const response = await fetch(EXPO_PUSH_URL, {
+async function sendOne(projectId: string, accessToken: string, row: PushSubscriptionRow, payload: PushPayload) {
+  const response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
     method: 'POST',
     headers: {
-      accept: 'application/json',
       'content-type': 'application/json',
+      authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify(messages),
+    body: JSON.stringify({
+      message: {
+        token: row.expo_push_token,
+        notification: { title: payload.title, body: payload.body },
+        data: payload.data ?? {},
+        android: { priority: 'high' },
+      },
+    }),
     signal: AbortSignal.timeout(5_000),
   });
+  if (response.ok) return;
 
-  if (!response.ok) throw new Error(`EXPO_PUSH_HTTP_${response.status}`);
-  const json = await response.json() as { data?: ExpoTicket[] };
-  const tickets = Array.isArray(json.data) ? json.data : [];
+  const errorBody = await response.json().catch(() => null) as { error?: { status?: string } } | null;
+  if (errorBody?.error?.status === 'UNREGISTERED' || errorBody?.error?.status === 'NOT_FOUND') {
+    await disableSubscription(row.expo_push_token);
+    return;
+  }
+  throw new Error(`FCM_SEND_HTTP_${response.status}`);
+}
 
-  await Promise.all(tickets.map(async (ticket, index) => {
-    if (ticket?.status !== 'error') return;
-    if (ticket.details?.error === 'DeviceNotRegistered') {
-      const token = rows[index]?.expo_push_token;
-      if (token) await disableSubscription(token);
-    }
-  }));
+async function postBatch(projectId: string, accessToken: string, rows: PushSubscriptionRow[], payload: PushPayload) {
+  for (let index = 0; index < rows.length; index += FCM_CONCURRENCY) {
+    const slice = rows.slice(index, index + FCM_CONCURRENCY);
+    await Promise.all(slice.map((row) => sendOne(projectId, accessToken, row, payload).catch((error) => {
+      logger.warn('fcm_send_failed', { userId: row.user_id, error: error instanceof Error ? error.message : 'unknown' });
+    })));
+  }
 }
 
 export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
   const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
   if (uniqueUserIds.length === 0) return;
 
+  const account = getServiceAccount();
+  if (!account) return;
+
   try {
     assertMetadataOnlyPushPayload(payload);
     const subscriptions = await listEnabledSubscriptions(uniqueUserIds);
+    if (subscriptions.length === 0) return;
+    const accessToken = await getAccessToken();
     for (let index = 0; index < subscriptions.length; index += MAX_BATCH) {
-      await postBatch(subscriptions.slice(index, index + MAX_BATCH), payload);
+      await postBatch(account.project_id, accessToken, subscriptions.slice(index, index + MAX_BATCH), payload);
     }
   } catch (error) {
     // Push is best-effort and must never break messaging/realtime delivery.

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "710346796279",
+    "project_id": "kssenger-90b57",
+    "storage_bucket": "kssenger-90b57.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:710346796279:android:28dde01d84ae51dca277f2",
+        "android_client_info": {
+          "package_name": "com.kahdigital.kssenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZE--0Ote_liStMb80Ou-GIXU_c3yoHbc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

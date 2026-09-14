@@ -22,6 +22,11 @@ const schema = z.object({
   LIVEKIT_URL: z.string().url().optional(),
   LIVEKIT_API_KEY: z.string().min(1).optional(),
   LIVEKIT_API_SECRET: z.string().min(1).optional(),
+  // Firebase service account (raw JSON), used to mint FCM HTTP v1 access
+  // tokens directly — avoids depending on Expo's hosted push relay and its
+  // interactive-only EAS credential upload. Optional: push sending fails
+  // closed (logs a warning, never breaks messaging/realtime) without it.
+  FCM_SERVICE_ACCOUNT_JSON: z.string().min(1).optional(),
   // Comma-separated allowlist of exact https origins. Rejects "*" (which the
   // cors package would otherwise happily echo back even with credentials:
   // true, defeating same-origin protection for cookie/credentialed requests)

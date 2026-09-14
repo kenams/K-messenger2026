@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { getBackend } from '../../lib/backend';
@@ -22,16 +21,18 @@ function platformName(): 'android' | 'ios' | null {
 
 async function getNativePushToken(): Promise<string | null> {
   const platform = platformName();
-  if (!platform || !Device.isDevice) return null;
+  // Server delivery goes straight to FCM HTTP v1 (see apps/server/src/push.ts)
+  // rather than Expo's hosted push relay, so only the raw native FCM
+  // registration token is useful here — no EAS project ID needed. iOS isn't
+  // shipped yet and would need an APNs-based send path, so it stays unregistered.
+  if (platform !== 'android' || !Device.isDevice) return null;
 
-  if (platform === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'K-ssenger',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 180, 100, 180],
-      sound: 'default',
-    });
-  }
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'K-ssenger',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 180, 100, 180],
+    sound: 'default',
+  });
 
   const existing = await Notifications.getPermissionsAsync();
   let status = existing.status;
@@ -40,10 +41,8 @@ async function getNativePushToken(): Promise<string | null> {
   }
   if (status !== 'granted') return null;
 
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-  if (!projectId) throw new Error('KSSENGER_EXPO_PROJECT_ID_MISSING');
-  const result = await Notifications.getExpoPushTokenAsync({ projectId });
-  return result.data || null;
+  const result = await Notifications.getDevicePushTokenAsync();
+  return typeof result.data === 'string' ? result.data : null;
 }
 
 export async function clearMyPushSubscriptions(userId: string) {
