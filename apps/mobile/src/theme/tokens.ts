@@ -1,38 +1,39 @@
 /**
- * K-ssenger design tokens — "MSN-2026, édition Lumière".
+ * K-ssenger design tokens — "MSN-2026, édition KAH Digital".
  *
- * The nostalgic buddy-list warmth, rebuilt at studio craft level: a deep
- * midnight-azure ink over an airy porcelain sky, one vivid presence green, a
- * reserved violet for the live "now playing" signature, and a single warm brass
- * accent kept only for moments of delight (a wizz landing, a celebratory state).
- * Every screen pulls colour, spacing, radius, type, elevation and motion from
- * here so the product reads as one confident object.
+ * The nostalgic buddy-list warmth, rebuilt in KAH Digital's own house
+ * palette: antique gold as the primary interactive colour (matching
+ * kah-digital.ch's #d6b36a accent), a warm ivory-porcelain surface instead
+ * of cool chalk-blue, KAH's teal as the secondary "now playing" signature,
+ * and its terracotta as the K-Pulse energy accent. Every screen pulls
+ * colour, spacing, radius, type, elevation and motion from here so the
+ * product reads as one confident, luxury object — never a template.
  */
 
 export const palette = {
-  // Brand ink — deep, calm, high-contrast on porcelain
-  azure: '#1C6FD6',
-  azureDeep: '#0E4EA6',
-  azurePress: '#0B3F86',
-  azureSoft: '#E8F1FF',
-  azureHalo: 'rgba(28,111,214,0.14)',
+  // Brand ink — deep antique gold, calm, high-contrast on ivory
+  azure: '#A67C3D',
+  azureDeep: '#7F5D28',
+  azurePress: '#6B4D1F',
+  azureSoft: '#F6EBD6',
+  azureHalo: 'rgba(166,124,61,0.16)',
 
-  ink: '#0C2233',
-  inkSoft: '#42596B',
-  inkFaint: '#8096A4',
-  inkOnAzure: '#F4F8FF',
+  ink: '#1C140B',
+  inkSoft: '#4A4032',
+  inkFaint: '#8C8172',
+  inkOnAzure: '#FFF8EC',
 
-  // Surfaces — porcelain, not chalk. Layered.
-  sky: '#F1F5FA',
-  skyTop: '#E9F1FA',
-  skyBottom: '#F7FAFD',
+  // Surfaces — warm ivory porcelain, not chalk-blue. Layered.
+  sky: '#F8F4EC',
+  skyTop: '#F3ECDD',
+  skyBottom: '#FBF8F2',
   surface: '#FFFFFF',
   surfaceRaised: '#FFFFFF',
-  surfaceSunken: '#EEF3F9',
-  glass: 'rgba(255,255,255,0.72)',
-  scrim: 'rgba(9,24,37,0.46)',
-  hairline: '#E2EAF2',
-  hairlineStrong: '#D2DEEA',
+  surfaceSunken: '#F2EBDD',
+  glass: 'rgba(255,253,248,0.72)',
+  scrim: 'rgba(20,14,6,0.46)',
+  hairline: '#EAE1CD',
+  hairlineStrong: '#DDD0B3',
 
   // Presence
   online: '#2FBF63',
@@ -42,13 +43,13 @@ export const palette = {
   invisible: '#93A3AF',
   offline: '#B7C4CE',
 
-  // Signature accents — brass tuned to the KAH Digital gold (#D6B36A)
-  music: '#7A5BFF',
-  musicSoft: '#EEEAFF',
-  brass: '#C99A4A',
+  // Signature accents — KAH Digital's exact gold, teal and terracotta
+  music: '#5B95A8',
+  musicSoft: '#E7F2F4',
+  brass: '#D6B36A',
   brassSoft: '#FBF1DE',
-  wizz: '#FFB020',
-  wizzSoft: '#FFF1D6',
+  wizz: '#C97A57',
+  wizzSoft: '#F7E9E1',
 
   // Feedback
   danger: '#C6362C',
@@ -58,13 +59,13 @@ export const palette = {
   white: '#FFFFFF',
 
   // Back-compat aliases (older screens) — resolve to the new scale.
-  hairlineSoft: '#EDF2F8',
-  pulse: '#FFB020',
-  pulseSoft: '#FFF1D6',
+  hairlineSoft: '#F0E8D6',
+  pulse: '#C97A57',
+  pulseSoft: '#F7E9E1',
 } as const;
 
 /** Reserved brand gradient — logo mark and the primary CTA only. Never decoration. */
-export const brandGradient = ['#2C86EE', '#1C6FD6', '#0E4EA6'] as const;
+export const brandGradient = ['#C9A24E', '#A67C3D', '#7F5D28'] as const;
 
 export const presenceColor: Record<string, string> = {
   online: palette.online,
