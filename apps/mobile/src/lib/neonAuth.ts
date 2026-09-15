@@ -21,17 +21,11 @@ type PasswordChangeCapableClient = {
 export function getNeonAuth() {
   if (!authClient) {
     const { authUrl } = requireNeonBackend();
-    // better-auth's client auto-detects `"credentials" in Request.prototype`
-    // and defaults to `credentials: "include"` (cross-origin cookies) when
-    // true. React Native's Request/XHR polyfill DOES define that property
-    // (so the check passes) but doesn't implement a real cookie jar the way
-    // a browser does — under the New Architecture's networking stack this
-    // makes every request fail outright with a bare "Network request
-    // failed" (no HTTP response ever comes back; Chrome/curl reach the same
-    // host fine). This app has no cookie-based session (the JWT lives in
-    // SecureStore/localStorage via the adapter), so cookies were never
-    // needed — force them off instead of chasing the native XHR bug.
-    authClient = createAuthClient(authUrl, { fetchOptions: { credentials: 'omit' } });
+    // Reverted 2026-09-15: see backend.ts. credentials:'omit' was a guess
+    // made while chasing a bug that turned out to be a broken local test
+    // emulator, and it drops the session cookie better-auth needs — left at
+    // the library default instead.
+    authClient = createAuthClient(authUrl);
   }
   return authClient;
 }
