@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { getBackend } from '../../lib/backend';
-import { getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
+import { getRealtimeSocketSync, isRealtimeConfigured } from '../../lib/realtime';
 
 type KPulsePayload = { senderId?: string };
 
@@ -12,7 +12,6 @@ export function useKPulseReceiver(onPulse: (fromName?: string) => void): void {
   useEffect(() => {
     if (!isRealtimeConfigured) return;
     let active = true;
-    let socket: Awaited<ReturnType<typeof getRealtimeSocket>> | null = null;
 
     const handler = (payload: KPulsePayload) => {
       const senderId = payload?.senderId;
@@ -36,13 +35,11 @@ export function useKPulseReceiver(onPulse: (fromName?: string) => void): void {
       })();
     };
 
-    void getRealtimeSocket()
-      .then((client) => {
-        if (!active) return;
-        socket = client;
-        client.on('kpulse:receive', handler);
-      })
-      .catch(() => undefined);
+    // Attach synchronously — see getRealtimeSocketSync's doc comment for why
+    // waiting on the async connect promise here used to drop K-Pulses that
+    // arrived in the race window right after page load.
+    const socket = getRealtimeSocketSync();
+    socket?.on('kpulse:receive', handler);
 
     return () => {
       active = false;

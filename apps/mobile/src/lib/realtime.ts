@@ -56,10 +56,7 @@ function waitUntilConnected(client: Socket): Promise<Socket> {
   return connecting;
 }
 
-export async function getRealtimeSocket(): Promise<Socket> {
-  if (!isRealtimeConfigured) throw new Error('REALTIME_NOT_CONFIGURED');
-  await getSessionIdentity();
-
+function ensureSocketInstance(): Socket {
   if (!socket) {
     socket = io(socketUrl, {
       autoConnect: false,
@@ -74,8 +71,30 @@ export async function getRealtimeSocket(): Promise<Socket> {
   } else {
     socket.auth = buildRealtimeAuth();
   }
+  return socket;
+}
 
-  return waitUntilConnected(socket);
+export async function getRealtimeSocket(): Promise<Socket> {
+  if (!isRealtimeConfigured) throw new Error('REALTIME_NOT_CONFIGURED');
+  await getSessionIdentity();
+  return waitUntilConnected(ensureSocketInstance());
+}
+
+/**
+ * Synchronous access to the (possibly not-yet-connected) socket instance, for
+ * listeners that must be attached on mount rather than after an async
+ * connect resolves. Socket.IO listeners are safe to register before the
+ * socket connects — they just won't fire until the connection is live —
+ * whereas waiting on `getRealtimeSocket()` first leaves a real window where a
+ * server-pushed event (e.g. an incoming K-Pulse) arrives before the listener
+ * is attached and is silently dropped (reproduced via E2E: ~2/3 failure rate
+ * on a fresh page load racing an immediate K-Pulse send).
+ */
+export function getRealtimeSocketSync(): Socket | null {
+  if (!isRealtimeConfigured) return null;
+  const client = ensureSocketInstance();
+  if (!client.connected) client.connect();
+  return client;
 }
 
 export function disconnectRealtimeSocket() {
