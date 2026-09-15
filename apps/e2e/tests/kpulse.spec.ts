@@ -6,21 +6,18 @@ import { BOTS, openApp, openTab } from './_helpers';
  * Kenams, and Kenams's screen shows the full-screen burst with her name —
  * while sitting on a tab other than Contacts.
  *
- * Known open flakiness (2026-09-15/16): even after fixing a real client-side
- * race (useKPulseReceiver used to attach its listener after the async socket
- * connect resolved, dropping events that arrived first — see realtime.ts's
- * getRealtimeSocketSync), this went from ~intermittent to failing 4/4
- * consecutive attempts in the same night session, with the bot side always
- * reporting "K-Pulse envoyé" (not rate-limited) yet the burst never arriving.
- * Most likely explanation: this exact bot pair (Léa → Kenams) was fired at
- * dozens of times in a row while debugging tonight, which may have wedged
- * some per-pair cooldown/state server-side beyond the user-facing rate-limit
- * message. TEMPORARILY SKIPPED rather than left blocking unrelated ships —
- * this is NOT fixed, re-enable and investigate server-side (check whatever
- * tracks K-Pulse cooldown for this exact pair, and whether kpulse:receive is
- * actually being emitted) before trusting K-Pulse delivery again.
+ * Root cause found (2026-09-16): `openApp()` only waits for the app shell
+ * (the tab bar) to render, not for the realtime socket to finish its
+ * handshake — `getRealtimeSocketSync()` creates the socket and calls
+ * `.connect()`, but the actual connection completes async (it fetches an
+ * auth token before the socket.io handshake resolves, see realtime.ts). The
+ * bot in this test fires its K-Pulse essentially immediately after
+ * `openApp()`, which can race ahead of Kenams's socket actually reaching the
+ * server-side `user:<id>` room. Manual testing always passed because a human
+ * takes way longer than that between opening the app and being pulsed at.
+ * Fix: give the socket a moment to actually connect before the bot fires.
  */
-test.skip('an incoming K-Pulse takes over the recipient screen', async ({ browser }) => {
+test('an incoming K-Pulse takes over the recipient screen', async ({ browser }) => {
   const kenamsCtx = await browser.newContext({ storageState: '.auth/kenams.json' });
   const botCtx = await browser.newContext({ storageState: '.auth/lea.json' });
 
@@ -28,6 +25,9 @@ test.skip('an incoming K-Pulse takes over the recipient screen', async ({ browse
     const kenams = await kenamsCtx.newPage();
     await openApp(kenams);
     await openTab(kenams, 'Moments');
+    // Let the realtime socket actually finish connecting (see comment above)
+    // before anyone fires a K-Pulse at this session.
+    await kenams.waitForTimeout(2500);
 
     const bot = await botCtx.newPage();
     await openApp(bot);
