@@ -24,8 +24,18 @@ function createKssengerClient() {
   const { authUrl, dataApiUrl } = requireNeonBackend();
   return createClient({
     auth: {
+      // better-auth's client auto-detects `"credentials" in Request.prototype`
+      // and defaults to `credentials: "include"` (cross-origin cookies) when
+      // true. React Native's Request/XHR polyfill DOES define that property
+      // (so the check passes) but has no real cookie jar the way a browser
+      // does — under the New Architecture networking stack this makes every
+      // request die outright with a bare "Network request failed" (no HTTP
+      // response ever comes back, while Chrome/curl reach the same host
+      // fine). K-ssenger's session is a bearer JWT persisted via SecureStore/
+      // localStorage, never a cookie — force credentials off instead of
+      // chasing the native XHR bug.
       adapter: SupabaseAuthAdapter({
-        fetchOptions: { headers: { Origin: NATIVE_AUTH_ORIGIN } },
+        fetchOptions: { headers: { Origin: NATIVE_AUTH_ORIGIN }, credentials: 'omit' },
       }),
       url: authUrl,
     },
