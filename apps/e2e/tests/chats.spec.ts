@@ -28,6 +28,10 @@ test('two people can send and receive messages', async ({ browser }) => {
 
     const lea = await leaCtx.newPage();
     await openApp(lea);
+    // Let Léa's realtime socket actually finish connecting before opening the
+    // thread — openApp() only waits for the app shell to render, not for the
+    // async socket handshake (see kpulse.spec.ts for the same root cause).
+    await lea.waitForTimeout(2500);
     await openTab(lea, 'Contacts');
     await lea.getByText('Kenams').first().click();
     await expect(lea.getByText(fromKenams)).toBeVisible({ timeout: 20_000 });

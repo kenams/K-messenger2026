@@ -222,17 +222,39 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         })));
       };
 
-      const syncConversation = async () => {
-        const joined = await emitAck<{ ok: boolean }>(client, 'conversation:join', { conversationId: id });
-        if (!joined.ok) throw new Error('DIRECT_JOIN_FAILED');
+      // History is fetched AFTER the socket is already in the conversation's
+      // room (join below), so a message can legitimately arrive live via
+      // messageHandler in the gap between joining and the history response
+      // landing. Merge into whatever's already in state instead of
+      // overwriting it outright, so that live arrival is never clobbered by
+      // a history snapshot taken a moment earlier.
+      const mergeHistory = (loaded: ChatMessage[]) => {
+        if (!active) return;
+        setHistory((prev) => {
+          const byId = new Map(prev.map((message) => [message.id, message]));
+          for (const message of loaded) byId.set(message.id, message);
+          return Array.from(byId.values()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        });
+      };
+
+      const syncConversation = async (join: boolean) => {
+        if (join) {
+          const joined = await emitAck<{ ok: boolean }>(client, 'conversation:join', { conversationId: id });
+          if (!joined.ok) throw new Error('DIRECT_JOIN_FAILED');
+        }
         const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
         if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
         const loaded = (response.messages ?? []).map(hydrate);
-        if (active) setHistory(loaded);
+        mergeHistory(loaded);
         await acknowledge(loaded);
       };
 
-      await syncConversation();
+      // Join and attach listeners FIRST — before fetching history — so
+      // nothing sent between joining the room and the history snapshot
+      // arriving can be missed.
+      const joined = await emitAck<{ ok: boolean }>(client, 'conversation:join', { conversationId: id });
+      if (!joined.ok) throw new Error('DIRECT_JOIN_FAILED');
+
       messageHandler = (message) => {
         if (message.conversationId !== id) return;
         const resolved = hydrate(message);
@@ -257,7 +279,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       connectHandler = () => {
         if (!active) return;
         setNotice('Connexion rétablie · resynchronisation…');
-        void syncConversation().then(() => { if (active) setNotice(''); }).catch(() => { if (active) setNotice('Connexion rétablie, resynchronisation à retenter.'); });
+        void syncConversation(true).then(() => { if (active) setNotice(''); }).catch(() => { if (active) setNotice('Connexion rétablie, resynchronisation à retenter.'); });
       };
       disconnectHandler = () => { if (active) setNotice('Hors ligne · les messages partiront à la reconnexion.'); };
       client.on('message:new', messageHandler);
@@ -265,6 +287,8 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       client.on('message:reaction', reactionHandler);
       client.on('connect', connectHandler);
       client.on('disconnect', disconnectHandler);
+
+      await syncConversation(false);
     }).catch(() => { if (active) setNotice('Impossible d’ouvrir cette conversation pour le moment.'); }).finally(() => { if (active) setLoading(false); });
 
     return () => {
