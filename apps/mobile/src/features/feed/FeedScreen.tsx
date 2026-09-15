@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: ink },
   muted: { color: '#7fa0b1' },
   toolbar: { minHeight: 56, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: ink, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
-  toolbarBrand: { color: '#6FB4F2', fontSize: 10, letterSpacing: 2.6, fontWeight: '900' },
+  toolbarBrand: { color: palette.brass, fontSize: 10, letterSpacing: 2.6, fontWeight: '900' },
   toolbarTitle: { color: palette.white, fontWeight: '900', fontSize: 20, marginTop: 2, letterSpacing: -0.3 },
   createButton: { backgroundColor: palette.azure, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 1 },
   createText: { color: palette.white, fontWeight: '900', fontSize: 12.5 },

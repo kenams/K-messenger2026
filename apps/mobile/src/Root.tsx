@@ -103,11 +103,11 @@ function ProfileLoadError({ onRetry }: { onRetry: () => Promise<void> }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#edf7fc' },
+  safe: { flex: 1, backgroundColor: '#F8F4EC' },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  loadingText: { color: '#5d7c8e', marginTop: 12, fontWeight: '700' },
-  errorTitle: { color: '#173448', fontSize: 22, fontWeight: '900', textAlign: 'center' },
-  errorCopy: { color: '#5d7c8e', marginTop: 10, textAlign: 'center', lineHeight: 20, maxWidth: 420 },
-  retry: { marginTop: 18, minWidth: 150, minHeight: 46, paddingHorizontal: 18, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2189c5' },
+  loadingText: { color: '#4A4032', marginTop: 12, fontWeight: '700' },
+  errorTitle: { color: '#1C140B', fontSize: 22, fontWeight: '900', textAlign: 'center' },
+  errorCopy: { color: '#4A4032', marginTop: 10, textAlign: 'center', lineHeight: 20, maxWidth: 420 },
+  retry: { marginTop: 18, minWidth: 150, minHeight: 46, paddingHorizontal: 18, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A67C3D' },
   retryText: { color: '#fff', fontWeight: '900' },
 });

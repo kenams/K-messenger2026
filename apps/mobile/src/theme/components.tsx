@@ -211,7 +211,7 @@ export function PrimaryButton({
 }) {
   const off = disabled || busy;
   const gradient = tone === 'music'
-    ? ([palette.music, '#5F3EEA'] as const)
+    ? ([palette.music, '#3E6E7D'] as const)
     : brandGradient;
   return (
     <TouchableOpacity
