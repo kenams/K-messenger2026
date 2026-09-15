@@ -271,7 +271,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   if (groupsScreen) {
     return (
       <WebShell>
-        <ScreenHeader title="Groupes" subtitle="Salons chiffrés" onBack={() => setGroupsScreen(false)} />
+        <ScreenHeader title="Groupes" subtitle="Connexion sécurisée" onBack={() => setGroupsScreen(false)} />
         <GroupsScreen />
       </WebShell>
     );
