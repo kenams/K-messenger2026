@@ -23,6 +23,13 @@ export const palette = {
   inkFaint: '#8C8172',
   inkOnAzure: '#FFF8EC',
 
+  // Deep navy-black — the KAH Digital emblem's own signature card colour.
+  // Used sparingly for header bars and the brand mark, never as a full-app
+  // background (that would need a real dark-mode pass across every screen).
+  navy: '#0F1420',
+  navyDeep: '#090C14',
+  navyGlow: 'rgba(214,179,106,0.20)',
+
   // Surfaces — warm ivory porcelain, not chalk-blue. Layered.
   sky: '#F8F4EC',
   skyTop: '#F3ECDD',

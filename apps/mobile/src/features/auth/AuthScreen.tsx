@@ -17,14 +17,18 @@ function BrandMark({ size = 76 }: { size?: number }) {
   return (
     <View style={[styles.markWrap, { width: size + 20, height: size + 20 }]}>
       <View style={[styles.markGlow, { borderRadius: (size + 20) / 2 }]} />
-      <LinearGradient
-        colors={brandGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.mark, { width: size, height: size, borderRadius: size * 0.32 }]}
-      >
-        <Text style={[styles.markText, { fontSize: size * 0.46 }]}>K</Text>
-      </LinearGradient>
+      <View style={[styles.mark, { width: size, height: size, borderRadius: size * 0.32 }]}>
+        <LinearGradient
+          colors={brandGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.markRing, { borderRadius: size * 0.32 }]}
+        >
+          <View style={[styles.markCore, { borderRadius: size * 0.32 - 2 }]}>
+            <Text style={[styles.markText, { fontSize: size * 0.46 }]}>K</Text>
+          </View>
+        </LinearGradient>
+      </View>
     </View>
   );
 }
@@ -380,9 +384,11 @@ const styles = StyleSheet.create({
   },
 
   markWrap: { alignItems: 'center', justifyContent: 'center' },
-  markGlow: { position: 'absolute', width: '100%', height: '100%', backgroundColor: palette.azureHalo },
+  markGlow: { position: 'absolute', width: '100%', height: '100%', backgroundColor: palette.navyGlow },
   mark: { alignItems: 'center', justifyContent: 'center', ...elevation.card },
-  markText: { color: palette.white, fontWeight: '900', letterSpacing: -1 },
+  markRing: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', padding: 2.5 },
+  markCore: { flex: 1, width: '100%', backgroundColor: palette.navy, alignItems: 'center', justifyContent: 'center' },
+  markText: { color: palette.brass, fontWeight: '900', letterSpacing: -1 },
 
   kicker: { marginTop: spacing.md, ...typo.brand },
   title: { marginTop: spacing.sm, ...typo.display, textAlign: 'center' },

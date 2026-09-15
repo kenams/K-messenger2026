@@ -166,7 +166,11 @@ export function ChatsHubScreen() {
                 <View style={styles.flex}>
                   <Text style={styles.name} numberOfLines={1}>{peer.nickname || peer.displayName}</Text>
                   <Text style={styles.preview} numberOfLines={1}>
-                    {conversation.lastMessage ? 'Nouveaux messages' : 'Nouvelle conversation'}
+                    {conversation.lastMessage
+                      ? conversation.lastMessage.senderUserId === currentUserId
+                        ? 'Vous : message envoyé'
+                        : 'Nouveau message'
+                      : 'Nouvelle conversation'}
                   </Text>
                   <Text style={styles.handle} numberOfLines={1}>@{peer.username}</Text>
                 </View>
