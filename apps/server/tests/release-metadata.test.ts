@@ -27,7 +27,7 @@ describe('K-ssenger V2 Beta release metadata', () => {
     expect(appConfig.expo?.ios?.bundleIdentifier).toBe('com.kahdigital.kssenger');
     expect(appConfig.expo?.android?.package).toBe('com.kahdigital.kssenger');
     expect(appConfig.expo?.ios?.buildNumber).toBe('2');
-    expect(appConfig.expo?.android?.versionCode).toBe(2);
+    expect(appConfig.expo?.android?.versionCode).toBe(3);
   });
 
   it('ties OTA runtime compatibility to the native app version', () => {
