@@ -246,6 +246,14 @@ export function usePulseUntilSeen(active: boolean, label?: string): { style: { t
     if (!active || !label) return;
     if (originalTitleRef.current === null) originalTitleRef.current = document.title;
     let on = false;
+    const restoreVisibleTitle = () => {
+      if (document.visibilityState !== 'visible') return;
+      on = false;
+      if (originalTitleRef.current !== null) document.title = originalTitleRef.current;
+    };
+    // Stopping the interval's updates is not enough: the last hidden tick
+    // may have left the notification label in the browser tab.
+    document.addEventListener('visibilitychange', restoreVisibleTitle);
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') return;
       on = !on;
@@ -253,6 +261,7 @@ export function usePulseUntilSeen(active: boolean, label?: string): { style: { t
     }, 1200);
     return () => {
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', restoreVisibleTitle);
       if (originalTitleRef.current !== null) document.title = originalTitleRef.current;
       originalTitleRef.current = null;
     };

@@ -226,7 +226,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   const loginNotificationsRef = useRef<LoginNotifications>('favorites');
   const { style: shakeStyle, trigger: triggerShake } = useNudgeShake();
   const isKPulseNotice = notice.startsWith('⚡ K-Pulse reçu');
-  const { style: noticePulseStyle } = usePulseUntilSeen(isKPulseNotice, `⚡ ${notice}`);
+  const { style: noticePulseStyle } = usePulseUntilSeen(isKPulseNotice, notice);
 
   useEffect(() => {
     contactsRef.current = contacts;
