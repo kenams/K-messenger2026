@@ -333,7 +333,7 @@ function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastf
               disabled={busy || lastfm.trim() === savedLastfm}
               onPress={() => void saveLastfm()}
               accessibilityRole="button"
-              accessibilityLabel={savedLastfm && !lastfm.trim() ? 'Retirer le pseudo Last.fm' : 'Enregistrer le pseudo Last.fm'}
+              accessibilityLabel={savedLastfm && !lastfm.trim() ? 'Retirer le pseudo Last.fm' : 'Confirmer le pseudo Last.fm'}
               style={[mstyles.ghostBtn, (busy || lastfm.trim() === savedLastfm) && styles.disabled]}
             >
               {busy ? <ActivityIndicator /> : <Text style={mstyles.ghostBtnText}>{savedLastfm && !lastfm.trim() ? 'Retirer' : 'Enregistrer'}</Text>}
