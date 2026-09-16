@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brandGradient, palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { brandGradient, overlayEffects, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { useReducedMotion } from '../../theme/components';
 import { playKPulseSound, vibrateKPulse } from '../../lib/kpulse';
 
@@ -38,6 +39,7 @@ export function useKPulse(): { fire: (from?: string) => void; node: React.ReactN
 }
 
 function KPulseBurstView({ from, onDone }: { from?: string; onDone: () => void }) {
+  const { styles, colors } = useThemedStyles();
   const reduced = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
   const shake = useRef(new Animated.Value(0)).current;
@@ -118,7 +120,7 @@ function KPulseBurstView({ from, onDone }: { from?: string; onDone: () => void }
                     transform: [
                       { scale: local.interpolate({ inputRange: [0, 1], outputRange: [0.2, 3.4], extrapolate: 'clamp' }) },
                     ],
-                    borderColor: i === 1 ? palette.brass : palette.azure,
+                    borderColor: i === 1 ? colors.brass : colors.azure,
                   },
                 ]}
               />
@@ -148,11 +150,12 @@ function KPulseBurstView({ from, onDone }: { from?: string; onDone: () => void }
 
 const RING = 220;
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   fill: { ...StyleSheet.absoluteFillObject },
   center: { alignItems: 'center', justifyContent: 'center' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#06121F' },
-  flash: { ...StyleSheet.absoluteFillObject, backgroundColor: '#EAF2FF' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: overlayEffects.backdrop },
+  flash: { ...StyleSheet.absoluteFillObject, backgroundColor: overlayEffects.flash },
   ring: {
     position: 'absolute',
     width: RING,
@@ -182,4 +185,12 @@ const styles = StyleSheet.create({
   monoText: { color: palette.white, fontWeight: '900', fontSize: 66, letterSpacing: -2 },
   label: { ...typo.brand, color: palette.white, fontSize: 13, letterSpacing: 3, marginTop: spacing.md },
   from: { color: 'rgba(255,255,255,0.75)', fontWeight: '800', fontSize: 13 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

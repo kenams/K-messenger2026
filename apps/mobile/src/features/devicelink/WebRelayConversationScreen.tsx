@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import type { Contact } from '../contacts/MsnContactsScreen';
 import type { RelayChatMessage } from '../../lib/deviceLink';
 import type { UseWebLink } from '../../lib/deviceLinkClient';
-import { presenceLabel } from '../../theme/tokens';
+import { presenceLabel, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
 
 type Row = RelayChatMessage & { mine: boolean; pending?: boolean };
@@ -26,6 +27,7 @@ export function WebRelayConversationScreen({
   currentUserId: string;
   onBack: () => void;
 }) {
+  const { styles, colors, scheme } = useThemedStyles();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [composer, setComposer] = useState('');
@@ -76,7 +78,7 @@ export function WebRelayConversationScreen({
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
         <View style={styles.avatar}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
@@ -94,7 +96,7 @@ export function WebRelayConversationScreen({
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color={palette.azure} /><Text style={styles.muted}>Chargement depuis le téléphone…</Text></View>
+        <View style={styles.center}><ActivityIndicator color={colors.azure} /><Text style={styles.muted}>Chargement depuis le téléphone…</Text></View>
       ) : (
         <ScrollView
           ref={scrollRef}
@@ -122,21 +124,22 @@ export function WebRelayConversationScreen({
           value={composer}
           onChangeText={setComposer}
           placeholder={webLink.phoneReachable ? 'Écrire un message…' : 'Téléphone hors ligne'}
-          placeholderTextColor={palette.inkFaint}
+          placeholderTextColor={colors.inkFaint}
           maxLength={12000}
           multiline
           editable={!disabled}
           onSubmitEditing={() => void send()}
         />
         <TouchableOpacity disabled={disabled || !composer.trim()} onPress={() => void send()} style={[styles.send, (disabled || !composer.trim()) && styles.sendOff]}>
-          {sending ? <ActivityIndicator color={palette.white} /> : <Text style={styles.sendText}>➤</Text>}
+          {sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>➤</Text>}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky }, flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline },
   back: { fontSize: 30, lineHeight: 30, color: palette.azureDeep, fontWeight: '900', width: 30, textAlign: 'center' },
@@ -160,4 +163,12 @@ const styles = StyleSheet.create({
   input: { flex: 1, maxHeight: 120, minHeight: 46, backgroundColor: palette.surfaceSunken, borderWidth: 1.5, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink, fontSize: 15, fontWeight: '500', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : null) },
   send: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, ...elevation.hairline },
   sendOff: { opacity: 0.4 }, sendText: { color: palette.white, fontWeight: '900', fontSize: 18 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

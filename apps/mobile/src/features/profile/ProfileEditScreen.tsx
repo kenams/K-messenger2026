@@ -8,7 +8,8 @@ import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import type { MyProfile } from './useMyProfile';
 import { ScreenHeader } from '../../theme/components';
-import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { radius, spacing, thirdPartyBrand, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { ACCENT_PRESETS, accentOf, onAccent } from '../../theme/accent';
 import {
   beginSpotifyAuth,
@@ -54,6 +55,7 @@ function inferAvatarMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMim
 }
 
 export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyProfile; onSaved: () => Promise<void>; onBack: () => void }) {
+  const { styles, colors, scheme } = useThemedStyles();
   const [username, setUsername] = useState(profile.username);
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [customStatus, setCustomStatus] = useState(profile.custom_status ?? '');
@@ -168,7 +170,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <ScreenHeader title="Modifier mon profil" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>PSEUDO</Text>
@@ -216,7 +218,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
             : <View style={styles.avatarPreview}><Text style={styles.avatarPreviewText}>{displayName[0]?.toUpperCase() ?? 'K'}</Text></View>}
           <View style={styles.avatarActions}>
             <TouchableOpacity disabled={avatarBusy || busy} onPress={() => void pickAvatar()} style={[styles.avatarButton, (avatarBusy || busy) && styles.disabled]}>
-              {avatarBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.avatarButtonText}>Choisir une photo</Text>}
+              {avatarBusy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.avatarButtonText}>Choisir une photo</Text>}
             </TouchableOpacity>
             <TouchableOpacity disabled={avatarBusy || busy} onPress={clearAvatar} style={styles.avatarSecondary}>
               <Text style={styles.avatarSecondaryText}>Retirer</Text>
@@ -228,14 +230,37 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
 
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
         <TouchableOpacity disabled={!canSave} onPress={() => void save()} accessibilityRole="button" accessibilityLabel="Enregistrer" style={[styles.primary, !canSave && styles.disabled]}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Enregistrer</Text>}
+          {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>Enregistrer</Text>}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function useMusicSyncStyles() {
+  const { colors, type: typo } = useTheme();
+  return useMemo(() => StyleSheet.create({
+    card: { marginTop: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.hairline, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
+    title: { ...typo.heading },
+    lede: { ...typo.micro, fontWeight: '500' },
+    row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    rowText: { flex: 1 },
+    rowTitle: { ...typo.name, fontSize: 14 },
+    rowMeta: { ...typo.micro, fontWeight: '500', marginTop: 2 },
+    spotifyBtn: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: thirdPartyBrand.spotifyGreen },
+    spotifyBtnText: { color: colors.white, fontWeight: '900', fontSize: 13 },
+    ghostBtn: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSunken, borderWidth: 1, borderColor: colors.hairline },
+    ghostBtnText: { color: colors.inkSoft, fontWeight: '900', fontSize: 13 },
+    lastfmBlock: { gap: spacing.xs, borderTopWidth: 1, borderTopColor: colors.hairline, paddingTop: spacing.sm },
+    lastfmRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+    lastfmInput: { flex: 1, backgroundColor: colors.surfaceSunken, borderWidth: 1, borderColor: colors.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.ink },
+    unlink: { color: colors.danger, fontWeight: '800', fontSize: 12, marginTop: spacing.xs },
+  }), [colors, typo]);
+}
+
 function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastfm: string | null }) {
+  const { styles, colors } = useThemedStyles();
+  const mstyles = useMusicSyncStyles();
   const [spotifyOn, setSpotifyOn] = useState(false);
   const [lastfm, setLastfm] = useState(initialLastfm ?? '');
   const [savedLastfm, setSavedLastfm] = useState(initialLastfm ?? '');
@@ -299,7 +324,7 @@ function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastf
               value={lastfm}
               onChangeText={setLastfm}
               placeholder="Pseudo Last.fm"
-              placeholderTextColor={palette.inkFaint}
+              placeholderTextColor={colors.inkFaint}
               style={mstyles.lastfmInput}
             />
             <TouchableOpacity
@@ -321,25 +346,8 @@ function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastf
   );
 }
 
-const mstyles = StyleSheet.create({
-  card: { marginTop: spacing.sm, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
-  title: { ...typo.heading },
-  lede: { ...typo.micro, fontWeight: '500' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  rowText: { flex: 1 },
-  rowTitle: { ...typo.name, fontSize: 14 },
-  rowMeta: { ...typo.micro, fontWeight: '500', marginTop: 2 },
-  spotifyBtn: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1DB954' },
-  spotifyBtnText: { color: palette.white, fontWeight: '900', fontSize: 13 },
-  ghostBtn: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline },
-  ghostBtnText: { color: palette.inkSoft, fontWeight: '900', fontSize: 13 },
-  lastfmBlock: { gap: spacing.xs, borderTopWidth: 1, borderTopColor: palette.hairline, paddingTop: spacing.sm },
-  lastfmRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  lastfmInput: { flex: 1, backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: palette.ink },
-  unlink: { color: palette.danger, fontWeight: '800', fontSize: 12, marginTop: spacing.xs },
-});
-
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, label: { marginTop: spacing.lg, marginBottom: spacing.xs, ...typo.label, textTransform: 'uppercase' }, input: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink }, stackedInput: { marginTop: spacing.sm }, multiline: { minHeight: 100, textAlignVertical: 'top' }, hint: { ...typo.micro, fontWeight: '500', lineHeight: 14, marginTop: spacing.xs }, error: { color: palette.danger }, notice: { marginTop: spacing.lg, color: palette.azureDeep, fontWeight: '700' },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md }, avatarPreview: { width: 78, height: 78, borderRadius: radius.xl, backgroundColor: palette.azure, borderWidth: 4, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarPreviewText: { color: palette.white, fontSize: 30, fontWeight: '900' }, avatarActions: { flex: 1, gap: spacing.sm }, avatarButton: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azure }, avatarButtonText: { color: palette.white, fontWeight: '900' }, avatarSecondary: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azureSoft, borderWidth: 1, borderColor: palette.hairline }, avatarSecondaryText: { color: palette.inkSoft, fontWeight: '900' },
@@ -348,4 +356,12 @@ const styles = StyleSheet.create({
   accentDotSelected: { borderColor: palette.ink },
   accentCheck: { fontWeight: '900', fontSize: 16 },
   primary: { minHeight: 48, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg }, primaryText: { color: palette.white, fontWeight: '900' }, disabled: { opacity: 0.45 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

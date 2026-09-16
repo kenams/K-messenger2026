@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -17,7 +17,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brandGradient, elevation, palette, presenceColor, radius, spacing, type as typo } from './tokens';
+import { brandGradient, elevation, radius, spacing, type Palette, type TypeTokens } from './tokens';
+import { useTheme } from './ThemeProvider';
 
 /** Respect the OS "reduce motion" setting for every decorative animation. */
 export function useReducedMotion(): boolean {
@@ -54,6 +55,7 @@ export function useAndroidBack(handler?: () => void): void {
 
 /** Soft vertical sky wash used behind buddy-list style screens. */
 export function SkyBackground({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={[styles.sky, style]}>
       <View style={styles.skyBand} pointerEvents="none" />
@@ -63,6 +65,7 @@ export function SkyBackground({ children, style }: { children: React.ReactNode; 
 }
 
 export function SectionLabel({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={styles.sectionLabelRow}>
       <Text style={styles.sectionLabel}>{children}</Text>
@@ -83,6 +86,7 @@ export function PresenceBadge({
 }) {
   const reduced = useReducedMotion();
   const pulse = useRef(new Animated.Value(0)).current;
+  const { colors, presenceColor } = useThemedStyles();
 
   useEffect(() => {
     if (reduced || presence !== 'online') {
@@ -99,7 +103,7 @@ export function PresenceBadge({
     return () => loop.stop();
   }, [reduced, presence, pulse]);
 
-  const color = presenceColor[presence] ?? palette.offline;
+  const color = presenceColor[presence] ?? colors.offline;
   const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.4] });
   const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] });
 
@@ -125,7 +129,7 @@ export function PresenceBadge({
           borderRadius: size / 2,
           backgroundColor: color,
           borderWidth: ring ? 2.5 : 0,
-          borderColor: palette.white,
+          borderColor: colors.white,
         }}
       />
     </View>
@@ -133,8 +137,10 @@ export function PresenceBadge({
 }
 
 /** Animated equalizer — the live "now playing" signature. */
-export function Equalizer({ color = palette.music, bars = 4, size = 14 }: { color?: string; bars?: number; size?: number }) {
+export function Equalizer({ color, bars = 4, size = 14 }: { color?: string; bars?: number; size?: number }) {
   const reduced = useReducedMotion();
+  const { colors } = useThemedStyles();
+  const resolvedColor = color ?? colors.music;
   const values = useRef(Array.from({ length: bars }, () => new Animated.Value(0.35))).current;
 
   useEffect(() => {
@@ -163,7 +169,7 @@ export function Equalizer({ color = palette.music, bars = 4, size = 14 }: { colo
           style={{
             width: 2.5,
             borderRadius: 2,
-            backgroundColor: color,
+            backgroundColor: resolvedColor,
             height: v.interpolate({ inputRange: [0, 1], outputRange: [size * 0.25, size] }),
           }}
         />
@@ -172,24 +178,32 @@ export function Equalizer({ color = palette.music, bars = 4, size = 14 }: { colo
   );
 }
 
-/** Full-screen shake used for an incoming K-Pulse (MSN "nudge"). */
+/**
+ * Full-screen shake used for an incoming K-Pulse (MSN "nudge").
+ *
+ * `trigger` must be referentially stable across renders: several screens
+ * (e.g. MsnContactsScreen) key a big socket-connect `useEffect` on it, and an
+ * identity change there tears down and re-runs the whole realtime sync
+ * (listeners detached/reattached, contacts refetched) for no reason. Reading
+ * `reduced` from a ref instead of a `useMemo` dependency keeps `trigger`'s
+ * identity fixed for the component's whole lifetime.
+ */
 export function useNudgeShake(): { style: { transform: { translateX: Animated.AnimatedInterpolation<number> }[] }; trigger: () => void } {
   const reduced = useReducedMotion();
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
   const shake = useRef(new Animated.Value(0)).current;
-  const trigger = useMemo(
-    () => () => {
-      if (reduced) return;
-      shake.setValue(0);
-      Animated.sequence([
-        Animated.timing(shake, { toValue: 1, duration: 60, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: -1, duration: 60, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: 0.6, duration: 60, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: -0.4, duration: 60, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: 0, duration: 60, useNativeDriver: true }),
-      ]).start();
-    },
-    [reduced, shake],
-  );
+  const trigger = useCallback(() => {
+    if (reducedRef.current) return;
+    shake.setValue(0);
+    Animated.sequence([
+      Animated.timing(shake, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -1, duration: 60, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 0.6, duration: 60, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -0.4, duration: 60, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 0, duration: 60, useNativeDriver: true }),
+    ]).start();
+  }, [shake]);
   const style = {
     transform: [{ translateX: shake.interpolate({ inputRange: [-1, 1], outputRange: [-9, 9] }) }],
   };
@@ -209,9 +223,10 @@ export function PrimaryButton({
   disabled?: boolean;
   tone?: 'azure' | 'music';
 }) {
+  const { styles, colors } = useThemedStyles();
   const off = disabled || busy;
   const gradient = tone === 'music'
-    ? ([palette.music, '#3E6E7D'] as const)
+    ? ([colors.music, colors.musicDeep] as const)
     : brandGradient;
   return (
     <TouchableOpacity
@@ -222,7 +237,7 @@ export function PrimaryButton({
       style={[styles.primaryShell, off && styles.disabled]}
     >
       <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primary} pointerEvents="none">
-        {busy ? <ActivityIndicator color={palette.white} /> : <Text style={styles.primaryText}>{label}</Text>}
+        {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>{label}</Text>}
       </LinearGradient>
     </TouchableOpacity>
   );
@@ -242,6 +257,7 @@ export function NowPlayingSheet({
   onClose: () => void;
   onSubmit: (title: string, artist: string) => Promise<void> | void;
 }) {
+  const { styles, colors } = useThemedStyles();
   const [title, setTitle] = useState(initialTitle);
   const [artist, setArtist] = useState(initialArtist);
   const [busy, setBusy] = useState(false);
@@ -277,7 +293,7 @@ export function NowPlayingSheet({
             value={title}
             onChangeText={setTitle}
             placeholder="Titre du morceau"
-            placeholderTextColor={palette.inkFaint}
+            placeholderTextColor={colors.inkFaint}
             style={styles.sheetInput}
             maxLength={120}
             autoFocus
@@ -286,7 +302,7 @@ export function NowPlayingSheet({
             value={artist}
             onChangeText={setArtist}
             placeholder="Artiste"
-            placeholderTextColor={palette.inkFaint}
+            placeholderTextColor={colors.inkFaint}
             style={styles.sheetInput}
             maxLength={120}
           />
@@ -318,6 +334,7 @@ export function ScreenHeader({
   onBack?: () => void;
   right?: React.ReactNode;
 }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={styles.header}>
       {onBack ? (
@@ -337,6 +354,7 @@ export function ScreenHeader({
 
 /** Glass panel used for every list row / grouped block. */
 export function Card({ children, style, onPress }: { children: React.ReactNode; style?: ViewStyle; onPress?: () => void }) {
+  const { styles } = useThemedStyles();
   if (onPress) {
     return (
       <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={[styles.card, style]}>
@@ -359,6 +377,7 @@ export function Avatar({
   size?: number;
   presence?: string;
 }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={{ width: size, height: size }}>
       {uri ? (
@@ -378,6 +397,7 @@ export function Avatar({
 }
 
 export function EmptyState({ icon = '💬', title, hint }: { icon?: string; title: string; hint?: string }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyIcon}>{icon}</Text>
@@ -388,6 +408,7 @@ export function EmptyState({ icon = '💬', title, hint }: { icon?: string; titl
 }
 
 export function Notice({ children, tone = 'info' }: { children: React.ReactNode; tone?: 'info' | 'danger' }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={[styles.notice, tone === 'danger' && styles.noticeDanger]}>
       <Text style={[styles.noticeText, tone === 'danger' && styles.noticeTextDanger]}>{children}</Text>
@@ -400,10 +421,11 @@ export function Field({
   hint,
   ...input
 }: { label: string; hint?: string } & React.ComponentProps<typeof TextInput>) {
+  const { styles, colors } = useThemedStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput placeholderTextColor={palette.inkFaint} {...input} style={[styles.fieldInput, input.style]} />
+      <TextInput placeholderTextColor={colors.inkFaint} {...input} style={[styles.fieldInput, input.style]} />
       {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
     </View>
   );
@@ -418,6 +440,7 @@ export function Segmented<T extends string>({
   options: { value: T; label: string }[];
   onChange: (value: T) => void;
 }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={styles.segment}>
       {options.map((option) => {
@@ -438,7 +461,15 @@ export function Segmented<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
+/** Every shared primitive pulls its styles from here, memoized per active theme. */
+export function useThemedStyles() {
+  const { colors, type: typo, presenceColor } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, presenceColor };
+}
+
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   sky: { flex: 1, backgroundColor: palette.sky },
   skyBand: { position: 'absolute', top: 0, left: 0, right: 0, height: 260, backgroundColor: palette.skyTop },
   sectionLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
@@ -540,4 +571,5 @@ const styles = StyleSheet.create({
   segmentItemActive: { backgroundColor: palette.surface, ...elevation.hairline },
   segmentText: { color: palette.inkSoft, fontWeight: '800', fontSize: 13 },
   segmentTextActive: { color: palette.azureDeep },
-});
+  });
+}

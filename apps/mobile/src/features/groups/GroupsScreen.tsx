@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
-import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
 import { onMessageReceived, onSocialPing } from '../../lib/soundKit';
 import type { Presence } from '../contacts/MsnContactsScreen';
@@ -44,6 +45,7 @@ type ContactsResponse = {
 type HistoryResponse = { ok: boolean; messages?: GroupEncryptedMessage[]; error?: string };
 
 export function GroupsScreen() {
+  const { styles, colors } = useThemedStyles();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -274,7 +276,7 @@ export function GroupsScreen() {
     <ScrollView style={styles.page} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}><View><Text style={styles.eyebrow}>MES GROUPES</Text><Text style={styles.title}>Salons K-ssenger</Text></View><TouchableOpacity style={styles.new} onPress={() => setCreating((value) => !value)}><Text style={styles.newText}>{creating ? '×' : '＋'}</Text></TouchableOpacity></View>
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
-      {creating && <View style={styles.panel}><Text style={styles.label}>NOUVEAU GROUPE</Text><TextInput value={title} onChangeText={setTitle} placeholder="Nom du groupe" maxLength={80} style={styles.input}/><View style={styles.chips}>{contacts.map((contact) => { const selected = selectedIds.includes(contact.id); return <TouchableOpacity key={contact.id} style={[styles.chip, selected && styles.chipSelected]} onPress={() => setSelectedIds((ids) => selected ? ids.filter((id) => id !== contact.id) : [...ids, contact.id])}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{contact.displayName}</Text></TouchableOpacity>; })}</View><TouchableOpacity disabled={busy || !title.trim() || selectedIds.length === 0} style={[styles.primary, (!title.trim() || selectedIds.length === 0) && styles.disabled]} onPress={() => void createGroup()}>{busy ? <ActivityIndicator color="#fff"/> : <Text style={styles.primaryText}>Créer le groupe</Text>}</TouchableOpacity></View>}
+      {creating && <View style={styles.panel}><Text style={styles.label}>NOUVEAU GROUPE</Text><TextInput value={title} onChangeText={setTitle} placeholder="Nom du groupe" maxLength={80} style={styles.input}/><View style={styles.chips}>{contacts.map((contact) => { const selected = selectedIds.includes(contact.id); return <TouchableOpacity key={contact.id} style={[styles.chip, selected && styles.chipSelected]} onPress={() => setSelectedIds((ids) => selected ? ids.filter((id) => id !== contact.id) : [...ids, contact.id])}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{contact.displayName}</Text></TouchableOpacity>; })}</View><TouchableOpacity disabled={busy || !title.trim() || selectedIds.length === 0} style={[styles.primary, (!title.trim() || selectedIds.length === 0) && styles.disabled]} onPress={() => void createGroup()}>{busy ? <ActivityIndicator color={colors.white}/> : <Text style={styles.primaryText}>Créer le groupe</Text>}</TouchableOpacity></View>}
       {groups.map((group) => <TouchableOpacity key={group.id} style={styles.card} disabled={busy} onPress={() => void openGroup(group)}><View style={styles.avatar}><Text style={styles.avatarText}>{(group.title || 'K').slice(0,2).toUpperCase()}</Text></View><View style={styles.flex}><Text style={styles.groupTitle}>{group.title || 'Groupe K-ssenger'}</Text><Text style={styles.meta}>{group.members.length} membres · {group.role}</Text><Text style={styles.muted}>{group.lastMessage ? 'Dernier message' : 'Aucun message'}</Text></View><Text style={styles.chevron}>›</Text></TouchableOpacity>)}
       {groups.length === 0 && !creating && <Text style={styles.empty}>Aucun groupe. Appuie sur ＋ pour créer ton premier salon.</Text>}
       <View style={styles.security}><Text style={styles.securityTitle}>🔒 Sécurité</Text><Text style={styles.muted}>Rôles et modération sont vérifiés côté serveur. Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version.</Text></View>
@@ -282,7 +284,8 @@ export function GroupsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   page: { flex: 1, backgroundColor: palette.sky }, content: { padding: spacing.lg, paddingBottom: spacing.xxl }, flex: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }, eyebrow: { ...typo.brand, color: palette.inkSoft }, title: { ...typo.title, marginTop: 3 }, new: { width: 45, height: 45, borderRadius: radius.md, backgroundColor: palette.azure, alignItems: 'center', justifyContent: 'center' }, newText: { color: palette.white, fontSize: 26 },
   notice: { color: palette.azureDeep, fontWeight: '700', textAlign: 'center', marginBottom: spacing.sm }, back: { color: palette.azure, fontWeight: '900', fontSize: 16, marginBottom: spacing.md }, hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: palette.hairline }, groupTitle: { ...typo.heading }, meta: { color: palette.inkSoft, fontSize: 11, marginTop: 3 }, muted: { ...typo.micro, fontWeight: '500', marginTop: 2 },
@@ -290,4 +293,12 @@ const styles = StyleSheet.create({
   member: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: palette.hairlineSoft }, memberName: { color: palette.ink, fontWeight: '800' }, actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 4, maxWidth: 165 }, action: { paddingHorizontal: 7, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: palette.azureSoft }, actionText: { color: palette.azureDeep, fontWeight: '900', fontSize: 9 }, danger: { paddingHorizontal: 7, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: palette.dangerSoft }, dangerText: { color: palette.danger, fontWeight: '900', fontSize: 10 }, leave: { marginTop: spacing.md, padding: spacing.md, alignItems: 'center', borderRadius: radius.md, borderWidth: 1, borderColor: palette.busy, backgroundColor: palette.dangerSoft },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm }, chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm, backgroundColor: palette.azureSoft, borderWidth: 1, borderColor: palette.hairline }, chipSelected: { backgroundColor: palette.azure, borderColor: palette.azure }, chipText: { color: palette.inkSoft, fontWeight: '800', fontSize: 11 }, chipTextSelected: { color: palette.white }, input: { minHeight: 44, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, backgroundColor: palette.sky, paddingHorizontal: spacing.md, marginBottom: spacing.sm, color: palette.ink }, primary: { marginTop: spacing.md, minHeight: 46, borderRadius: radius.md, backgroundColor: palette.azure, alignItems: 'center', justifyContent: 'center' }, disabled: { opacity: 0.45 }, primaryText: { color: palette.white, fontWeight: '900' },
   card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm }, chevron: { color: palette.inkFaint, fontSize: 26 }, empty: { color: palette.inkSoft, textAlign: 'center', padding: spacing.xl }, security: { marginTop: spacing.md, padding: spacing.md, backgroundColor: palette.azureSoft, borderRadius: radius.lg, borderWidth: 1, borderColor: palette.hairline }, securityTitle: { color: palette.azureDeep, fontWeight: '900' },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

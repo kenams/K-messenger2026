@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import { launchImageLibrarySafe } from '../../lib/pickMedia';
@@ -11,7 +11,8 @@ import { QUICK_REACTIONS, isBigEmoji, isSendKey, myReaction, summarizeReactions,
 import { EmojiPanel } from '../chats/EmojiPanel';
 import { emitAck } from '../../lib/realtime';
 import { onMessageSent } from '../../lib/soundKit';
-import { palette, radius, spacing } from '../../theme/tokens';
+import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 export type GroupEncryptedMessage = {
   id: string;
@@ -85,11 +86,13 @@ function inferGroupMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime
 }
 
 function GroupVideo({ uri }: { uri: string }) {
+  const { styles } = useThemedStyles();
   const player = useVideoPlayer(uri, (instance) => { instance.loop = false; });
   return <VideoView player={player} style={styles.mediaPreview} nativeControls contentFit="contain" />;
 }
 
 function GroupMedia({ content }: { content: Extract<GroupContent, { type: 'media' }> }) {
+  const { styles } = useThemedStyles();
   const [uri, setUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -117,6 +120,7 @@ function GroupMedia({ content }: { content: Extract<GroupContent, { type: 'media
 }
 
 export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, onReact }: Props) {
+  const { styles, colors } = useThemedStyles();
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState('');
@@ -294,7 +298,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
           value={composer}
           onChangeText={setComposer}
           placeholder="Message au groupe…"
-          placeholderTextColor={palette.inkFaint}
+          placeholderTextColor={colors.inkFaint}
           multiline
           maxLength={12000}
           editable={!sending}
@@ -307,14 +311,15 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
           }}
         />
         <TouchableOpacity onPress={() => void send()} disabled={!composer.trim() || sending || !deviceReady} accessibilityRole="button" accessibilityLabel="Envoyer au groupe" style={[styles.send, (!composer.trim() || sending || !deviceReady) && styles.disabled]}>
-          {sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}
+          {sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>➤</Text>}
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   wrap: { marginTop: spacing.md },
   security: { backgroundColor: palette.azureSoft, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm },
   securityText: { color: palette.azureDeep, textAlign: 'center', fontSize: 11, fontWeight: '800' },
@@ -353,4 +358,12 @@ const styles = StyleSheet.create({
   send: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure },
   disabled: { opacity: 0.45 },
   sendText: { color: palette.white, fontSize: 20, fontWeight: '900' },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

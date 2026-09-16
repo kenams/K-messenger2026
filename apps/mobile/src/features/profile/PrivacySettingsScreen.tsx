@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import { ScreenHeader } from '../../theme/components';
-import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type Visibility = 'everyone' | 'contacts' | 'nobody';
 type KPulsePolicy = 'everyone' | 'contacts' | 'favorites' | 'nobody';
@@ -47,6 +48,8 @@ const loginOptions: Array<{ value: LoginNotifications; label: string }> = [
 ];
 
 export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBack: () => void }) {
+  const { styles, colors } = useThemedStyles();
+  const { scheme } = useTheme();
   const [settings, setSettings] = useState<PrivacySettings>(defaults);
   const [exists, setExists] = useState(false);
   const [blocks, setBlocks] = useState<BlockRow[]>([]);
@@ -147,7 +150,7 @@ export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBa
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <ScreenHeader title="Présence & confidentialité" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.intro}>Garde le côté vivant des messageries d’époque sans perdre le contrôle sur ce que les autres voient.</Text>
@@ -183,7 +186,7 @@ export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBa
 
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
         <TouchableOpacity disabled={saving} accessibilityRole="button" accessibilityLabel="Enregistrer" style={[styles.primary, saving && styles.disabled]} onPress={() => void save()}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Enregistrer</Text>}
+          {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>Enregistrer</Text>}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -191,6 +194,7 @@ export function PrivacySettingsScreen({ userId, onBack }: { userId: string; onBa
 }
 
 function ChoiceSection<T extends string>({ title, value, options, onChange }: { title: string; value: T; options: Array<{ value: T; label: string }>; onChange: (value: T) => void }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -205,8 +209,17 @@ function ChoiceSection<T extends string>({ title, value, options, onChange }: { 
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky }, flex: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, intro: { color: palette.inkSoft, lineHeight: 19, marginBottom: spacing.xs }, section: { marginTop: spacing.lg, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, padding: spacing.md }, sectionTitle: { ...typo.label, textTransform: 'uppercase' }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm }, option: { borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: palette.sky }, optionActive: { borderColor: palette.azure, backgroundColor: palette.azureSoft }, optionLabel: { color: palette.inkSoft, fontSize: 11, fontWeight: '800' }, optionLabelActive: { color: palette.azureDeep }, toggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm }, toggle: { fontSize: 22 }, hint: { ...typo.micro, fontWeight: '500', lineHeight: 14, marginTop: 3 }, notice: { color: palette.azureDeep, marginTop: spacing.lg, fontWeight: '800' }, primary: { minHeight: 48, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg }, primaryText: { color: palette.white, fontWeight: '900' }, disabled: { opacity: 0.5 },
   blockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: palette.hairlineSoft, paddingVertical: spacing.sm, marginTop: spacing.sm }, blockLabel: { color: palette.ink, fontWeight: '800', fontSize: 12 }, blockId: { ...typo.micro, fontWeight: '500', marginTop: 2 }, unblock: { borderWidth: 1, borderColor: palette.hairline, backgroundColor: palette.sky, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minWidth: 82, alignItems: 'center' }, unblockText: { color: palette.azureDeep, fontSize: 10, fontWeight: '900' }, empty: { color: palette.inkFaint, fontSize: 11, marginTop: spacing.sm },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

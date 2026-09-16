@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -8,9 +8,11 @@ import { disconnectRealtimeSocket, emitAck, getRealtimeSocket } from '../../lib/
 import { prepareLocalSignalAccountPurge } from '../../lib/signalCleanup';
 import type { MyProfile } from './useMyProfile';
 import { ScreenHeader } from '../../theme/components';
-import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 function PasswordField(props: React.ComponentProps<typeof TextInput>) {
+  const { styles } = useThemedStyles();
   const [revealed, setRevealed] = useState(false);
   return (
     <View style={styles.passwordRow}>
@@ -51,6 +53,8 @@ async function readRowsForIds(table: string, column: string, ids: string[], sele
 }
 
 export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onBack: () => void }) {
+  const { styles, colors } = useThemedStyles();
+  const { scheme } = useTheme();
   const [busy, setBusy] = useState(false);
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -193,7 +197,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <ScreenHeader title="Compte & données" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
@@ -203,7 +207,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
           <PasswordField value={newPassword} onChangeText={setNewPassword} placeholder="Nouveau mot de passe" />
           <PasswordField value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirmer le nouveau mot de passe" onSubmitEditing={() => void changePassword()} />
           <TouchableOpacity style={[styles.primary, passwordBusy && styles.buttonDisabled]} disabled={passwordBusy} onPress={() => void changePassword()}>
-            {passwordBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Modifier mon mot de passe</Text>}
+            {passwordBusy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>Modifier mon mot de passe</Text>}
           </TouchableOpacity>
           {!!passwordNotice && <Text style={styles.notice}>{passwordNotice}</Text>}
         </View>
@@ -212,7 +216,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
           <Text style={styles.cardTitle}>📦 Exporter mon compte</Text>
           <Text style={styles.copy}>Génère un export JSON de ton profil, paramètres, relations, conversations autorisées, appareils, K-Feed, Moments et partages K-MAP. Tes messages sont inclus (le chiffrement de bout en bout n'est pas encore actif) ; les jetons push ne sont jamais exportés.</Text>
           <TouchableOpacity style={[styles.primary, busy && styles.buttonDisabled]} disabled={busy} accessibilityRole="button" accessibilityLabel="Créer mon export" onPress={() => void exportData()}>
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Créer mon export</Text>}
+            {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>Créer mon export</Text>}
           </TouchableOpacity>
           {!!notice && <Text style={styles.notice}>{notice}</Text>}
         </View>
@@ -223,7 +227,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
           <PasswordField value={deletePassword} onChangeText={setDeletePassword} placeholder="Mot de passe actuel" />
           <TextInput autoCapitalize="characters" autoCorrect={false} value={deleteConfirmation} onChangeText={setDeleteConfirmation} placeholder="Tape DELETE" style={styles.input} />
           <TouchableOpacity style={[styles.danger, deleteBusy && styles.buttonDisabled]} disabled={deleteBusy} onPress={() => void deleteAccount()}>
-            {deleteBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Supprimer définitivement mon compte</Text>}
+            {deleteBusy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>Supprimer définitivement mon compte</Text>}
           </TouchableOpacity>
           {!!deleteNotice && <Text style={styles.deleteNotice}>{deleteNotice}</Text>}
         </View>
@@ -232,7 +236,8 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, card: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, padding: spacing.lg }, sectionGap: { marginTop: spacing.md }, warningCard: { marginTop: spacing.md, backgroundColor: palette.dangerSoft, borderWidth: 1, borderColor: palette.busy, borderRadius: radius.lg, padding: spacing.lg },
   cardTitle: { ...typo.heading }, copy: { color: palette.inkSoft, lineHeight: 19, marginTop: spacing.sm }, input: { minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: palette.sky, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, color: palette.ink },
@@ -240,4 +245,12 @@ const styles = StyleSheet.create({
   passwordReveal: { position: 'absolute', right: spacing.sm, top: spacing.sm + 4, padding: 4 }, passwordRevealIcon: { fontSize: 17 },
   primary: { minHeight: 48, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.md }, danger: { minHeight: 48, marginTop: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.danger, borderRadius: radius.md }, buttonDisabled: { opacity: 0.55 }, primaryText: { color: palette.white, fontWeight: '900', textAlign: 'center' },
   notice: { marginTop: spacing.md, color: palette.azureDeep, fontWeight: '700' }, deleteNotice: { marginTop: spacing.md, color: palette.danger, fontWeight: '700' },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

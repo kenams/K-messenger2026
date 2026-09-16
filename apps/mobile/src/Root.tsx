@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -11,8 +11,11 @@ import { ProfileBootstrapScreen } from './features/profile/ProfileBootstrapScree
 import { useMyProfile } from './features/profile/useMyProfile';
 import { useKPulse } from './features/kpulse/KPulseBurst';
 import { useKPulseReceiver } from './features/kpulse/useKPulseReceiver';
+import { ThemeContext, ThemeProvider, useTheme, type ThemeContextValue } from './theme/ThemeProvider';
+import { lightPalette, type Palette } from './theme/tokens';
 
 class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  static contextType = ThemeContext;
   state: { error: Error | null } = { error: null };
 
   static getDerivedStateFromError(error: Error) {
@@ -21,9 +24,12 @@ class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, {
 
   render() {
     if (!this.state.error) return this.props.children;
+    const theme = this.context as ThemeContextValue | null;
+    const colors = theme?.colors ?? lightPalette;
+    const styles = buildStyles(colors);
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar style="dark" />
+        <StatusBar style={theme?.scheme === 'dark' ? 'light' : 'dark'} />
         <View style={styles.loading}>
           <Text style={styles.errorTitle}>K-ssenger n’a pas pu démarrer</Text>
           <Text style={styles.errorCopy}>{this.state.error.message || String(this.state.error)}</Text>
@@ -39,9 +45,11 @@ class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, {
 export function Root() {
   return (
     <SafeAreaProvider>
-      <RootErrorBoundary>
-        <RootInner />
-      </RootErrorBoundary>
+      <ThemeProvider>
+        <RootErrorBoundary>
+          <RootInner />
+        </RootErrorBoundary>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
@@ -76,11 +84,13 @@ function AuthenticatedRoot({ userId }: { userId: string }) {
 }
 
 function Loading({ label }: { label: string }) {
+  const { colors, scheme } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.loading}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.azure} />
         <Text style={styles.loadingText}>{label}</Text>
       </View>
     </SafeAreaView>
@@ -88,9 +98,11 @@ function Loading({ label }: { label: string }) {
 }
 
 function ProfileLoadError({ onRetry }: { onRetry: () => Promise<void> }) {
+  const { colors, scheme } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.loading}>
         <Text style={styles.errorTitle}>Connexion au profil impossible</Text>
         <Text style={styles.errorCopy}>Ton compte existe toujours. K-ssenger n’essaiera pas de recréer ton profil à cause d’une erreur réseau.</Text>
@@ -102,12 +114,14 @@ function ProfileLoadError({ onRetry }: { onRetry: () => Promise<void> }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8F4EC' },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
-  loadingText: { color: '#4A4032', marginTop: 12, fontWeight: '700' },
-  errorTitle: { color: '#1C140B', fontSize: 22, fontWeight: '900', textAlign: 'center' },
-  errorCopy: { color: '#4A4032', marginTop: 10, textAlign: 'center', lineHeight: 20, maxWidth: 420 },
-  retry: { marginTop: 18, minWidth: 150, minHeight: 46, paddingHorizontal: 18, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A67C3D' },
-  retryText: { color: '#fff', fontWeight: '900' },
-});
+function buildStyles(colors: Palette) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.sky },
+    loading: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
+    loadingText: { color: colors.inkSoft, marginTop: 12, fontWeight: '700' },
+    errorTitle: { color: colors.ink, fontSize: 22, fontWeight: '900', textAlign: 'center' },
+    errorCopy: { color: colors.inkSoft, marginTop: 10, textAlign: 'center', lineHeight: 20, maxWidth: 420 },
+    retry: { marginTop: 18, minWidth: 150, minHeight: 46, paddingHorizontal: 18, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.azure },
+    retryText: { color: colors.white, fontWeight: '900' },
+  });
+}

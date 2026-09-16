@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { UseWebLink } from '../../lib/deviceLinkClient';
 import { ScreenHeader, useAndroidBack } from '../../theme/components';
-import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { brandGradient, elevation, layout, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 /**
  * Web-side pairing screen. The web session stays logged in with its own
@@ -13,6 +14,7 @@ import { brandGradient, elevation, layout, palette, radius, spacing, type as typ
  * the Signal keys.
  */
 export function WebLinkScreen({ webLink, onBack }: { webLink: UseWebLink; onBack?: () => void }) {
+  const { styles, colors, scheme } = useThemedStyles();
   const pairing = webLink.status === 'pairing';
 
   const goBack = React.useCallback(() => {
@@ -24,7 +26,7 @@ export function WebLinkScreen({ webLink, onBack }: { webLink: UseWebLink; onBack
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.wash} pointerEvents="none" />
       {onBack ? <ScreenHeader title="Lier mon téléphone" onBack={goBack} /> : null}
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -47,7 +49,7 @@ export function WebLinkScreen({ webLink, onBack }: { webLink: UseWebLink; onBack
                   <View key={i} style={styles.codeCell}><Text style={styles.codeDigit}>{d}</Text></View>
                 ))}
               </View>
-              <View style={styles.waiting}><ActivityIndicator color={palette.azure} /><Text style={styles.waitingText}>En attente de la validation du téléphone…</Text></View>
+              <View style={styles.waiting}><ActivityIndicator color={colors.azure} /><Text style={styles.waitingText}>En attente de la validation du téléphone…</Text></View>
               <TouchableOpacity onPress={webLink.cancelPairing}><Text style={styles.link}>Annuler</Text></TouchableOpacity>
             </>
           ) : webLink.status === 'linked' ? (
@@ -64,7 +66,7 @@ export function WebLinkScreen({ webLink, onBack }: { webLink: UseWebLink; onBack
           ) : (
             <TouchableOpacity activeOpacity={0.9} disabled={webLink.starting} onPress={() => void webLink.startPairing()} style={[styles.ctaShell, webLink.starting && { opacity: 0.6 }]}>
               <LinearGradient colors={brandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta} pointerEvents="none">
-                {webLink.starting ? <ActivityIndicator color={palette.white} /> : <Text style={styles.ctaText}>Lier mon téléphone</Text>}
+                {webLink.starting ? <ActivityIndicator color={colors.white} /> : <Text style={styles.ctaText}>Lier mon téléphone</Text>}
               </LinearGradient>
             </TouchableOpacity>
           )}
@@ -79,7 +81,8 @@ export function WebLinkScreen({ webLink, onBack }: { webLink: UseWebLink; onBack
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
   wash: { position: 'absolute', top: 0, left: 0, right: 0, height: 300, backgroundColor: palette.skyTop },
   scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, paddingVertical: spacing.xxxl },
@@ -108,4 +111,12 @@ const styles = StyleSheet.create({
   trust: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: palette.hairline, alignSelf: 'stretch' },
   trustLock: { fontSize: 15 },
   trustText: { flex: 1, ...typo.micro, fontWeight: '600', lineHeight: 15 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

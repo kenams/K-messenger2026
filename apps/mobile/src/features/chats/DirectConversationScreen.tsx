@@ -8,7 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import type { Socket } from 'socket.io-client';
 import type { Contact } from '../contacts/MsnContactsScreen';
-import { elevation, layout, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
+import { elevation, layout, presenceLabel, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { accentOf } from '../../theme/accent';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
@@ -94,11 +95,13 @@ function inferChatMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime 
 }
 
 function ChatVideo({ uri }: { uri: string }) {
+  const { styles } = useThemedStyles();
   const player = useVideoPlayer(uri, (instance) => { instance.loop = false; });
   return <VideoView player={player} style={styles.mediaPreview} nativeControls contentFit="contain" />;
 }
 
 function ChatMedia({ content }: { content: Extract<ChatContent, { type: 'media' }> }) {
+  const { styles } = useThemedStyles();
   const [uri, setUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -130,6 +133,7 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
   onToggleReacting: () => void;
   onReact: (emoji: string) => void;
 }) {
+  const { styles } = useThemedStyles();
   const content = message.content ?? parseChatContent(readMessageText(message));
   const summary = summarizeReactions(message.reactions, currentUserId);
   const mineReaction = myReaction(message.reactions, currentUserId);
@@ -174,6 +178,7 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
 }
 
 export function DirectConversationScreen({ contact, onBack }: { contact: Contact; onBack: () => void; onLinkPhone?: () => void }) {
+  const { styles, colors, scheme } = useThemedStyles();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [conversationId, setConversationId] = useState('');
@@ -391,7 +396,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={[styles.header, contact.accentColor ? { borderBottomColor: accentOf(contact.accentColor), borderBottomWidth: 2 } : null]}>
         <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
         <View style={[styles.avatar, contact.accentColor ? { backgroundColor: accentOf(contact.accentColor) } : null]}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
@@ -440,7 +445,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
           value={composer}
           onChangeText={setComposer}
           placeholder="Écrire un message…"
-          placeholderTextColor={palette.inkFaint}
+          placeholderTextColor={colors.inkFaint}
           maxLength={12000}
           multiline
           editable={!sending}
@@ -452,13 +457,14 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
             }
           }}
         />
-        <TouchableOpacity disabled={!composer.trim() || sending || !canSend} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSend) && styles.disabled]}>{sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
+        <TouchableOpacity disabled={!composer.trim() || sending || !canSend} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSend) && styles.disabled]}>{sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky }, flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md, backgroundColor: palette.surface, borderBottomWidth: 1, borderBottomColor: palette.hairline },
   back: { fontSize: 30, lineHeight: 30, color: palette.azureDeep, fontWeight: '900', width: 30, textAlign: 'center' },
@@ -501,4 +507,12 @@ const styles = StyleSheet.create({
   attachActive: { backgroundColor: palette.azureSoft, borderColor: palette.azure },
   attachText: { color: palette.azureDeep, fontSize: 22, lineHeight: 26, fontWeight: '700' },
   disabled: { opacity: 0.4 }, sendText: { color: palette.white, fontWeight: '900', fontSize: 18 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

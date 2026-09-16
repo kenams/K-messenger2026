@@ -6,7 +6,8 @@ import { DirectConversationScreen } from './DirectConversationScreen';
 import type { Contact, Presence } from '../contacts/MsnContactsScreen';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
 import { Avatar, Card, EmptyState, Notice, Segmented, SkyBackground } from '../../theme/components';
-import { palette, spacing, type as typo } from '../../theme/tokens';
+import { spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type ConversationMember = {
   userId: string;
@@ -35,6 +36,7 @@ type ConversationsResponse = {
 };
 
 export function ChatsHubScreen() {
+  const { styles, colors } = useThemedStyles();
   const [mode, setMode] = useState<'private' | 'groups'>('private');
   const [, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
@@ -151,7 +153,7 @@ export function ChatsHubScreen() {
       {!!notice && <Notice>{notice}</Notice>}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={palette.azure} />
+          <ActivityIndicator color={colors.azure} />
           <Text style={styles.loadingText}>Chargement des conversations…</Text>
         </View>
       ) : (
@@ -201,7 +203,8 @@ function formatTime(value: string | null) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   content: { padding: spacing.lg, paddingTop: spacing.xs, gap: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   loadingText: { ...typo.meta },
@@ -213,4 +216,12 @@ const styles = StyleSheet.create({
   right: { alignItems: 'flex-end', minWidth: 42 },
   time: { ...typo.micro },
   chevron: { color: palette.inkFaint, fontSize: 24, marginTop: 4 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

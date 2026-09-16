@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Location from 'expo-location';
 import { getBackend } from '../../lib/backend';
 import { getAuthenticatedUserId } from '../../lib/realtime';
 import { EmptyState, ScreenHeader, SectionLabel } from '../../theme/components';
-import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type SharePrecision = 'precise' | 'approximate';
 type ShareMode = 'one_time' | 'live' | 'meet' | 'route';
@@ -33,6 +34,7 @@ type VisibleShare = LocationShare & { point: SafePoint | null };
 type ContactOption = { id: string; label: string };
 
 export function KMapScreen() {
+  const { styles, colors } = useThemedStyles();
   const [mine, setMine] = useState<LocationShare[]>([]);
   const [received, setReceived] = useState<VisibleShare[]>([]);
   const [contacts, setContacts] = useState<ContactOption[]>([]);
@@ -205,12 +207,12 @@ export function KMapScreen() {
     }
   };
 
-  if (loading) return <View style={styles.loading}><ActivityIndicator color={palette.azure} /><Text style={styles.muted}>Chargement de K‑Map…</Text></View>;
+  if (loading) return <View style={styles.loading}><ActivityIndicator color={colors.azure} /><Text style={styles.muted}>Chargement de K‑Map…</Text></View>;
 
   return (
     <View style={styles.page}>
       <ScreenHeader title="K-Map" subtitle="Partage ponctuel · foreground uniquement" />
-      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={palette.azure} />}>
+      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.azure} />}>
         <View style={styles.hero}>
           <Text style={styles.pin}>📍</Text>
           <Text style={styles.subtitle}>Aucun tracking caché : K-ssenger demande ta position seulement quand tu appuies sur Partager. Chaque partage ponctuel expire après 30 minutes.</Text>
@@ -238,7 +240,7 @@ export function KMapScreen() {
               </View>
               <Text style={styles.privacyCopy}>{precision === 'approximate' ? 'Recommandé : précision réduite avant stockage puis encore dégradée par Neon pour le destinataire.' : 'La position exacte sera stockée pour ce partage. Utilise-la seulement avec une personne de confiance.'}</Text>
               <TouchableOpacity disabled={mutating || !selectedRecipient} onPress={() => void createOneTimeShare()} style={[styles.shareButton, (mutating || !selectedRecipient) && styles.disabled]}>
-                {mutating ? <ActivityIndicator color={palette.white} /> : <Text style={styles.shareButtonText}>Partager ma position · 30 min</Text>}
+                {mutating ? <ActivityIndicator color={colors.white} /> : <Text style={styles.shareButtonText}>Partager ma position · 30 min</Text>}
               </TouchableOpacity>
             </View>
           )}
@@ -280,7 +282,8 @@ export function KMapScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   page: { flex: 1, backgroundColor: palette.sky },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: palette.sky },
@@ -312,4 +315,12 @@ const styles = StyleSheet.create({
   privacyCopy: { color: palette.inkFaint, fontSize: 10, lineHeight: 15, marginTop: spacing.sm },
   shareButton: { minHeight: 48, backgroundColor: palette.azure, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
   shareButtonText: { color: palette.white, fontWeight: '900' },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

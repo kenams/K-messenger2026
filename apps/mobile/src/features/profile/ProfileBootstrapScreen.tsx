@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
-import { elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { elevation, layout, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 function normalizeUsername(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
 }
 
 export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void> | void }) {
+  const { styles, colors, scheme } = useThemedStyles();
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -42,7 +44,7 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.card}>
         <View style={styles.logo}><Text style={styles.logoText}>K</Text></View>
         <Text style={styles.brand}>K-SSENGER</Text>
@@ -52,7 +54,7 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
         <TextInput value={displayName} onChangeText={setDisplayName} placeholder="Nom affiché / surnom" maxLength={64} style={styles.input} onSubmitEditing={save} />
         {!!error && <Text style={styles.error}>{error}</Text>}
         <TouchableOpacity style={[styles.primary, !valid && styles.disabled]} disabled={!valid} onPress={save}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Continuer</Text>}
+          {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>Continuer</Text>}
         </TouchableOpacity>
         <TouchableOpacity onPress={signOut}><Text style={styles.logout}>Se déconnecter</Text></TouchableOpacity>
       </View>
@@ -60,7 +62,8 @@ export function ProfileBootstrapScreen({ onDone }: { onDone: () => Promise<void>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
   card: {
     flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl,
@@ -84,4 +87,12 @@ const styles = StyleSheet.create({
   primaryText: { color: palette.white, fontWeight: '900', fontSize: 14.5, letterSpacing: 0.3 },
   error: { color: palette.danger, marginTop: spacing.md, textAlign: 'center', fontSize: 12.5, fontWeight: '700' },
   logout: { color: palette.inkSoft, marginTop: spacing.lg, fontWeight: '800', fontSize: 12 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

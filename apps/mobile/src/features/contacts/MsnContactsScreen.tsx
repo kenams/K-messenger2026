@@ -4,7 +4,8 @@ import type { Socket } from 'socket.io-client';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload } from '../../lib/media';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
-import { elevation, palette, presenceLabel, radius, spacing, type as typo } from '../../theme/tokens';
+import { elevation, presenceLabel, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
 import { clearContactAttention, useContactAttention, wireContactAttention } from '../attention/contactAttention';
@@ -92,6 +93,7 @@ function httpsAvatar(value: string | null | undefined): string | null {
 }
 
 function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: string; avatarUrl?: string | null; presence?: Presence }) {
+  const { styles } = useThemedStyles();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => httpsAvatar(avatarUrl));
   const mediaId = mediaIdFromAvatar(avatarUrl);
 
@@ -139,6 +141,7 @@ function ContactRow({
   onRemove: () => void;
   onBlock: () => void;
 }) {
+  const { styles } = useThemedStyles();
   const { unread, pulse } = useContactAttention(contact.id);
   const reducedMotion = useReducedMotion();
   const attention = unread > 0 || pulse;
@@ -206,6 +209,7 @@ function requestName(request: ContactRequest, currentUserId: string): { name: st
 }
 
 export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => void }) {
+  const { styles, colors } = useThemedStyles();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -351,6 +355,18 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       try {
         await Promise.all([loadContacts(client), loadRequests(client), loadBlockedUsers(client)]);
         if (active) setNotice('');
+        // A freshly-authenticated socket can occasionally have its very first
+        // `contacts:list` answered before the connection is fully warmed up
+        // server-side, coming back `ok:true` with an empty list even though
+        // real contacts exist (only surfaces as "empty until I switch tabs
+        // and back" — switching tabs just remounts this screen and retries).
+        // Don't trust an empty first answer as final: reconfirm once, short
+        // delay, before treating it as a real "no contacts yet" state.
+        if (active && contactsRef.current.length === 0) {
+          setTimeout(() => {
+            if (active && client.connected) void loadContacts(client).catch(() => undefined);
+          }, 1500);
+        }
       } catch {
         if (active) setNotice('Connexion aux contacts K-ssenger impossible.');
       } finally {
@@ -500,7 +516,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     setNotice(`${blocked.display_name} est débloqué. Il n’a pas été réajouté automatiquement à tes contacts.`);
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={palette.azure} /><Text style={styles.loadingText}>Chargement de tes contacts…</Text></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.azure} /><Text style={styles.loadingText}>Chargement de tes contacts…</Text></View>;
 
   return (
     <SkyBackground>
@@ -508,7 +524,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         <ScrollView style={styles.page} contentContainerStyle={styles.content}>
           <View style={styles.toolbar}>
             <Text style={styles.searchIcon}>⌕</Text>
-            <TextInput testID="contact-search" value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo" placeholderTextColor={palette.inkFaint} style={styles.search} autoCapitalize="none" />
+            <TextInput testID="contact-search" value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo" placeholderTextColor={colors.inkFaint} style={styles.search} autoCapitalize="none" />
           </View>
           <Text style={styles.counter}>{onlineCount} en ligne · {filtered.length} contact{filtered.length > 1 ? 's' : ''}</Text>
           {!!notice && <View style={styles.noticePill}><Text style={styles.notice}>{notice}</Text></View>}
@@ -626,7 +642,8 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   fill: { flex: 1 },
   page: { flex: 1 },
   content: { padding: spacing.md, paddingBottom: spacing.xxl },
@@ -660,7 +677,7 @@ const styles = StyleSheet.create({
   attentionNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   attentionPulseIcon: { fontSize: 13 },
   attentionBadge: { backgroundColor: palette.danger, borderRadius: radius.pill, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
-  attentionBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  attentionBadgeText: { color: palette.white, fontSize: 10, fontWeight: '800' },
   accentEdge: { width: 3, alignSelf: 'stretch', borderRadius: radius.pill, marginRight: spacing.xs },
   status: { color: palette.inkSoft, marginTop: 2, fontSize: 12 },
   statusFaint: { color: palette.inkFaint, marginTop: 2, fontSize: 11 },
@@ -671,18 +688,26 @@ const styles = StyleSheet.create({
   acceptText: { color: palette.white, fontSize: 11, fontWeight: '900' },
   secondaryAction: { backgroundColor: palette.sky, borderWidth: 1, borderColor: palette.hairline, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm },
   secondaryActionText: { color: palette.inkSoft, fontSize: 11, fontWeight: '900' },
-  dangerAction: { backgroundColor: palette.dangerSoft, borderWidth: 1, borderColor: '#EFB4B4', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm },
+  dangerAction: { backgroundColor: palette.dangerSoft, borderWidth: 1, borderColor: palette.dangerBorder, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm },
   dangerActionText: { color: palette.danger, fontSize: 11, fontWeight: '900' },
 
   iconBtn: { width: 38, height: 38, borderRadius: radius.md, borderWidth: 1, borderColor: palette.hairline, backgroundColor: palette.surface, alignItems: 'center', justifyContent: 'center' },
   iconBtnText: { color: palette.inkSoft, fontSize: 16, fontWeight: '900' },
-  pulseBtn: { backgroundColor: palette.pulseSoft, borderColor: '#EFCF65' },
-  favoriteActive: { backgroundColor: '#FFF7D6', borderColor: '#E7CA5C' },
-  favoriteActiveText: { color: '#B48A00' },
+  pulseBtn: { backgroundColor: palette.pulseSoft, borderColor: palette.brass },
+  favoriteActive: { backgroundColor: palette.favoriteSoft, borderColor: palette.favoriteBorder },
+  favoriteActiveText: { color: palette.favoriteText },
   manageRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
 
   emptyState: { alignItems: 'center', marginTop: 60, paddingHorizontal: spacing.xl },
   emptyIcon: { fontSize: 40 },
   emptyTitle: { ...typo.heading, marginTop: spacing.sm },
   empty: { marginTop: spacing.xs, textAlign: 'center', color: palette.inkFaint, fontSize: 12, lineHeight: 18 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

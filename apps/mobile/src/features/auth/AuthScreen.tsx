@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getBackend, isBackendConfigured, notifyAuthStateMayHaveChanged } from '../../lib/backend';
-import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { brandGradient, elevation, layout, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 import { MobileAppQr } from '../profile/MobileAppQr';
 
 type Mode = 'login' | 'signup';
@@ -14,6 +15,7 @@ function normalizeUsername(value: string) {
 }
 
 function BrandMark({ size = 76 }: { size?: number }) {
+  const { styles } = useThemedStyles();
   return (
     <View style={[styles.markWrap, { width: size + 20, height: size + 20 }]}>
       <View style={[styles.markGlow, { borderRadius: (size + 20) / 2 }]} />
@@ -34,6 +36,7 @@ function BrandMark({ size = 76 }: { size?: number }) {
 }
 
 function AuthField(props: React.ComponentProps<typeof TextInput> & { icon?: string }) {
+  const { styles, colors } = useThemedStyles();
   const { icon, style, secureTextEntry, ...input } = props;
   const [focused, setFocused] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -42,7 +45,7 @@ function AuthField(props: React.ComponentProps<typeof TextInput> & { icon?: stri
     <View style={[styles.fieldRow, focused && styles.fieldRowFocused]}>
       {icon ? <Text style={styles.fieldIcon}>{icon}</Text> : null}
       <TextInput
-        placeholderTextColor={palette.inkFaint}
+        placeholderTextColor={colors.inkFaint}
         {...input}
         accessibilityLabel={input.accessibilityLabel ?? input.placeholder}
         secureTextEntry={canReveal && !revealed}
@@ -66,6 +69,7 @@ function AuthField(props: React.ComponentProps<typeof TextInput> & { icon?: stri
 }
 
 export function AuthScreen() {
+  const { styles, colors, scheme } = useThemedStyles();
   const { width } = useWindowDimensions();
   const compact = width < 480;
   const [emailTouched, setEmailTouched] = useState(false);
@@ -187,7 +191,7 @@ export function AuthScreen() {
   if (!isBackendConfigured) {
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar style="dark" />
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         <View style={styles.wash} pointerEvents="none" />
         <View style={styles.centre}>
           <View style={styles.card}>
@@ -208,7 +212,7 @@ export function AuthScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.wash} pointerEvents="none" />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -316,7 +320,7 @@ export function AuthScreen() {
               >
                 <LinearGradient colors={brandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta} pointerEvents="none">
                   {busy ? (
-                    <ActivityIndicator color={palette.white} />
+                    <ActivityIndicator color={colors.white} />
                   ) : (
                     <Text style={styles.ctaText}>{mode === 'login' ? 'Se connecter' : 'Créer mon compte'}</Text>
                   )}
@@ -357,7 +361,8 @@ export function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
   flex: { flex: 1 },
   wash: { position: 'absolute', top: 0, left: 0, right: 0, height: 320, backgroundColor: palette.skyTop },
@@ -469,4 +474,12 @@ const styles = StyleSheet.create({
   codeBlock: { marginTop: spacing.lg, gap: spacing.xs, alignItems: 'center' },
   code: { color: palette.azureDeep, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 },
   warning: { marginTop: spacing.lg, color: palette.away, fontWeight: '800', textAlign: 'center', fontSize: 12 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

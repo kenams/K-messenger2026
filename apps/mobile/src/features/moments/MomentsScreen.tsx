@@ -7,7 +7,8 @@ import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { getAuthenticatedUserId } from '../../lib/realtime';
 import { EmptyState, ScreenHeader } from '../../theme/components';
-import { palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { immersive, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type MomentVisibility = 'friends' | 'close_friends' | 'public';
 type MomentKind = 'photo' | 'video' | 'text';
@@ -45,6 +46,7 @@ function inferMomentMime(asset: ImagePicker.ImagePickerAsset, kind: 'photo' | 'v
 }
 
 export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void }) {
+  const { styles, colors } = useThemedStyles();
   const [moments, setMoments] = useState<Moment[]>([]);
   const [caption, setCaption] = useState('');
   const [visibility, setVisibility] = useState<MomentVisibility>('friends');
@@ -205,7 +207,7 @@ export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void 
     } catch { setNotice('Impossible d’envoyer le signalement pour le moment.'); }
   };
 
-  if (loading) return <View style={styles.loading}><ActivityIndicator color={palette.azure} /><Text style={styles.muted}>Chargement des Moments…</Text></View>;
+  if (loading) return <View style={styles.loading}><ActivityIndicator color={colors.azure} /><Text style={styles.muted}>Chargement des Moments…</Text></View>;
   return (
     <View style={styles.container}>
       <ScreenHeader title="Moments" subtitle="Texte, photo ou vidéo · 24 h · média privé" />
@@ -213,7 +215,7 @@ export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void 
         data={moments}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={palette.azure} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.azure} />}
         ListHeaderComponent={
           <View style={styles.composer}>
             <Text style={styles.title}>Partager un moment</Text>
@@ -222,7 +224,7 @@ export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void 
               <Pressable disabled={publishing} onPress={() => void publishMedia('photo')} style={styles.chip}><Text style={styles.chipText}>📸 Photo</Text></Pressable>
               <Pressable disabled={publishing} onPress={() => void publishMedia('video')} style={styles.chip}><Text style={styles.chipText}>🎥 Vidéo</Text></Pressable>
             </View>
-            <TextInput value={caption} onChangeText={setCaption} placeholder="Qu'est-ce qui se passe dans ta vie ?" placeholderTextColor={palette.inkFaint} style={styles.input} multiline maxLength={280} />
+            <TextInput value={caption} onChangeText={setCaption} placeholder="Qu'est-ce qui se passe dans ta vie ?" placeholderTextColor={colors.inkFaint} style={styles.input} multiline maxLength={280} />
             <View style={styles.row}>
               {(['friends','close_friends','public'] as MomentVisibility[]).map((value) => (
                 <Pressable key={value} onPress={() => setVisibility(value)} style={[styles.chip, visibility === value && styles.chipActive]}>
@@ -231,7 +233,7 @@ export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void 
               ))}
             </View>
             <Pressable disabled={!canPublish} onPress={() => void publishText()} style={[styles.publish, !canPublish && styles.publishDisabled]}>
-              {publishing ? <ActivityIndicator color={palette.white} /> : <Text style={styles.publishText}>Publier le texte pour 24 h</Text>}
+              {publishing ? <ActivityIndicator color={colors.white} /> : <Text style={styles.publishText}>Publier le texte pour 24 h</Text>}
             </Pressable>
             {!!notice && <Text style={styles.notice}>{notice}</Text>}
           </View>
@@ -243,9 +245,10 @@ export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void 
   );
 }
 
-function MomentVideo({ uri }: { uri: string }) { const player = useVideoPlayer(uri, (instance) => { instance.loop = true; }); return <VideoView player={player} style={styles.media} nativeControls allowsFullscreen contentFit="contain" />; }
+function MomentVideo({ uri }: { uri: string }) { const { styles } = useThemedStyles(); const player = useVideoPlayer(uri, (instance) => { instance.loop = true; }); return <VideoView player={player} style={styles.media} nativeControls allowsFullscreen contentFit="contain" />; }
 
 function MomentMedia({ moment }: { moment: Moment }) {
+  const { styles, colors } = useThemedStyles();
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -257,7 +260,7 @@ function MomentMedia({ moment }: { moment: Moment }) {
   const uri = signedUrl ?? legacy;
   if (moment.kind === 'photo' && uri) return <Image source={{ uri }} style={styles.media} resizeMode="cover" />;
   if (moment.kind === 'video' && uri) return <MomentVideo uri={uri} />;
-  if (moment.kind !== 'text') return <View style={styles.textMoment}><ActivityIndicator color={palette.white} /><Text style={styles.textMomentCopy}>Média privé en chargement…</Text></View>;
+  if (moment.kind !== 'text') return <View style={styles.textMoment}><ActivityIndicator color={colors.white} /><Text style={styles.textMomentCopy}>Média privé en chargement…</Text></View>;
   return <View style={styles.textMoment}><Text style={styles.textMomentIcon}>💭</Text><Text style={styles.textMomentCopy}>{moment.caption || 'Moment K-ssenger'}</Text></View>;
 }
 
@@ -268,6 +271,7 @@ function MomentCard({ moment, onDelete, onReport, onReact, onTogglePin }: {
   onReact: (moment: Moment, emoji: string) => void;
   onTogglePin: (moment: Moment) => void;
 }) {
+  const { styles, colors } = useThemedStyles();
   const remainingHours = Math.max(1, Math.ceil(Math.max(0, new Date(moment.expires_at).getTime() - Date.now()) / 3_600_000));
   return (
     <View style={[styles.card, moment.is_pinned && styles.cardPinned]}>
@@ -312,7 +316,8 @@ function MomentCard({ moment, onDelete, onReport, onReact, onTogglePin }: {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.sky },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: palette.sky },
   muted: { ...typo.meta },
@@ -334,10 +339,10 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   author: { ...typo.name },
   time: { ...typo.micro },
-  textMoment: { marginTop: spacing.md, minHeight: 150, borderRadius: radius.md, backgroundColor: '#102c3d', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  textMoment: { marginTop: spacing.md, minHeight: 150, borderRadius: radius.md, backgroundColor: immersive.panel, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   textMomentIcon: { fontSize: 36 },
   textMomentCopy: { color: palette.white, fontSize: 20, lineHeight: 27, fontWeight: '800', textAlign: 'center', marginTop: spacing.md },
-  media: { width: '100%', height: 320, marginTop: spacing.md, borderRadius: radius.md, backgroundColor: '#0c1d27' },
+  media: { width: '100%', height: 320, marginTop: spacing.md, borderRadius: radius.md, backgroundColor: immersive.surface },
   mediaCaption: { color: palette.inkSoft, marginTop: spacing.sm, lineHeight: 18 },
   visibility: { marginTop: spacing.sm, ...typo.micro, fontWeight: '500' },
   reactionBar: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.md, flexWrap: 'wrap' },
@@ -349,4 +354,12 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.lg, marginTop: spacing.md, alignItems: 'center' },
   action: { color: palette.inkSoft, fontWeight: '700', fontSize: 12 },
   deleteAction: { color: palette.danger, fontWeight: '800', fontSize: 12 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

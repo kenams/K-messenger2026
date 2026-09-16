@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -6,11 +6,13 @@ import { getBackend } from '../../lib/backend';
 import { emitAck, getRealtimeSocket } from '../../lib/realtime';
 import { approvePendingLink, linkConfirmationCode } from '../../lib/deviceLinkClient';
 import { ScreenHeader, useAndroidBack } from '../../theme/components';
-import { elevation, layout, palette, radius, spacing, type as typo } from '../../theme/tokens';
+import { elevation, layout, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type LinkRow = { id: string; status: 'pending' | 'approved' | 'revoked'; created_at: string; approved_at: string | null };
 
 export function LinkedDevicesScreen({ userId, onBack }: { userId: string; onBack: () => void }) {
+  const { styles, colors, scheme } = useThemedStyles();
   const [rows, setRows] = useState<LinkRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [codeInput, setCodeInput] = useState('');
@@ -80,7 +82,7 @@ export function LinkedDevicesScreen({ userId, onBack }: { userId: string; onBack
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <ScreenHeader title="Appareils liés" onBack={onBack} />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.kicker}>APPAREILS LIÉS</Text>
@@ -96,12 +98,12 @@ export function LinkedDevicesScreen({ userId, onBack }: { userId: string; onBack
               value={codeInput}
               onChangeText={(v) => setCodeInput(v.replace(/[^0-9]/g, '').slice(0, 6))}
               placeholder="000000"
-              placeholderTextColor={palette.inkFaint}
+              placeholderTextColor={colors.inkFaint}
               keyboardType="number-pad"
               maxLength={6}
             />
             <TouchableOpacity onPress={() => void approve()} disabled={codeInput.length !== 6 || busy} style={[styles.approve, (codeInput.length !== 6 || busy) && styles.approveOff]}>
-              {busy ? <ActivityIndicator color={palette.white} /> : <Text style={styles.approveText}>Lier</Text>}
+              {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.approveText}>Lier</Text>}
             </TouchableOpacity>
           </View>
           {pending.length > 0 && <Text style={styles.pendingHint}>{pending.length} demande(s) en attente.</Text>}
@@ -110,7 +112,7 @@ export function LinkedDevicesScreen({ userId, onBack }: { userId: string; onBack
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
 
         <Text style={styles.sectionLabel}>Navigateurs actifs</Text>
-        {loading ? <ActivityIndicator color={palette.azure} style={{ marginTop: spacing.md }} /> : approved.length === 0 ? (
+        {loading ? <ActivityIndicator color={colors.azure} style={{ marginTop: spacing.md }} /> : approved.length === 0 ? (
           <Text style={styles.empty}>Aucun navigateur lié.</Text>
         ) : approved.map((row) => (
           <View key={row.id} style={styles.linkRow}>
@@ -126,7 +128,8 @@ export function LinkedDevicesScreen({ userId, onBack }: { userId: string; onBack
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sky },
   content: { padding: spacing.xl, paddingBottom: spacing.xxxl, maxWidth: layout.maxContent, alignSelf: 'center', width: '100%' },
   kicker: { ...typo.brand },
@@ -150,4 +153,12 @@ const styles = StyleSheet.create({
   linkMeta: { ...typo.micro, color: palette.inkFaint, marginTop: 2 },
   revoke: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: palette.danger, backgroundColor: palette.dangerSoft },
   revokeText: { color: palette.danger, fontWeight: '900', fontSize: 11 },
-});
+  });
+}
+
+/** Pulls this screen's styles from the active theme, memoized. */
+function useThemedStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}

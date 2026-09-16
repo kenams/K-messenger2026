@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -23,8 +23,9 @@ import { getBackend, notifyAuthStateMayHaveChanged } from './src/lib/backend';
 import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket } from './src/lib/realtime';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brandGradient, elevation, layout, palette, radius, spacing, type as typo } from './src/theme/tokens';
-import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, useAndroidBack } from './src/theme/components';
+import { brandGradient, elevation, immersive, layout, radius, spacing, type Palette, type TypeTokens } from './src/theme/tokens';
+import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, SectionLabel, Segmented, useAndroidBack } from './src/theme/components';
+import { useTheme, type ThemeMode } from './src/theme/ThemeProvider';
 import { accentOf } from './src/theme/accent';
 import { MobileAppQr } from './src/features/profile/MobileAppQr';
 
@@ -84,15 +85,19 @@ function isHttpsAvatarUrl(value: string | null | undefined): value is string {
 
 /** Centered app column so web never sprawls edge to edge. */
 function WebShell({ children }: { children: React.ReactNode }) {
+  const { styles } = useAppStyles();
+  const { scheme } = useTheme();
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.shell}>{children}</View>
     </SafeAreaView>
   );
 }
 
 export default function App({ profile, onProfileChanged }: AppProps) {
+  const { styles, colors } = useAppStyles();
+  const { scheme } = useTheme();
   const [tab, setTab] = useState<TabName>('contacts');
   const [selected, setSelected] = useState<Contact | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -216,8 +221,8 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   if (ageLoading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar style="dark" />
-        <View style={styles.ageGate}><ActivityIndicator size="large" color={palette.azure} /><Text style={styles.legal}>Vérification du profil de sécurité…</Text></View>
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        <View style={styles.ageGate}><ActivityIndicator size="large" color={colors.azure} /><Text style={styles.legal}>Vérification du profil de sécurité…</Text></View>
       </SafeAreaView>
     );
   }
@@ -225,7 +230,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   if (userAge === null) {
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar style="dark" />
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         <View style={styles.ageWash} pointerEvents="none" />
         <View style={styles.ageGate}>
           <View style={styles.ageCard}>
@@ -240,7 +245,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
               autoCorrect={false}
               keyboardType="numbers-and-punctuation"
               placeholder="AAAA-MM-JJ"
-              placeholderTextColor={palette.inkFaint}
+              placeholderTextColor={colors.inkFaint}
               maxLength={10}
               style={styles.ageInput}
               onSubmitEditing={() => void confirmAge()}
@@ -248,7 +253,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
             {!!ageError && <Text style={styles.error}>{ageError}</Text>}
             <TouchableOpacity disabled={ageSaving} activeOpacity={0.9} style={[styles.primaryShell, ageSaving && styles.disabled]} onPress={() => void confirmAge()}>
               <LinearGradient colors={brandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.primary} pointerEvents="none">
-                {ageSaving ? <ActivityIndicator color={palette.white} /> : <Text style={styles.primaryText}>Entrer dans K-ssenger</Text>}
+                {ageSaving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>Entrer dans K-ssenger</Text>}
               </LinearGradient>
             </TouchableOpacity>
             <Text style={styles.legal}>Âge déclaré · l’accès au contenu public reste fermé tant que ce profil n’est pas enregistré côté Neon.</Text>
@@ -284,7 +289,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={[styles.shell, immersive && styles.shellImmersive]}>
         {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
         {liveBroadcasts.size > 0 && tab !== 'feed' && Platform.OS === 'web' && (
@@ -332,6 +337,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
 }
 
 function Avatar({ profile, size = 'small' }: { profile: MyProfile; size?: 'small' | 'large' }) {
+  const { styles } = useAppStyles();
   const style = size === 'large' ? styles.profileAvatar : styles.avatar;
   const textStyle = size === 'large' ? styles.profileAvatarText : styles.avatarText;
   const [signedAvatarUrl, setSignedAvatarUrl] = useState<string | null>(null);
@@ -354,6 +360,7 @@ function Avatar({ profile, size = 'small' }: { profile: MyProfile; size?: 'small
 }
 
 function ProfileHeader({ profile, onEdit, onNowPlaying }: { profile: MyProfile; onEdit: () => void; onNowPlaying: () => void }) {
+  const { styles } = useAppStyles();
   const track = profile.now_playing_title
     ? `${profile.now_playing_artist ? `${profile.now_playing_artist} — ` : ''}${profile.now_playing_title}`
     : null;
@@ -374,7 +381,15 @@ function ProfileHeader({ profile, onEdit, onNowPlaying }: { profile: MyProfile; 
   );
 }
 
+const APPEARANCE_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'light', label: 'Clair' },
+  { value: 'dark', label: 'Sombre' },
+  { value: 'system', label: 'Système' },
+];
+
 function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups, onNowPlaying, onLive }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void; onNowPlaying: () => void; onLive: () => void }) {
+  const { styles } = useAppStyles();
+  const { mode, setMode } = useTheme();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
 
@@ -419,6 +434,10 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
       </TouchableOpacity>
       {!!profile.bio && <Text style={styles.profileBio}>{profile.bio}</Text>}
       <View style={styles.profileGrid}><ProfileButton icon="✏️" label="Profil" onPress={onEdit}/><ProfileButton icon="📦" label="Données" onPress={onAccountData}/><ProfileButton icon="👥" label="Groupes" onPress={onGroups}/><ProfileButton icon="🔒" label="Vie privée" onPress={onPrivacy}/><ProfileButton icon="🔴" label="K-Live" onPress={onLive}/></View>
+      <View style={styles.appearanceSection}>
+        <SectionLabel>Apparence</SectionLabel>
+        <Segmented value={mode} options={APPEARANCE_OPTIONS} onChange={setMode} />
+      </View>
       <TouchableOpacity disabled={signingOut} style={[styles.signOutButton, signingOut && styles.disabled]} onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Se déconnecter de K-ssenger">
         {signingOut ? <ActivityIndicator /> : <Text style={styles.signOutText}>Se déconnecter</Text>}
       </TouchableOpacity>
@@ -436,10 +455,12 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
 }
 
 function ProfileButton({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
+  const { styles } = useAppStyles();
   return <TouchableOpacity testID={`me-${label}`} accessibilityRole="button" accessibilityLabel={label} style={styles.profileButton} onPress={onPress}><Text style={styles.profileButtonIcon}>{icon}</Text><Text style={styles.profileButtonLabel}>{label}</Text></TouchableOpacity>;
 }
 
 function Tab({ active, icon, label, onPress }: { active: boolean; icon: string; label: string; onPress: () => void }) {
+  const { styles } = useAppStyles();
   return (
     <TouchableOpacity testID={`tab-${label}`} style={styles.tab} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}>
       <View style={[styles.tabPill, active && styles.tabPillActive]}>
@@ -452,7 +473,15 @@ function Tab({ active, icon, label, onPress }: { active: boolean; icon: string; 
 
 const SHELL_MAX = 720;
 
-const styles = StyleSheet.create({
+/** Every component in this file pulls its styles from here, memoized per active theme. */
+function useAppStyles() {
+  const { colors, type: typo, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, typo), [colors, typo]);
+  return { styles, colors, typo, scheme };
+}
+
+function createStyles(palette: Palette, typo: TypeTokens) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.surfaceSunken, alignItems: 'center' },
   shell: {
     flex: 1,
@@ -461,7 +490,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.sky,
     ...(Platform.OS === 'web' ? { borderLeftWidth: 1, borderRightWidth: 1, borderColor: palette.hairline } : null),
   },
-  shellImmersive: { maxWidth: SHELL_MAX, backgroundColor: '#07131c' },
+  shellImmersive: { maxWidth: SHELL_MAX, backgroundColor: immersive.surface },
   flex: { flex: 1 },
 
   ageWash: { position: 'absolute', top: 0, left: 0, right: 0, height: 320, backgroundColor: palette.skyTop },
@@ -538,4 +567,6 @@ const styles = StyleSheet.create({
   meQrPanel: { alignSelf: 'stretch', marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: palette.hairline },
   signOutButton: { marginTop: spacing.xl, minWidth: 190, alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairlineStrong, borderRadius: radius.md },
   signOutText: { color: palette.inkSoft, fontWeight: '900' },
-});
+  appearanceSection: { width: '100%', marginTop: spacing.xl },
+  });
+}
