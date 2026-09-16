@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { launchImageLibrarySafe } from '../../lib/pickMedia';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
@@ -247,6 +247,7 @@ function useMusicSyncStyles() {
     rowText: { flex: 1 },
     rowTitle: { ...typo.name, fontSize: 14 },
     rowMeta: { ...typo.micro, fontWeight: '500', marginTop: 2 },
+    rowNote: { ...typo.micro, fontWeight: '500', marginTop: 4, color: colors.inkFaint, lineHeight: 14 },
     spotifyBtn: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: thirdPartyBrand.spotifyGreen },
     spotifyBtnText: { color: colors.white, fontWeight: '900', fontSize: 13 },
     ghostBtn: { minHeight: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSunken, borderWidth: 1, borderColor: colors.hairline },
@@ -255,6 +256,7 @@ function useMusicSyncStyles() {
     lastfmRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
     lastfmInput: { flex: 1, backgroundColor: colors.surfaceSunken, borderWidth: 1, borderColor: colors.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: colors.ink },
     unlink: { color: colors.danger, fontWeight: '800', fontSize: 12, marginTop: spacing.xs },
+    lastfmHelp: { color: colors.azureDeep, fontWeight: '700', fontSize: 12 },
   }), [colors, typo]);
 }
 
@@ -296,6 +298,7 @@ function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastf
           <View style={mstyles.rowText}>
             <Text style={mstyles.rowTitle}>Spotify</Text>
             <Text style={mstyles.rowMeta}>{spotifyOn ? 'Connecté' : 'Lecture en direct de ton Spotify'}</Text>
+            <Text style={mstyles.rowNote}>Nécessite un compte Spotify Premium (l'API de Spotify refuse la lecture en direct aux comptes gratuits).</Text>
           </View>
           {spotifyOn ? (
             <TouchableOpacity
@@ -319,6 +322,15 @@ function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastf
         <View style={mstyles.lastfmBlock}>
           <Text style={mstyles.rowTitle}>Last.fm</Text>
           <Text style={mstyles.rowMeta}>Couvre Deezer, Apple Music, YouTube Music… via le scrobble.</Text>
+          {!savedLastfm ? (
+            <TouchableOpacity
+              onPress={() => void Linking.openURL('https://www.last.fm/join')}
+              accessibilityRole="button"
+              accessibilityLabel="Créer un compte Last.fm"
+            >
+              <Text style={mstyles.lastfmHelp}>Pas de compte Last.fm ? Le créer en 30 secondes →</Text>
+            </TouchableOpacity>
+          ) : null}
           <View style={mstyles.lastfmRow}>
             <TextInput
               autoCapitalize="none"

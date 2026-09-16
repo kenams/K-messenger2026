@@ -71,8 +71,8 @@ function AuthenticatedRoot({ userId }: { userId: string }) {
   const { fire: fireKPulse, node: kpulseNode } = useKPulse();
   useKPulseReceiver(fireKPulse);
 
-  if (profile.loading) return <Loading label="Chargement de ton profil K-ssenger…" />;
-  if (profile.error) return <ProfileLoadError onRetry={profile.refresh} />;
+  if (profile.loading && !profile.profile) return <Loading label="Chargement de ton profil K-ssenger…" />;
+  if (profile.error && !profile.profile) return <ProfileLoadError onRetry={profile.refresh} />;
   if (!profile.profile) return <ProfileBootstrapScreen onDone={profile.refresh} />;
 
   return (
