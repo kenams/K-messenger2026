@@ -6,7 +6,7 @@ import { getMediaDownload } from '../../lib/media';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
 import { elevation, presenceLabel, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
-import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, useReducedMotion } from '../../theme/components';
+import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, usePulseUntilSeen, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
 import { clearContactAttention, useContactAttention, wireContactAttention } from '../attention/contactAttention';
 
@@ -225,6 +225,8 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   const contactsRef = useRef<Contact[]>([]);
   const loginNotificationsRef = useRef<LoginNotifications>('favorites');
   const { style: shakeStyle, trigger: triggerShake } = useNudgeShake();
+  const isKPulseNotice = notice.startsWith('⚡ K-Pulse reçu');
+  const { style: noticePulseStyle } = usePulseUntilSeen(isKPulseNotice, `⚡ ${notice}`);
 
   useEffect(() => {
     contactsRef.current = contacts;
@@ -527,7 +529,11 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
             <TextInput testID="contact-search" value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo" placeholderTextColor={colors.inkFaint} style={styles.search} autoCapitalize="none" />
           </View>
           <Text style={styles.counter}>{onlineCount} en ligne · {filtered.length} contact{filtered.length > 1 ? 's' : ''}</Text>
-          {!!notice && <View style={styles.noticePill}><Text style={styles.notice}>{notice}</Text></View>}
+          {!!notice && (
+            <Animated.View style={[styles.noticePill, isKPulseNotice && noticePulseStyle]}>
+              <Text style={styles.notice}>{notice}</Text>
+            </Animated.View>
+          )}
 
           {!!incomingRequests.length && (
             <View style={styles.group}>

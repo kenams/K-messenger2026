@@ -210,6 +210,57 @@ export function useNudgeShake(): { style: { transform: { translateX: Animated.An
   return { style, trigger };
 }
 
+/**
+ * Repeats a gentle scale pulse for as long as `active` stays true — used to
+ * keep an unread notice (e.g. an incoming K-Pulse) visibly nudging the user
+ * until the tab regains focus or the notice is dismissed, rather than
+ * flashing once and going silently unnoticed if the app isn't in view.
+ * Also pulses the browser tab title on web while the document is hidden, so
+ * a K-Pulse is noticeable even from another tab.
+ */
+export function usePulseUntilSeen(active: boolean, label?: string): { style: { transform: { scale: Animated.Value }[] } } {
+  const reduced = useReducedMotion();
+  const scale = useRef(new Animated.Value(1)).current;
+  const loopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const originalTitleRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!active || reduced) {
+      loopRef.current?.stop();
+      scale.setValue(1);
+      return;
+    }
+    loopRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.06, duration: 420, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 420, useNativeDriver: true }),
+        Animated.delay(1400),
+      ]),
+    );
+    loopRef.current.start();
+    return () => loopRef.current?.stop();
+  }, [active, reduced, scale]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    if (!active || !label) return;
+    if (originalTitleRef.current === null) originalTitleRef.current = document.title;
+    let on = false;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') return;
+      on = !on;
+      document.title = on ? label : (originalTitleRef.current ?? document.title);
+    }, 1200);
+    return () => {
+      clearInterval(timer);
+      if (originalTitleRef.current !== null) document.title = originalTitleRef.current;
+      originalTitleRef.current = null;
+    };
+  }, [active, label]);
+
+  return { style: { transform: [{ scale }] } };
+}
+
 export function PrimaryButton({
   label,
   onPress,
