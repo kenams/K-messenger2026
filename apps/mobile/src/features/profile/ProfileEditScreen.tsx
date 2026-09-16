@@ -301,12 +301,14 @@ function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastf
             <TouchableOpacity
               disabled={busy}
               onPress={async () => { setBusy(true); await disconnectSpotify(); setSpotifyOn(false); setBusy(false); }}
+              accessibilityRole="button"
+              accessibilityLabel="Déconnecter Spotify"
               style={mstyles.ghostBtn}
             >
               <Text style={mstyles.ghostBtnText}>Déconnecter</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity disabled={busy || !ready} onPress={() => void beginSpotifyAuth()} style={mstyles.spotifyBtn}>
+            <TouchableOpacity disabled={busy || !ready} onPress={() => void beginSpotifyAuth()} accessibilityRole="button" accessibilityLabel="Connecter Spotify" style={mstyles.spotifyBtn}>
               <Text style={mstyles.spotifyBtnText}>Connecter</Text>
             </TouchableOpacity>
           )}
@@ -330,13 +332,15 @@ function MusicSyncCard({ userId, initialLastfm }: { userId: string; initialLastf
             <TouchableOpacity
               disabled={busy || lastfm.trim() === savedLastfm}
               onPress={() => void saveLastfm()}
+              accessibilityRole="button"
+              accessibilityLabel={savedLastfm && !lastfm.trim() ? 'Retirer le pseudo Last.fm' : 'Enregistrer le pseudo Last.fm'}
               style={[mstyles.ghostBtn, (busy || lastfm.trim() === savedLastfm) && styles.disabled]}
             >
               {busy ? <ActivityIndicator /> : <Text style={mstyles.ghostBtnText}>{savedLastfm && !lastfm.trim() ? 'Retirer' : 'Enregistrer'}</Text>}
             </TouchableOpacity>
           </View>
           {savedLastfm ? (
-            <TouchableOpacity onPress={async () => { await disconnectLastfm(userId); setLastfm(''); setSavedLastfm(''); }}>
+            <TouchableOpacity onPress={async () => { await disconnectLastfm(userId); setLastfm(''); setSavedLastfm(''); }} accessibilityRole="button" accessibilityLabel="Retirer Last.fm">
               <Text style={mstyles.unlink}>Retirer Last.fm</Text>
             </TouchableOpacity>
           ) : null}

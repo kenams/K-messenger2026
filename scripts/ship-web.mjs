@@ -43,7 +43,15 @@ try {
   run('static release gate', 'npm run release:check-static');
 
   if (!skipDeploy) {
-    run('web export', 'npx expo export --platform web', { cwd: 'apps/mobile', env: { ...process.env, ...MOBILE_ENV } });
+    // --clear busts Metro's transform cache. Without it, Metro can keep serving
+    // a previously-cached transform of a module that reads `process.env.EXPO_PUBLIC_*`
+    // (e.g. musicNowPlaying.ts) with whatever value was inlined the very first time
+    // that module was ever bundled on this machine — env var changes alone do NOT
+    // invalidate Metro's cache. This silently kept shipping a web bundle with
+    // lastfmConfigured/spotifyConfigured baked in as false even after the env vars
+    // above were fixed, across multiple "successful" deploys. Confirmed by diffing
+    // the exported bundle's content hash before/after an env-only change: identical.
+    run('web export', 'npx expo export --platform web --clear', { cwd: 'apps/mobile', env: { ...process.env, ...MOBILE_ENV } });
     run('deploy to production', 'npx eas deploy --prod --alias kssenger', { cwd: 'apps/mobile' });
   }
 
