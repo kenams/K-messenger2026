@@ -162,7 +162,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         return;
       }
       await onSaved();
-      setNotice('Profil enregistré.');
+      onBack();
     } finally {
       setBusy(false);
     }
