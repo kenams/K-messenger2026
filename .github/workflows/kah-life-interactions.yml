@@ -1,0 +1,28 @@
+name: Kah life interactions (20 bots)
+
+# Keeps Kah's account feeling alive: a rotating subset of the 20 bots catch up
+# on anything Kah sent them and do 1-2 low-volume proactive actions per tick.
+on:
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kah-life-interactions
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node scripts/kah-life-interactions.mjs
