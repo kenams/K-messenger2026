@@ -20,6 +20,9 @@ Son contrôle de démarrage a été interrompu par le quota du contrôle automat
 d'autorisation. Publication directe ensuite demandée par Kenams ; ne pas présenter
 cette APK comme validée sur appareil ou comme ayant passé un Fulltest Android.
 
-Release prévue : `v2.0.0-beta.13`. Le QR code encode déjà le lien stable :
+Release publiée le 17 septembre 2026 : `v2.0.0-beta.13`, marquée `latest`.
+Taille et SHA-256 reçus par GitHub vérifiés ; redirection du lien stable vers beta.13 confirmée.
+L'envoi avec `gh` restait bloqué ; l'envoi HTTPS avec curl/Schannel a réussi (HTTP 201).
+Le QR code encode déjà le lien stable :
 `https://github.com/kenams/K-messenger2026/releases/latest/download/K-ssenger-latest.apk`.
 Il n'a pas besoin d'être modifié lorsque la release est marquée `latest`.
