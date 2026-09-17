@@ -140,8 +140,10 @@ export function AuthScreen() {
   };
 
   // TEMPORARY convenience while Kenams drives the app day-to-day — remove once
-  // the team is done onboarding testers. Fixed credentials for his own working
-  // account (kenams42+app@gmail.com), never shown as plaintext in the UI.
+  // the team is done onboarding testers. Fixed credentials for his main
+  // working account (kahdigital42@gmail.com, @kah), never shown as plaintext
+  // in the UI. Switched from the old kenams_app account on 2026-09-17 — Kenams
+  // picked @kah as his principal account.
   const quickLoginKenams = async () => {
     setBusy(true);
     setError('');
@@ -149,8 +151,8 @@ export function AuthScreen() {
     try {
       const backend = getBackend();
       const { data, error: authError } = await backend.auth.signInWithPassword({
-        email: 'kenams42+app@gmail.com',
-        password: 'KenamsKAH2026',
+        email: 'kahdigital42@gmail.com',
+        password: 'KahDigital2026!',
       });
       if (authError) setError('Connexion rapide indisponible pour le moment.');
       else if (data.session && Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -335,7 +337,7 @@ export function AuthScreen() {
                   onPress={() => void quickLoginKenams()}
                   style={styles.quickLogin}
                 >
-                  <Text style={styles.quickLoginText}>🔑 Connexion rapide — Kenams</Text>
+                  <Text style={styles.quickLoginText}>🔑 Connexion rapide — Kah</Text>
                 </TouchableOpacity>
               )}
             </View>

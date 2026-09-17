@@ -10,7 +10,8 @@ import { KAH_ID, stableMessageId, testConversation, latestUnanswered, emitAck } 
 const AUTH_URL = 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth';
 const DATA_API_URL = 'https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1';
 const SOCKET_URL = 'https://kssenger-server.onrender.com';
-const BOT_PASSWORD = process.env.BOT_PASSWORD || 'KssBot2026!';
+const BOT_PASSWORD = process.env.BOT_PASSWORD;
+if (!BOT_PASSWORD) throw new Error('BOT_PASSWORD env var is required');
 
 const ALL_SLUGS = [
   'lea', 'karim', 'chloe', 'yanis', 'fatou', 'hugo', 'ines', 'malik', 'sofia', 'tom',

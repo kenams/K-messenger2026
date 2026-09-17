@@ -26,3 +26,5 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: node scripts/kah-life-interactions.mjs
+        env:
+          BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}

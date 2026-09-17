@@ -10,8 +10,9 @@ import { KAH_ID, emitAck } from './kah-interactions-core.mjs';
 const AUTH_URL = 'https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth';
 const DATA_API_URL = 'https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1';
 const SOCKET_URL = 'https://kssenger-server.onrender.com';
-const BOT_PASSWORD = process.env.BOT_PASSWORD || 'KssBot2026!';
-const KAH_PASSWORD = process.env.KAH_PASSWORD || 'KahDigital2026!';
+const BOT_PASSWORD = process.env.BOT_PASSWORD;
+const KAH_PASSWORD = process.env.KAH_PASSWORD;
+if (!BOT_PASSWORD || !KAH_PASSWORD) throw new Error('BOT_PASSWORD and KAH_PASSWORD env vars are required');
 
 const BOTS = [
   { slug: 'lea', name: 'Léa Martin', line: "Salut Kah ! Bienvenue sur ton compte tout propre 🎉", track: { title: 'Ne me quitte pas', artist: 'Jacques Brel' } },
