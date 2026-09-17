@@ -152,7 +152,7 @@ export function AuthScreen() {
       const backend = getBackend();
       const { data, error: authError } = await backend.auth.signInWithPassword({
         email: 'kahdigital42@gmail.com',
-        password: 'KahDigital2026!',
+        password: 'Kah-Digital-2026-Secure!42',
       });
       if (authError) setError('Connexion rapide indisponible pour le moment.');
       else if (data.session && Platform.OS === 'web' && typeof window !== 'undefined') {
