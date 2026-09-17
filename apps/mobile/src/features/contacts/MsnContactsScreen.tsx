@@ -359,16 +359,22 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         if (active) setNotice('');
         // A freshly-authenticated socket can occasionally have its very first
         // `contacts:list` answered before the connection is fully warmed up
-        // server-side, coming back `ok:true` with an empty list even though
-        // real contacts exist (only surfaces as "empty until I switch tabs
-        // and back" — switching tabs just remounts this screen and retries).
-        // Don't trust an empty first answer as final: reconfirm once, short
-        // delay, before treating it as a real "no contacts yet" state.
-        if (active && contactsRef.current.length === 0) {
+        // server-side (worse on a cold Render instance or a slow mobile
+        // network), coming back `ok:true` with an empty list even though real
+        // contacts exist. A single 1.5s retry wasn't enough on a real device
+        // over cellular — back off across a few attempts before accepting an
+        // empty list as the real "no contacts yet" state.
+        const retryDelaysMs = [1500, 3000, 5000, 8000];
+        const retryUntilNonEmpty = (attempt: number) => {
+          if (!active || attempt >= retryDelaysMs.length || contactsRef.current.length > 0) return;
           setTimeout(() => {
-            if (active && client.connected) void loadContacts(client).catch(() => undefined);
-          }, 1500);
-        }
+            if (!active || !client.connected || contactsRef.current.length > 0) return;
+            void loadContacts(client)
+              .catch(() => undefined)
+              .then(() => retryUntilNonEmpty(attempt + 1));
+          }, retryDelaysMs[attempt]);
+        };
+        if (active && contactsRef.current.length === 0) retryUntilNonEmpty(0);
       } catch {
         if (active) setNotice('Connexion aux contacts K-ssenger impossible.');
       } finally {
