@@ -225,12 +225,17 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       setCurrentUserId(userId);
       deviceIdRef.current = await ensureChatDevice(userId);
 
-      const myKeys = await ensureIdentityKeyPair(userId);
-      const peerPublicKey = myKeys ? await fetchPeerPublicKey(contact.id) : null;
-      if (myKeys && peerPublicKey) {
-        keysRef.current = { mySecretKey: myKeys.secretKey, peerPublicKey };
-        if (active) setE2eeActive(true);
-      }
+      // Run the key exchange concurrently with everything else below instead
+      // of blocking the conversation from opening — hydrate() only needs
+      // keysRef by the time history/messages actually arrive, not before.
+      const keysReady = (async () => {
+        const myKeys = await ensureIdentityKeyPair(userId);
+        const peerPublicKey = myKeys ? await fetchPeerPublicKey(contact.id) : null;
+        if (myKeys && peerPublicKey) {
+          keysRef.current = { mySecretKey: myKeys.secretKey, peerPublicKey };
+          if (active) setE2eeActive(true);
+        }
+      })();
 
       const { data: privacy } = await getBackend().from('privacy_settings').select('read_receipts').eq('user_id', userId).maybeSingle();
       const receiptState: ReceiptState = (privacy as { read_receipts?: boolean } | null)?.read_receipts === false ? 'delivered' : 'read';
@@ -268,6 +273,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         }
         const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
         if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
+        await keysReady;
         const loaded = (response.messages ?? []).map((message) => hydrate(message, keysRef.current));
         mergeHistory(loaded);
         await acknowledge(loaded);
@@ -281,6 +287,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
 
       messageHandler = (message) => {
         if (message.conversationId !== id) return;
+        void keysReady.then(() => {
         const resolved = hydrate(message, keysRef.current);
         if (!active) return;
         setHistory((items) => {
@@ -291,6 +298,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         if (resolved.senderUserId !== userId) {
           void emitAck(client, 'message:receipt', { conversationId: id, messageId: resolved.id, state: receiptState }).catch(() => undefined);
         }
+        });
       };
       receiptHandler = (receipt) => {
         if (!receipt.messageId || !receipt.state) return;
