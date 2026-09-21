@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -224,6 +224,7 @@ export function GroupsScreen() {
     const inviteCandidates = contacts.filter((contact) => !existingIds.has(contact.id));
     const canManage = selectedGroup.role === 'owner' || selectedGroup.role === 'admin';
     return (
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
       <ScrollView style={styles.page} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={() => { setSelectedGroup(null); setHistory([]); setBans([]); }}><Text style={styles.back}>‹ Groupes</Text></TouchableOpacity>
         <View style={styles.hero}>
@@ -269,10 +270,12 @@ export function GroupsScreen() {
 
         {selectedGroup.role !== 'owner' && <TouchableOpacity disabled={busy} style={styles.leave} onPress={() => void leave()}><Text style={styles.dangerText}>Quitter le groupe</Text></TouchableOpacity>}
       </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
   return (
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
     <ScrollView style={styles.page} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}><View><Text style={styles.eyebrow}>MES GROUPES</Text><Text style={styles.title}>Salons K-ssenger</Text></View><TouchableOpacity style={styles.new} onPress={() => setCreating((value) => !value)}><Text style={styles.newText}>{creating ? '×' : '＋'}</Text></TouchableOpacity></View>
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
@@ -281,6 +284,7 @@ export function GroupsScreen() {
       {groups.length === 0 && !creating && <Text style={styles.empty}>Aucun groupe. Appuie sur ＋ pour créer ton premier salon.</Text>}
       <View style={styles.security}><Text style={styles.securityTitle}>🔒 Sécurité</Text><Text style={styles.muted}>Rôles et modération sont vérifiés côté serveur. Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version.</Text></View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

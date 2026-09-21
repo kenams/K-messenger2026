@@ -99,6 +99,10 @@ export default function App({ profile, onProfileChanged }: AppProps) {
   const { styles, colors } = useAppStyles();
   const { scheme } = useTheme();
   const [tab, setTab] = useState<TabName>('contacts');
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabName>>(() => new Set(['contacts']));
+  useEffect(() => {
+    if (!visitedTabs.has(tab)) setVisitedTabs((prev) => new Set(prev).add(tab));
+  }, [tab, visitedTabs]);
   const [selected, setSelected] = useState<Contact | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [accountData, setAccountData] = useState(false);
@@ -301,12 +305,23 @@ export default function App({ profile, onProfileChanged }: AppProps) {
             <Text style={styles.liveBannerText}>🔴 {[...liveBroadcasts.values()][0]} est en direct — rejoindre</Text>
           </TouchableOpacity>
         )}
-        {tab === 'contacts' && <MsnContactsScreen onOpen={setSelected} />}
-        {tab === 'chats' && <ChatsHubScreen />}
+        {/* Contacts/Chats/Moi stay mounted (hidden, not removed) once visited —
+            re-entering them shouldn't redo their socket sync/data load from
+            scratch every time, which was the main source of tab-switch lag.
+            Feed/K-Map/Moments keep unmounting on tab-out: they hold a video
+            feed / continuous GPS watch that shouldn't run in the background. */}
+        {visitedTabs.has('contacts') && (
+          <View style={tab === 'contacts' ? styles.flex : styles.hiddenPane}><MsnContactsScreen onOpen={setSelected} /></View>
+        )}
+        {visitedTabs.has('chats') && (
+          <View style={tab === 'chats' ? styles.flex : styles.hiddenPane}><ChatsHubScreen /></View>
+        )}
         {tab === 'feed' && <FeedScreen userAge={userAge} />}
         {tab === 'map' && <KMapScreen />}
         {tab === 'moments' && <MomentsScreen />}
-        {tab === 'me' && <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} onLive={() => {
+        {visitedTabs.has('me') && (
+          <View style={tab === 'me' ? styles.flex : styles.hiddenPane}>
+          <MeScreen profile={profile} userAge={userAge} onEdit={() => setEditingProfile(true)} onAccountData={() => setAccountData(true)} onPrivacy={() => setPrivacySettings(true)} onGroups={() => setGroupsScreen(true)} onNowPlaying={() => setNowPlayingOpen(true)} onLive={() => {
           // K-Live's native video module (react-native-webrtc) is temporarily
           // pulled from Android/iOS builds — it broke unrelated networking
           // (profile/auth fetches) on real devices even though it never got
@@ -315,7 +330,9 @@ export default function App({ profile, onProfileChanged }: AppProps) {
           // in app.json once that conflict is root-caused and fixed.
           if (Platform.OS === 'web') setLiveScreen({ broadcasterId: null });
           else Alert.alert('K-Live', 'Le live vidéo arrive bientôt sur mobile. Disponible dès maintenant sur la version web.');
-        }} />}
+        }} />
+          </View>
+        )}
         <View style={styles.tabs}>
           <Tab active={tab === 'contacts'} icon="👥" label="Contacts" onPress={() => setTab('contacts')} />
           <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
@@ -492,6 +509,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   },
   shellImmersive: { maxWidth: SHELL_MAX, backgroundColor: immersive.surface },
   flex: { flex: 1 },
+  hiddenPane: { display: 'none' },
 
   ageWash: { position: 'absolute', top: 0, left: 0, right: 0, height: 320, backgroundColor: palette.skyTop },
   ageGate: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
