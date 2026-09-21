@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 
-export type ContactAttention = { unread: number; pulse: boolean };
+export type ContactAttention = { unread: number; pulse: boolean; lastActivityAt?: number };
 
 const state = new Map<string, ContactAttention>();
 const listeners = new Set<() => void>();
@@ -12,8 +12,28 @@ function notify() {
 
 function bump(contactId: string, patch: Partial<ContactAttention>) {
   const current = state.get(contactId) ?? { unread: 0, pulse: false };
-  state.set(contactId, { ...current, ...patch });
+  state.set(contactId, { ...current, ...patch, lastActivityAt: Date.now() });
   notify();
+}
+
+/** Most recent message/K-Pulse timestamp for a contact, or 0 if none this session. */
+export function getContactActivity(contactId: string): number {
+  return state.get(contactId)?.lastActivityAt ?? 0;
+}
+
+/**
+ * Re-renders on ANY contact's attention changing (not just one id) — for the
+ * buddy list to re-sort by recent activity ("who just pinged me should be
+ * easy to find without scrolling", Kenams 2026-09-21) without polling.
+ */
+export function useAttentionTick(): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const listener = () => setTick((t) => t + 1);
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  }, []);
+  return tick;
 }
 
 export function clearContactAttention(contactId: string) {

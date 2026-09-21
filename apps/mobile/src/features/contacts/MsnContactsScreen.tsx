@@ -8,7 +8,7 @@ import { elevation, presenceLabel, radius, spacing, type Palette, type TypeToken
 import { useTheme } from '../../theme/ThemeProvider';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, usePulseUntilSeen, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
-import { clearContactAttention, useContactAttention, wireContactAttention } from '../attention/contactAttention';
+import { clearContactAttention, getContactActivity, useAttentionTick, useContactAttention, wireContactAttention } from '../attention/contactAttention';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
 export type Contact = {
@@ -225,6 +225,8 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   const contactsRef = useRef<Contact[]>([]);
   const loginNotificationsRef = useRef<LoginNotifications>('favorites');
   const { style: shakeStyle, trigger: triggerShake } = useNudgeShake();
+  // Re-render (and re-sort the buddy list below) whenever any contact pings us.
+  useAttentionTick();
   const isKPulseNotice = notice.startsWith('⚡ K-Pulse reçu');
   const { style: noticePulseStyle } = usePulseUntilSeen(isKPulseNotice, notice);
 
@@ -615,7 +617,11 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
           )}
 
           {groups.map((group) => {
-            const items = filtered.filter((c) => c.group === group);
+            // Whoever just messaged/K-Pulsed you rises to the top of their
+            // section — no more hunting through the alphabetical list for
+            // the person you're mid-conversation with (Kenams, 2026-09-21).
+            const items = filtered.filter((c) => c.group === group)
+              .sort((a, b) => getContactActivity(b.id) - getContactActivity(a.id));
             const isCollapsed = collapsed[group];
             const onlineHere = items.filter((c) => c.presence !== 'offline').length;
             return (
