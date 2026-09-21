@@ -32,11 +32,21 @@ describe('private chat media client contract', () => {
     expect(directChatSource).not.toMatch(/uploadLocalMedia\([\s\S]*?ciphertext\s*:/);
   });
 
-  it('makes an honest, non-overstated transport claim in the UI', () => {
-    // E2EE is not shipped; the banner must say TLS-only, never claim E2EE is active.
-    expect(directChatSource).toContain('Connexion sécurisée.');
-    expect(directChatSource).toContain('sera ajouté dans une prochaine version');
-    expect(directChatSource).not.toMatch(/chiffrement de bout en bout actif|Signal sécurisé|chiffrés? de bout en bout/i);
+  it('makes an honest, conditional transport claim in the UI — never claims E2EE unless a shared key was actually established', () => {
+    // Real E2EE ships for direct chats (NaCl box, see lib/e2ee.ts), but only
+    // once both sides have exchanged public keys. The banner must reflect
+    // e2eeActive rather than asserting encryption unconditionally.
+    expect(directChatSource).toContain('e2eeActive ?');
+    expect(directChatSource).toContain('Chiffré de bout en bout');
+    expect(directChatSource).toContain('Connexion sécurisée (TLS)');
+    // The claim must be gated on the real key-derivation outcome, not a constant.
+    expect(directChatSource).toContain('keysRef.current');
+    expect(directChatSource).toMatch(/setE2eeActive\(true\)/);
+  });
+
+  it('never sends a direct message claiming encryption without actually encrypting it', () => {
+    expect(directChatSource).toContain('encryptDirectMessage(payload, keys.mySecretKey, keys.peerPublicKey)');
+    expect(directChatSource).toContain(': encodePlaintext(payload)');
   });
 
   it('fails closed on unsafe or expired presigned media requests before fetch', () => {
