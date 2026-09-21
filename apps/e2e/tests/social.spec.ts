@@ -33,7 +33,10 @@ test.describe('K-Map', () => {
     await openApp(page);
     await openTab(page, 'K-Map');
 
-    await page.getByText('Chloé Dubois').first().click();
+    // Contacts stays mounted (hidden) in the background now for snappier tab
+    // switching, so an unscoped name match can also hit its hidden copy —
+    // restrict to the one that's actually visible on this screen.
+    await page.getByText('Chloé Dubois').and(page.locator(':visible')).first().click();
     await page.getByText('Partager ma position · 30 min').click();
     await expect(page.getByText('Position ponctuelle')).toBeVisible({ timeout: 20_000 });
 

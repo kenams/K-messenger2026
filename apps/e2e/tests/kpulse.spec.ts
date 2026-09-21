@@ -44,8 +44,11 @@ test('an incoming K-Pulse takes over the recipient screen', async ({ browser }) 
     test.skip(await limited.isVisible(), 'K-Pulse rate-limited between this bot pair — not a real failure, rerun later.');
 
     await expect(kenams.getByTestId('kpulse-burst')).toBeVisible({ timeout: 15_000 });
-    await expect(kenams.getByText('K-Pulse')).toBeVisible();
-    await expect(kenams.getByText(new RegExp(`de ${BOTS.lea.name}`))).toBeVisible();
+    // Contacts stays mounted (hidden) in the background for snappier tab
+    // switching, and it also renders "K-Pulse"/sender-name text (attention
+    // badges, notices) — scope to what's actually visible on screen.
+    await expect(kenams.getByText('K-Pulse').and(kenams.locator(':visible')).first()).toBeVisible();
+    await expect(kenams.getByText(new RegExp(`de ${BOTS.lea.name}`)).and(kenams.locator(':visible')).first()).toBeVisible();
   } finally {
     await kenamsCtx.close();
     await botCtx.close();
