@@ -216,7 +216,7 @@ export function AuthScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.wash} pointerEvents="none" />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={[styles.card, compact && styles.cardCompact]}>
             <BrandMark size={compact ? 52 : 76} />
