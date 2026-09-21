@@ -14,6 +14,7 @@ import { accentOf } from '../../theme/accent';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/chatTransport';
+import { ensureIdentityKeyPair, fetchPeerPublicKey, encryptDirectMessage, decryptDirectMessage, ENCRYPTED_ALGO } from '../../lib/e2ee';
 import {
   QUICK_REACTIONS,
   isBigEmoji,
@@ -78,8 +79,17 @@ function serializeChatContent(content: ChatContent) {
   return JSON.stringify(content);
 }
 
-function hydrate(message: ChatMessage): ChatMessage {
-  return { ...message, content: parseChatContent(readMessageText(message)), reactions: message.reactions ?? [] };
+type DirectKeys = { mySecretKey: string; peerPublicKey: string };
+
+function hydrate(message: ChatMessage, keys: DirectKeys | null): ChatMessage {
+  let text: string;
+  if (message.algorithm === ENCRYPTED_ALGO) {
+    const opened = keys ? decryptDirectMessage(message.ciphertext ?? '', keys.mySecretKey, keys.peerPublicKey) : null;
+    text = opened ?? '🔒 Message chiffré (clé indisponible sur cet appareil)';
+  } else {
+    text = readMessageText(message);
+  }
+  return { ...message, content: parseChatContent(text), reactions: message.reactions ?? [] };
 }
 
 function inferChatMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime | null {
@@ -191,6 +201,8 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const [reactingId, setReactingId] = useState<string | null>(null);
   const deviceIdRef = useRef('');
   const conversationIdRef = useRef('');
+  const keysRef = useRef<DirectKeys | null>(null);
+  const [e2eeActive, setE2eeActive] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const canSend = useMemo(
     () => !!socket && !!conversationId && !!currentUserId && !!deviceIdRef.current && !sending,
@@ -212,6 +224,13 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       setSocket(client);
       setCurrentUserId(userId);
       deviceIdRef.current = await ensureChatDevice(userId);
+
+      const myKeys = await ensureIdentityKeyPair(userId);
+      const peerPublicKey = myKeys ? await fetchPeerPublicKey(contact.id) : null;
+      if (myKeys && peerPublicKey) {
+        keysRef.current = { mySecretKey: myKeys.secretKey, peerPublicKey };
+        if (active) setE2eeActive(true);
+      }
 
       const { data: privacy } = await getBackend().from('privacy_settings').select('read_receipts').eq('user_id', userId).maybeSingle();
       const receiptState: ReceiptState = (privacy as { read_receipts?: boolean } | null)?.read_receipts === false ? 'delivered' : 'read';
@@ -249,7 +268,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         }
         const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
         if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
-        const loaded = (response.messages ?? []).map(hydrate);
+        const loaded = (response.messages ?? []).map((message) => hydrate(message, keysRef.current));
         mergeHistory(loaded);
         await acknowledge(loaded);
       };
@@ -262,7 +281,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
 
       messageHandler = (message) => {
         if (message.conversationId !== id) return;
-        const resolved = hydrate(message);
+        const resolved = hydrate(message, keysRef.current);
         if (!active) return;
         setHistory((items) => {
           if (items.some((item) => item.id === resolved.id)) return items;
@@ -321,7 +340,10 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     setShowEmoji(false);
     try {
       const payload = serializeChatContent(content);
-      const { algorithm, ciphertext } = encodePlaintext(payload);
+      const keys = keysRef.current;
+      const { algorithm, ciphertext } = keys
+        ? encryptDirectMessage(payload, keys.mySecretKey, keys.peerPublicKey)
+        : encodePlaintext(payload);
       const clientMessageId = Crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const response = await emitAck<SendResponse>(socket, 'message:send', {
@@ -403,7 +425,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         <View style={styles.flex}><Text style={[styles.name, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
         <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
-      <View style={styles.security}><Text style={styles.securityText}>🔒 Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version.</Text></View>
+      <View style={styles.security}><Text style={styles.securityText}>{e2eeActive ? '🔒 Chiffré de bout en bout — même K-ssenger ne peut pas lire ces messages.' : '🔒 Connexion sécurisée (TLS). Le chiffrement de bout en bout s’active dès que les deux appareils l’ont initialisé.'}</Text></View>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
