@@ -81,15 +81,21 @@ function serializeChatContent(content: ChatContent) {
 
 type DirectKeys = { mySecretKey: string; peerPublicKey: string };
 
+const UNDECRYPTABLE_TEXT = '🔒 Message chiffré (clé indisponible sur cet appareil)';
+
 function hydrate(message: ChatMessage, keys: DirectKeys | null): ChatMessage {
   let text: string;
   if (message.algorithm === ENCRYPTED_ALGO) {
     const opened = keys ? decryptDirectMessage(message.ciphertext ?? '', keys.mySecretKey, keys.peerPublicKey) : null;
-    text = opened ?? '🔒 Message chiffré (clé indisponible sur cet appareil)';
+    text = opened ?? UNDECRYPTABLE_TEXT;
   } else {
     text = readMessageText(message);
   }
   return { ...message, content: parseChatContent(text), reactions: message.reactions ?? [] };
+}
+
+function hasUndecryptable(messages: ChatMessage[]): boolean {
+  return messages.some((m) => m.algorithm === ENCRYPTED_ALGO && m.content?.type === 'text' && m.content.text === UNDECRYPTABLE_TEXT);
 }
 
 function inferChatMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime | null {
@@ -274,7 +280,20 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
         if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
         await keysReady;
-        const loaded = (response.messages ?? []).map((message) => hydrate(message, keysRef.current));
+        let loaded = (response.messages ?? []).map((message) => hydrate(message, keysRef.current));
+        // The very first time two devices open a brand-new conversation
+        // within moments of each other, one side can fetch the other's
+        // public key before it's finished uploading (see lib/e2ee.ts) and
+        // cache a stale/absent one for the whole session. Re-fetch once and
+        // retry rather than leaving messages permanently unreadable.
+        if (hasUndecryptable(loaded)) {
+          const myKeysRetry = await ensureIdentityKeyPair(userId);
+          const freshPeerKey = myKeysRetry ? await fetchPeerPublicKey(contact.id) : null;
+          if (myKeysRetry && freshPeerKey && freshPeerKey !== keysRef.current?.peerPublicKey) {
+            keysRef.current = { mySecretKey: myKeysRetry.secretKey, peerPublicKey: freshPeerKey };
+            loaded = (response.messages ?? []).map((message) => hydrate(message, keysRef.current));
+          }
+        }
         mergeHistory(loaded);
         await acknowledge(loaded);
       };
@@ -287,8 +306,18 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
 
       messageHandler = (message) => {
         if (message.conversationId !== id) return;
-        void keysReady.then(() => {
-        const resolved = hydrate(message, keysRef.current);
+        void keysReady.then(async () => {
+        let resolved = hydrate(message, keysRef.current);
+        // Same first-contact key race as syncConversation above: retry once
+        // against a freshly-fetched peer key before giving up on this message.
+        if (hasUndecryptable([resolved])) {
+          const myKeysRetry = await ensureIdentityKeyPair(userId);
+          const freshPeerKey = myKeysRetry ? await fetchPeerPublicKey(contact.id) : null;
+          if (myKeysRetry && freshPeerKey && freshPeerKey !== keysRef.current?.peerPublicKey) {
+            keysRef.current = { mySecretKey: myKeysRetry.secretKey, peerPublicKey: freshPeerKey };
+            resolved = hydrate(message, keysRef.current);
+          }
+        }
         if (!active) return;
         setHistory((items) => {
           if (items.some((item) => item.id === resolved.id)) return items;
