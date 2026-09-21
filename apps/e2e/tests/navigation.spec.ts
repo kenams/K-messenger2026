@@ -29,7 +29,9 @@ test.describe('Navigation — no dead ends', () => {
   test('opening a conversation shows a back control', async ({ page }) => {
     await openTab(page, 'Contacts');
     await page.getByText('Chloé Dubois').and(page.locator(':visible')).first().click();
-    await expect(page.getByText(/Connexion sécurisée\./)).toBeVisible();
+    // Banner text depends on whether a real E2EE key exchange completed for
+    // this pair (see lib/e2ee.ts) — accept either honest state.
+    await expect(page.getByText(/Connexion sécurisée \(TLS\)|Chiffré de bout en bout/)).toBeVisible();
     await page.getByText('‹', { exact: true }).first().click();
     await expect(page.getByTestId('contact-search')).toBeVisible();
   });
