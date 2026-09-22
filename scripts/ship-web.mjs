@@ -30,6 +30,11 @@ const MOBILE_ENV = {
   // `lastfmConfigured` was false and every Last.fm-sourced sync silently no-opped.
   EXPO_PUBLIC_SPOTIFY_CLIENT_ID: process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID || 'acdb17c786eb432aa1ceacbd49a2de88',
   EXPO_PUBLIC_LASTFM_CLIENT_ID: process.env.EXPO_PUBLIC_LASTFM_CLIENT_ID || '6cf2de22fd7a199162deaeab4b3bcb2d',
+  // Public VAPID key for browser Web Push subscriptions (usePushRegistration.ts).
+  // Not a secret — it's sent to every visitor's browser by design (identifies
+  // this server to the push service). The matching private key lives only in
+  // the server's VAPID_PRIVATE_KEY env var.
+  EXPO_PUBLIC_VAPID_PUBLIC_KEY: process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY || 'BPIjpl4b554TbHNmMR2TsTGfBH0Os8PxA45hYWB92HW2lMmOhSrEVD95hyHWB59UeVE3vXmJTsFGqYYkab0_hLE',
 };
 
 function run(label, cmd, opts = {}) {

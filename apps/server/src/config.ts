@@ -27,6 +27,12 @@ const schema = z.object({
   // interactive-only EAS credential upload. Optional: push sending fails
   // closed (logs a warning, never breaks messaging/realtime) without it.
   FCM_SERVICE_ACCOUNT_JSON: z.string().min(1).optional(),
+  // Web Push (browser notifications for the web build — no native app
+  // install required). Optional: web push sending fails closed without it,
+  // same posture as FCM above.
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  VAPID_SUBJECT: z.string().min(1).optional(),
   // Comma-separated allowlist of exact https origins. Rejects "*" (which the
   // cors package would otherwise happily echo back even with credentials:
   // true, defeating same-origin protection for cookie/credentialed requests)

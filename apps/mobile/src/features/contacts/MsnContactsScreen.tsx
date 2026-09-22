@@ -8,7 +8,7 @@ import { elevation, presenceLabel, radius, spacing, type Palette, type TypeToken
 import { useTheme } from '../../theme/ThemeProvider';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, usePulseUntilSeen, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
-import { clearContactAttention, getContactActivity, seedContactActivity, useAttentionTick, useContactAttention, wireContactAttention } from '../attention/contactAttention';
+import { clearContactAttention, getContactActivity, seedContactActivity, seedContactUnread, useAttentionTick, useContactAttention, wireContactAttention } from '../attention/contactAttention';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
 export type Contact = {
@@ -44,6 +44,7 @@ type ContactResponse = {
       accent_color?: string | null;
     };
     last_message_at: string | null;
+    unread_count: number;
   }>;
   error?: string;
 };
@@ -242,6 +243,10 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       const nowPlaying = row.profiles.now_playing_title
         ? `${row.profiles.now_playing_artist ? `${row.profiles.now_playing_artist} — ` : ''}${row.profiles.now_playing_title}`
         : undefined;
+      // Seed unread BEFORE activity: seedContactActivity below folds the
+      // current tracked state (including whatever unread just got seeded)
+      // back in, so the badge survives that call instead of racing it.
+      if (row.unread_count) seedContactUnread(row.profiles.id, row.unread_count);
       // Base the buddy-list order on the real last-message time from the DB
       // so it survives app restarts, like WhatsApp — live socket activity
       // (wireContactAttention) still takes priority once it happens this

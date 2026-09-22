@@ -13,10 +13,45 @@ Notifications.setNotificationHandler({
   }),
 });
 
-function platformName(): 'android' | 'ios' | null {
+function platformName(): 'android' | 'ios' | 'web' | null {
   if (Platform.OS === 'android') return 'android';
   if (Platform.OS === 'ios') return 'ios';
+  if (Platform.OS === 'web') return 'web';
   return null;
+}
+
+function urlBase64ToUint8Array(base64: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const base64Safe = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = globalThis.atob(base64Safe);
+  return Uint8Array.from([...raw].map((char) => char.charCodeAt(0)));
+}
+
+/**
+ * Browser Web Push subscription (works even with the tab closed, unlike the
+ * Notification API used by useWebNotifications.ts which only fires while a
+ * tab is open and connected). No-ops without HTTPS/a service worker/the
+ * public VAPID key, or if the visitor never grants permission — push stays
+ * strictly optional everywhere in this app.
+ */
+async function getWebPushSubscription(): Promise<PushSubscription | null> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const vapidPublicKey = process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!vapidPublicKey) return null;
+
+  const existing = await Notification.requestPermission();
+  if (existing !== 'granted') return null;
+
+  const registration = await navigator.serviceWorker.register('/sw.js');
+  await navigator.serviceWorker.ready;
+
+  const current = await registration.pushManager.getSubscription();
+  if (current) return current;
+
+  return registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as BufferSource,
+  });
 }
 
 async function getNativePushToken(): Promise<string | null> {
@@ -85,10 +120,23 @@ export async function unregisterPushForSignOut(userId: string) {
 async function registerPushSubscription(userId: string) {
   const platform = platformName();
   if (!platform) return;
-  const token = await getNativePushToken();
-  if (!token) return;
 
-  // A refreshed native token supersedes older tokens for this account/platform.
+  let token: string;
+  let webKeys: { p256dh: string; auth: string } | null = null;
+  if (platform === 'web') {
+    const subscription = await getWebPushSubscription();
+    if (!subscription) return;
+    const json = subscription.toJSON();
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+    token = json.endpoint;
+    webKeys = { p256dh: json.keys.p256dh, auth: json.keys.auth };
+  } else {
+    const nativeToken = await getNativePushToken();
+    if (!nativeToken) return;
+    token = nativeToken;
+  }
+
+  // A refreshed token supersedes older tokens for this account/platform.
   const disableOld = await getBackend()
     .from('push_subscriptions')
     .update({ enabled: false, updated_at: new Date().toISOString() })
@@ -109,7 +157,12 @@ async function registerPushSubscription(userId: string) {
   if (existing[0]?.id) {
     const { error } = await getBackend()
       .from('push_subscriptions')
-      .update({ enabled: true, last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({
+        enabled: true,
+        last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...(webKeys ? { web_p256dh: webKeys.p256dh, web_auth: webKeys.auth } : {}),
+      })
       .eq('id', existing[0].id)
       .eq('user_id', userId);
     if (error) throw error;
@@ -123,6 +176,7 @@ async function registerPushSubscription(userId: string) {
     platform,
     enabled: true,
     last_seen_at: new Date().toISOString(),
+    ...(webKeys ? { web_p256dh: webKeys.p256dh, web_auth: webKeys.auth } : {}),
   });
   if (error) throw error;
 }

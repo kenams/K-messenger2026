@@ -31,6 +31,7 @@ export async function listContacts(userId: string) {
     now_playing_artist: string | null;
     accent_color: string | null;
     last_message_at: string | null;
+    unread_count: number;
   }>(
     `select c.contact_id,
             c.favorite,
@@ -55,20 +56,36 @@ export async function listContacts(userId: string) {
               when coalesce(ps.show_music, 'contacts') = 'nobody' then null
               else p.now_playing_artist
             end as now_playing_artist,
-            last_dm.created_at as last_message_at
+            last_dm.created_at as last_message_at,
+            coalesce(unread_dm.unread, 0) as unread_count
        from public.contacts c
        join public.profiles p on p.id = c.contact_id
        left join public.privacy_settings ps on ps.user_id = p.id
        left join lateral (
-         select m.created_at
+         select conv.id
            from public.conversations conv
            join public.conversation_members mine on mine.conversation_id = conv.id and mine.user_id = $1
            join public.conversation_members theirs on theirs.conversation_id = conv.id and theirs.user_id = c.contact_id
-           join public.messages m on m.conversation_id = conv.id
           where conv.kind = 'direct'
+          limit 1
+       ) dm on true
+       left join lateral (
+         select m.created_at
+           from public.messages m
+          where m.conversation_id = dm.id
           order by m.created_at desc
           limit 1
        ) last_dm on true
+       left join lateral (
+         select count(*)::int as unread
+           from public.messages m
+          where m.conversation_id = dm.id
+            and m.sender_user_id = c.contact_id
+            and not exists (
+              select 1 from public.message_receipts r
+               where r.message_id = m.id and r.user_id = $1 and r.read_at is not null
+            )
+       ) unread_dm on true
       where c.owner_id = $1
       order by coalesce(last_dm.created_at, '-infinity') desc, c.favorite desc, c.list_name asc, p.display_name asc`,
     [userId],

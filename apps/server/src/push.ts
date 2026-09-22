@@ -1,4 +1,5 @@
 import { SignJWT, importPKCS8 } from 'jose';
+import webpush from 'web-push';
 import { query } from './db.js';
 import { logger } from './logger.js';
 import { config } from './config.js';
@@ -6,6 +7,9 @@ import { config } from './config.js';
 type PushSubscriptionRow = {
   user_id: string;
   expo_push_token: string;
+  platform: 'android' | 'ios' | 'web';
+  web_p256dh: string | null;
+  web_auth: string | null;
 };
 
 type PushPayload = {
@@ -49,11 +53,27 @@ function getServiceAccount() {
 
 export const isPushConfigured = () => getServiceAccount() !== null;
 
+let vapidConfigured: boolean | undefined;
+function ensureWebPushConfigured(): boolean {
+  if (vapidConfigured !== undefined) return vapidConfigured;
+  if (!config.VAPID_PUBLIC_KEY || !config.VAPID_PRIVATE_KEY || !config.VAPID_SUBJECT) {
+    vapidConfigured = false;
+    return vapidConfigured;
+  }
+  webpush.setVapidDetails(config.VAPID_SUBJECT, config.VAPID_PUBLIC_KEY, config.VAPID_PRIVATE_KEY);
+  vapidConfigured = true;
+  return vapidConfigured;
+}
+
+export const isWebPushConfigured = () => ensureWebPushConfigured();
+
 // Test-only: module-level caches (service account parse result, OAuth
-// access token) otherwise leak across test cases sharing this module instance.
+// access token, VAPID setup) otherwise leak across test cases sharing this
+// module instance.
 export function resetPushClientForTests() {
   serviceAccount = undefined;
   cachedAccessToken = null;
+  vapidConfigured = undefined;
 }
 
 async function getAccessToken(): Promise<string> {
@@ -132,13 +152,16 @@ function assertMetadataOnlyPushPayload(payload: PushPayload) {
 async function listEnabledSubscriptions(userIds: string[]): Promise<PushSubscriptionRow[]> {
   if (userIds.length === 0) return [];
   const { rows } = await query<PushSubscriptionRow>(
-    `select user_id, expo_push_token
+    `select user_id, expo_push_token, platform, web_p256dh, web_auth
        from public.push_subscriptions
       where user_id = any($1::uuid[])
         and enabled = true`,
     [userIds],
   );
-  return rows.filter((row) => FCM_TOKEN_PATTERN.test(row.expo_push_token));
+  // Web rows carry a push-service endpoint URL in expo_push_token, not an
+  // FCM token — validated separately in sendOneWeb via its own subscription
+  // shape, so the FCM token pattern only gates the android/ios rows here.
+  return rows.filter((row) => row.platform === 'web' || FCM_TOKEN_PATTERN.test(row.expo_push_token));
 }
 
 async function disableSubscription(token: string) {
@@ -187,20 +210,55 @@ async function postBatch(projectId: string, accessToken: string, rows: PushSubsc
   }
 }
 
+async function sendOneWeb(row: PushSubscriptionRow, payload: PushPayload) {
+  if (!row.web_p256dh || !row.web_auth) return;
+  try {
+    await webpush.sendNotification(
+      { endpoint: row.expo_push_token, keys: { p256dh: row.web_p256dh, auth: row.web_auth } },
+      JSON.stringify({ title: payload.title, body: payload.body, data: payload.data ?? {} }),
+    );
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number } | null)?.statusCode;
+    if (statusCode === 404 || statusCode === 410) {
+      await disableSubscription(row.expo_push_token);
+      return;
+    }
+    logger.warn('web_push_send_failed', { userId: row.user_id, error: error instanceof Error ? error.message : 'unknown' });
+  }
+}
+
+async function postWebBatch(rows: PushSubscriptionRow[], payload: PushPayload) {
+  for (let index = 0; index < rows.length; index += FCM_CONCURRENCY) {
+    const slice = rows.slice(index, index + FCM_CONCURRENCY);
+    await Promise.all(slice.map((row) => sendOneWeb(row, payload)));
+  }
+}
+
 export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
   const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
   if (uniqueUserIds.length === 0) return;
 
-  const account = getServiceAccount();
-  if (!account) return;
+  const fcmAccount = getServiceAccount();
+  const webConfigured = ensureWebPushConfigured();
+  if (!fcmAccount && !webConfigured) return;
 
   try {
     assertMetadataOnlyPushPayload(payload);
     const subscriptions = await listEnabledSubscriptions(uniqueUserIds);
     if (subscriptions.length === 0) return;
-    const accessToken = await getAccessToken();
-    for (let index = 0; index < subscriptions.length; index += MAX_BATCH) {
-      await postBatch(account.project_id, accessToken, subscriptions.slice(index, index + MAX_BATCH), payload);
+
+    const webRows = subscriptions.filter((row) => row.platform === 'web');
+    const nativeRows = subscriptions.filter((row) => row.platform !== 'web');
+
+    if (webConfigured && webRows.length > 0) {
+      await postWebBatch(webRows, payload);
+    }
+
+    if (fcmAccount && nativeRows.length > 0) {
+      const accessToken = await getAccessToken();
+      for (let index = 0; index < nativeRows.length; index += MAX_BATCH) {
+        await postBatch(fcmAccount.project_id, accessToken, nativeRows.slice(index, index + MAX_BATCH), payload);
+      }
     }
   } catch (error) {
     // Push is best-effort and must never break messaging/realtime delivery.

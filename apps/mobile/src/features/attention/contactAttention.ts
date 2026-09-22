@@ -37,6 +37,18 @@ export function seedContactActivity(contactId: string, timestampMs: number) {
 }
 
 /**
+ * Seeds the unread badge from the server's real count (messages the DB says
+ * are still unread) on contacts load — only when this contact has no
+ * tracked state yet this session, so it never clobbers a live socket update
+ * or a badge the user already cleared by opening the chat.
+ */
+export function seedContactUnread(contactId: string, unread: number) {
+  if (!Number.isFinite(unread) || unread <= 0 || state.has(contactId)) return;
+  state.set(contactId, { unread, pulse: false });
+  notify();
+}
+
+/**
  * Re-renders on ANY contact's attention changing (not just one id) — for the
  * buddy list to re-sort by recent activity ("who just pinged me should be
  * easy to find without scrolling", Kenams 2026-09-21) without polling.
@@ -51,9 +63,17 @@ export function useAttentionTick(): number {
   return tick;
 }
 
+/**
+ * Clears the unread badge/pulse for a contact (opening their chat) without
+ * touching lastActivityAt — a conversation you just read should stay where
+ * it is in the "recently active" sort, not drop out of it the instant you
+ * open it (that's not what "unread" means; it's what "no new activity since
+ * someone else messaged" means).
+ */
 export function clearContactAttention(contactId: string) {
-  if (!state.has(contactId)) return;
-  state.delete(contactId);
+  const current = state.get(contactId);
+  if (!current || (current.unread === 0 && !current.pulse)) return;
+  state.set(contactId, { ...current, unread: 0, pulse: false });
   notify();
 }
 
