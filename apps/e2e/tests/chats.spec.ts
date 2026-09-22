@@ -52,6 +52,24 @@ test('two people can send and receive messages', async ({ browser }) => {
     const firesBefore = await lea.getByText('🔥', { exact: true }).count();
     await kenams.getByRole('button', { name: 'Envoyer 🔥' }).click();
     await expect(lea.getByText('🔥', { exact: true })).toHaveCount(firesBefore + 1, { timeout: 20_000 });
+
+    // Kenams deletes his first message; the ack confirms the server actually
+    // deleted it (deleteMessageAction rolls back the optimistic UI if it
+    // didn't — see DirectConversationScreen.tsx), so this assertion is a
+    // real proof of server-side deletion, not just local state.
+    //
+    // Deliberately NOT asserting Léa sees it live here: this Render
+    // instance's realtime connections cycle every 20-40s under this test's
+    // multi-context load (confirmed via server logs — both accounts'
+    // sockets reconnect repeatedly), which occasionally eats the live
+    // 'message:deleted' broadcast in the gap. That's a realtime-delivery
+    // characteristic of this environment, not something this test should
+    // chase — the durable, cross-session guarantee (any fresh history fetch
+    // reflects the deletion) is already covered by hydrate()/listEncryptedMessages.
+    await kenams.getByText(fromKenams).click();
+    await kenams.getByRole('button', { name: 'Supprimer ce message' }).click();
+    await expect(kenams.getByText('Tu as supprimé ce message')).toBeVisible({ timeout: 10_000 });
+    await expect(kenams.getByText(fromKenams)).toHaveCount(0);
   } finally {
     await kenamsCtx.close();
     await leaCtx.close();

@@ -44,6 +44,7 @@ type ChatMessage = {
   receiptState?: ReceiptState;
   content?: ChatContent;
   reactions?: MessageReaction[];
+  deletedAt?: string | null;
 };
 type HistoryResponse = { ok: boolean; messages?: ChatMessage[]; error?: string };
 type SendResponse = { ok: boolean; id?: string; duplicate?: boolean; error?: string };
@@ -84,6 +85,9 @@ type DirectKeys = { mySecretKey: string; peerPublicKey: string };
 const UNDECRYPTABLE_TEXT = '🔒 Message chiffré (clé indisponible sur cet appareil)';
 
 function hydrate(message: ChatMessage, keys: DirectKeys | null): ChatMessage {
+  if (message.deletedAt) {
+    return { ...message, content: { v: 1, type: 'text', text: '' }, reactions: message.reactions ?? [] };
+  }
   let text: string;
   if (message.algorithm === ENCRYPTED_ALGO) {
     const opened = keys ? decryptDirectMessage(message.ciphertext ?? '', keys.mySecretKey, keys.peerPublicKey) : null;
@@ -141,15 +145,27 @@ function ChatMedia({ content }: { content: Extract<ChatContent, { type: 'media' 
   );
 }
 
-function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacting, onReact }: {
+function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacting, onReact, onDelete }: {
   message: ChatMessage;
   mine: boolean;
   currentUserId: string;
   reactingOpen: boolean;
   onToggleReacting: () => void;
   onReact: (emoji: string) => void;
+  onDelete: () => void;
 }) {
   const { styles } = useThemedStyles();
+
+  if (message.deletedAt) {
+    return (
+      <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
+        <View style={[styles.bubble, styles.bubbleDeleted]}>
+          <Text style={styles.bodyTextDeleted}>{mine ? 'Tu as supprimé ce message' : 'Ce message a été supprimé'}</Text>
+        </View>
+      </View>
+    );
+  }
+
   const content = message.content ?? parseChatContent(readMessageText(message));
   const summary = summarizeReactions(message.reactions, currentUserId);
   const mineReaction = myReaction(message.reactions, currentUserId);
@@ -189,6 +205,17 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
           ))}
         </View>
       )}
+
+      {reactingOpen && mine && (
+        <TouchableOpacity
+          onPress={onDelete}
+          accessibilityRole="button"
+          accessibilityLabel="Supprimer ce message"
+          style={styles.deleteBtn}
+        >
+          <Text style={styles.deleteBtnText}>🗑️ Supprimer</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -221,6 +248,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     let messageHandler: ((message: ChatMessage) => void) | null = null;
     let receiptHandler: ((receipt: { messageId?: string; state?: ReceiptState }) => void) | null = null;
     let reactionHandler: ((payload: { messageId?: string; reactions?: MessageReaction[] }) => void) | null = null;
+    let deletedHandler: ((payload: { messageId?: string }) => void) | null = null;
     let connectHandler: (() => void) | null = null;
     let disconnectHandler: (() => void) | null = null;
 
@@ -344,6 +372,12 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         if (!payload.messageId) return;
         setHistory((items) => items.map((message) => message.id === payload.messageId ? { ...message, reactions: payload.reactions ?? [] } : message));
       };
+      deletedHandler = (payload) => {
+        if (!payload.messageId) return;
+        setHistory((items) => items.map((message) => message.id === payload.messageId
+          ? { ...message, deletedAt: new Date().toISOString(), content: { v: 1, type: 'text', text: '' }, reactions: [] }
+          : message));
+      };
       connectHandler = () => {
         if (!active) return;
         setNotice('Connexion rétablie · resynchronisation…');
@@ -353,6 +387,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       client.on('message:new', messageHandler);
       client.on('message:receipt', receiptHandler);
       client.on('message:reaction', reactionHandler);
+      client.on('message:deleted', deletedHandler);
       client.on('connect', connectHandler);
       client.on('disconnect', disconnectHandler);
 
@@ -364,6 +399,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       if (clientRef && messageHandler) clientRef.off('message:new', messageHandler);
       if (clientRef && receiptHandler) clientRef.off('message:receipt', receiptHandler);
       if (clientRef && reactionHandler) clientRef.off('message:reaction', reactionHandler);
+      if (clientRef && deletedHandler) clientRef.off('message:deleted', deletedHandler);
       if (clientRef && connectHandler) clientRef.off('connect', connectHandler);
       if (clientRef && disconnectHandler) clientRef.off('disconnect', disconnectHandler);
     };
@@ -440,6 +476,45 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     }
   };
 
+  const deleteMessageAction = async (messageId: string) => {
+    if (!socket || !conversationIdRef.current) return;
+    setReactingId(null);
+    const previous = history.find((m) => m.id === messageId);
+    if (!previous) return;
+    // Optimistic — matches the server, which also clears content rather than just flagging it.
+    setHistory((items) => items.map((m) => m.id === messageId
+      ? { ...m, deletedAt: new Date().toISOString(), content: { v: 1, type: 'text', text: '' }, reactions: [] }
+      : m));
+
+    const attemptDelete = () => emitAck<{ ok: boolean }>(socket, 'message:delete', {
+      conversationId: conversationIdRef.current, messageId,
+    });
+
+    try {
+      let res: { ok: boolean };
+      try {
+        res = await attemptDelete();
+      } catch {
+        // The realtime connection on this app cycles under load; a request
+        // in flight exactly during a reconnect is silently dropped rather
+        // than acked either way. Give the socket a beat to finish
+        // reconnecting, then retry once — resolves it without the user
+        // having to notice or re-tap.
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        res = await attemptDelete();
+      }
+      if (!res.ok) {
+        // Never leave a message showing "deleted" when the server never
+        // actually deleted it — that's a worse lie than showing nothing happened.
+        setHistory((items) => items.map((m) => m.id === messageId ? previous : m));
+        setNotice('Suppression impossible.');
+      }
+    } catch {
+      setHistory((items) => items.map((m) => m.id === messageId ? previous : m));
+      setNotice('Suppression impossible hors ligne.');
+    }
+  };
+
   const pickAndSendMedia = async () => {
     if (!canSend || !conversationId) return;
     setSending(true);
@@ -493,6 +568,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
               reactingOpen={reactingId === message.id}
               onToggleReacting={() => setReactingId((id) => id === message.id ? null : message.id)}
               onReact={(emoji) => void react(message.id, emoji)}
+              onDelete={() => void deleteMessageAction(message.id)}
             />
           ))}
         </ScrollView>
@@ -555,6 +631,8 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   theirs: { backgroundColor: palette.surface, borderBottomLeftRadius: 6, borderWidth: 1, borderColor: palette.hairline, ...elevation.hairline },
   bodyText: { ...typo.body },
   bodyTextMine: { color: palette.inkOnAzure },
+  bubbleDeleted: { backgroundColor: 'transparent', borderWidth: 1, borderColor: palette.hairline, borderStyle: 'dashed' },
+  bodyTextDeleted: { ...typo.body, color: palette.inkFaint, fontStyle: 'italic' },
   bigEmoji: { fontSize: 44, lineHeight: 52 },
   messageMeta: { fontSize: 9.5, marginTop: 5, textAlign: 'right', color: palette.inkFaint, fontWeight: '600' },
   messageMetaMine: { color: 'rgba(244,248,255,0.75)' },
@@ -564,8 +642,10 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   chip: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
   chipMine: { backgroundColor: palette.azureSoft, borderColor: palette.azure },
   chipText: { fontSize: 12, fontWeight: '700', color: palette.inkSoft },
-  reactBar: { flexDirection: 'row', gap: 2, marginTop: 4, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.pill, padding: 3, ...elevation.hairline },
+  reactBar: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, marginTop: 4, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.pill, padding: 3, ...elevation.hairline },
   reactBtn: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  deleteBtn: { marginTop: 4, paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline },
+  deleteBtnText: { fontSize: 12, fontWeight: '700', color: palette.inkFaint },
   reactBtnActive: { backgroundColor: palette.azureSoft },
   reactBtnText: { fontSize: 17 },
   mediaPreview: { width: 230, height: 230, borderRadius: radius.sm, backgroundColor: palette.surfaceSunken, marginBottom: 6 }, mediaError: { color: palette.danger, fontSize: 12, fontWeight: '700' },

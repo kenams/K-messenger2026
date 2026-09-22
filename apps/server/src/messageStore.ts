@@ -32,6 +32,29 @@ async function reactionsForMessages(messageIds: string[]): Promise<Record<string
   return grouped;
 }
 
+/**
+ * "Delete for everyone": only the sender may do this, and only their own
+ * message. Content is actually cleared, not just flagged — deleted_at alone
+ * would leave the ciphertext sitting in the DB forever. Returns the
+ * conversation id (for broadcasting) or null if the message wasn't found /
+ * didn't belong to this user / was already deleted.
+ */
+export async function deleteMessage(userId: string, messageId: string): Promise<{ conversationId: string } | null> {
+  const { rows } = await query<{ conversation_id: string }>(
+    `update public.messages
+        set ciphertext = '',
+            nonce = null,
+            aad = null,
+            deleted_at = now()
+      where id = $1
+        and sender_user_id = $2
+        and deleted_at is null
+      returning conversation_id`,
+    [messageId, userId],
+  );
+  return rows[0] ? { conversationId: rows[0].conversation_id } : null;
+}
+
 /** Set or clear the caller's reaction on a message they can see. Returns the full list. */
 export async function setMessageReaction(userId: string, request: ReactRequest): Promise<MessageReaction[]> {
   const { rowCount } = await query(
@@ -128,6 +151,7 @@ export async function listEncryptedMessages(request: HistoryRequest) {
     nonce: string | null;
     aad: string | null;
     created_at: string;
+    deleted_at: string | null;
   }>(
     `select id,
             client_message_id,
@@ -138,7 +162,8 @@ export async function listEncryptedMessages(request: HistoryRequest) {
             ciphertext,
             nonce,
             aad,
-            created_at
+            created_at,
+            deleted_at
        from public.messages
       where conversation_id = $1
         ${beforeClause}
@@ -165,6 +190,7 @@ export async function listEncryptedMessages(request: HistoryRequest) {
       nonce: row.nonce,
       aad: row.aad,
       createdAt: row.created_at,
+      deletedAt: row.deleted_at,
       reactions: reactions[row.id] ?? [],
     })),
     nextCursor,

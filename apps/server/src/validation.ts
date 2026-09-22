@@ -34,6 +34,11 @@ export const messageReactSchema = z.object({
   reaction: z.string().min(1).max(16).nullable(),
 }).strict();
 
+export const messageDeleteSchema = z.object({
+  conversationId: z.string().uuid(),
+  messageId: z.string().uuid(),
+}).strict();
+
 export const conversationJoinSchema = z.object({
   conversationId: z.string().uuid(),
 }).strict();

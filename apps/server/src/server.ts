@@ -27,6 +27,7 @@ import {
   presenceSchema,
   receiptSchema,
   messageReactSchema,
+  messageDeleteSchema,
   wizzSchema,
 } from './validation.js';
 import { createOrGetDirectConversation } from './directConversationStore.js';
@@ -44,7 +45,7 @@ import { registerMediaHandlers } from './mediaSocket.js';
 import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { registerDeviceLinkHandlers } from './deviceLinkSocket.js';
 import { sendConversationPush, sendContactRequestPush, sendGroupInvitePush, sendKPulsePush } from './push.js';
-import { listEncryptedMessages, persistEncryptedMessage, setMessageReaction } from './messageStore.js';
+import { deleteMessage, listEncryptedMessages, persistEncryptedMessage, setMessageReaction } from './messageStore.js';
 import { endLiveRoom, isLiveConfigured, liveRoomName, mintLiveToken } from './live.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -89,6 +90,17 @@ const io = new Server(httpServer, {
   cors: { origin: config.CORS_ORIGIN, credentials: true },
   maxHttpBufferSize: 2_100_000,
   transports: ['websocket', 'polling'],
+  // Socket.IO's defaults (25s ping interval / 20s ping timeout) are wider
+  // than the idle-connection window some reverse proxies enforce in front of
+  // Render's free-tier service, which was forcing sockets to disconnect and
+  // reconnect every 20-40s in production even under active use (observed via
+  // Render logs during E2E: both test accounts' sockets cycled repeatedly).
+  // Any live event ('message:new', 'message:deleted', reactions, presence...)
+  // emitted during one of those gaps was silently dropped for that recipient
+  // until their next reconnect-triggered resync. Pinging twice as often
+  // keeps the connection recognized as active by any such proxy.
+  pingInterval: 12_000,
+  pingTimeout: 15_000,
 });
 
 const presenceRuntime = new PresenceRuntime();
@@ -471,6 +483,25 @@ io.on('connection', (socket) => {
       ack?.({ ok: true, reactions });
     } catch (error) {
       logger.warn('message_react_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('message:delete', async (raw, ack) => {
+    try {
+      if (!messageLimiter.consume(`${userId}:delete`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = messageDeleteSchema.parse(raw);
+      await requireConversationMember(userId, request.conversationId);
+      await requireConversationNotBlocked(userId, request.conversationId);
+      const result = await deleteMessage(userId, request.messageId);
+      if (!result) return ack?.({ ok: false, error: 'MESSAGE_NOT_DELETABLE' });
+      io.to(`conversation:${result.conversationId}`).emit('message:deleted', {
+        conversationId: result.conversationId,
+        messageId: request.messageId,
+      });
+      ack?.({ ok: true });
+    } catch (error) {
+      logger.warn('message_delete_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });
