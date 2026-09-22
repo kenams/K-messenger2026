@@ -279,8 +279,15 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         }
         const response = await emitAck<HistoryResponse>(client, 'conversation:history', { conversationId: id, limit: 50 });
         if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
+        const rawMessages = response.messages ?? [];
+        // Show plaintext (and already-known-key) messages the instant history
+        // arrives — don't make the whole thread wait on the E2EE key
+        // round-trip. Encrypted messages render the "clé indisponible"
+        // placeholder for a moment and get upgraded below once keys resolve.
+        mergeHistory(rawMessages.map((message) => hydrate(message, keysRef.current)));
+
         await keysReady;
-        let loaded = (response.messages ?? []).map((message) => hydrate(message, keysRef.current));
+        let loaded = rawMessages.map((message) => hydrate(message, keysRef.current));
         // The very first time two devices open a brand-new conversation
         // within moments of each other, one side can fetch the other's
         // public key before it's finished uploading (see lib/e2ee.ts) and
@@ -291,7 +298,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
           const freshPeerKey = myKeysRetry ? await fetchPeerPublicKey(contact.id) : null;
           if (myKeysRetry && freshPeerKey && freshPeerKey !== keysRef.current?.peerPublicKey) {
             keysRef.current = { mySecretKey: myKeysRetry.secretKey, peerPublicKey: freshPeerKey };
-            loaded = (response.messages ?? []).map((message) => hydrate(message, keysRef.current));
+            loaded = rawMessages.map((message) => hydrate(message, keysRef.current));
           }
         }
         mergeHistory(loaded);
