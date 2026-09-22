@@ -7,6 +7,7 @@ import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigure
 import { onMessageReceived, onSocialPing } from '../../lib/soundKit';
 import type { Presence } from '../contacts/MsnContactsScreen';
 import { GroupEncryptedChat, type GroupEncryptedMessage } from './GroupEncryptedChat';
+import { ensureGroupKey, wrapForMissingMembers } from '../../lib/groupE2ee';
 import { getGroupModerationCapabilities, type GroupBanSummary } from './groupModeration';
 import {
   banGroupMemberRealtime,
@@ -56,6 +57,7 @@ export function GroupsScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<ConversationSummary | null>(null);
   const [history, setHistory] = useState<GroupEncryptedMessage[]>([]);
+  const [groupKey, setGroupKey] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [bans, setBans] = useState<GroupBanSummary[]>([]);
@@ -154,6 +156,16 @@ export function GroupsScreen() {
     };
   }, [socket, selectedGroup?.id, currentUserId]);
 
+  // Best-effort: if the membership list changes (someone joins) while I
+  // already hold the group key, opportunistically wrap it for them too —
+  // see groupE2ee.ts for why this isn't a hard delivery guarantee.
+  const memberIdsKey = selectedGroup?.members.map((m) => m.userId).join(',') ?? '';
+  useEffect(() => {
+    if (!selectedGroup || !groupKey || !currentUserId) return;
+    void wrapForMissingMembers(selectedGroup.id, currentUserId, selectedGroup.members.map((m) => m.userId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberIdsKey, groupKey, currentUserId]);
+
   const createGroup = async () => {
     if (!socket || busy || !title.trim() || selectedIds.length === 0) return;
     setBusy(true);
@@ -180,6 +192,8 @@ export function GroupsScreen() {
       if (!response.ok) throw new Error(response.error ?? 'HISTORY_FAILED');
       setSelectedGroup(group);
       setHistory(response.messages ?? []);
+      setGroupKey(null);
+      void ensureGroupKey(group.id, currentUserId, group.members.map((m) => m.userId)).then(setGroupKey);
       if (group.role === 'owner' || group.role === 'admin') {
         setBans(await listGroupBansRealtime(group.id).catch(() => []));
       } else setBans([]);
@@ -218,7 +232,7 @@ export function GroupsScreen() {
     try {
       const result = await emitAck<{ ok: boolean; error?: string }>(socket, 'group:leave', { conversationId: selectedGroup.id });
       if (!result.ok) throw new Error(result.error ?? 'LEAVE_FAILED');
-      setSelectedGroup(null); setHistory([]); setBans([]);
+      setSelectedGroup(null); setHistory([]); setBans([]); setGroupKey(null);
       await loadData(socket);
       setNotice('Tu as quitté le groupe.');
     } catch { setNotice('Le propriétaire doit transférer son rôle avant de quitter.'); }
@@ -234,7 +248,7 @@ export function GroupsScreen() {
     return (
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
       <ScrollView style={styles.page} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity onPress={() => { setSelectedGroup(null); setHistory([]); setBans([]); }}><Text style={styles.back}>‹ Groupes</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => { setSelectedGroup(null); setHistory([]); setBans([]); setGroupKey(null); }}><Text style={styles.back}>‹ Groupes</Text></TouchableOpacity>
         <View style={styles.hero}>
           <View style={styles.avatar}><Text style={styles.avatarText}>{(selectedGroup.title || 'K').slice(0, 2).toUpperCase()}</Text></View>
           <View style={styles.flex}><Text style={styles.groupTitle}>{selectedGroup.title || 'Groupe K-ssenger'}</Text><Text style={styles.meta}>{selectedGroup.members.length} membres · {selectedGroup.role}</Text></View>
@@ -246,6 +260,7 @@ export function GroupsScreen() {
           groupId={selectedGroup.id}
           currentUserId={currentUserId}
           memberIds={selectedGroup.members.map((member) => member.userId)}
+          groupKey={groupKey}
           messages={history}
           onReact={(messageId, reactions) => setHistory((items) => items.map((item) => item.id === messageId ? { ...item, reactions } : item))}
           onDelete={(messageId, deletedAt) => setHistory((items) => items.map((item) => item.id === messageId ? { ...item, deletedAt, ciphertext: undefined, reactions: [] } : item))}

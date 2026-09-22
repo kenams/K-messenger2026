@@ -8,6 +8,7 @@ import type { Socket } from 'socket.io-client';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/chatTransport';
 import { QUICK_REACTIONS, isBigEmoji, isSendKey, myReaction, summarizeReactions, type MessageReaction } from '../../lib/chatExtras';
+import { GROUP_ENCRYPTED_ALGO, decryptGroupMessage, encryptGroupMessage } from '../../lib/groupE2ee';
 import { EmojiPanel } from '../chats/EmojiPanel';
 import { emitAck } from '../../lib/realtime';
 import { onMessageSent } from '../../lib/soundKit';
@@ -38,9 +39,20 @@ type Props = {
   currentUserId: string;
   memberIds: string[];
   messages: GroupEncryptedMessage[];
+  groupKey?: string | null;
   onReact?: (messageId: string, reactions: MessageReaction[]) => void;
   onDelete?: (messageId: string, deletedAt: string) => void;
 };
+
+const GROUP_UNDECRYPTABLE_TEXT = '🔒 Message chiffré (clé indisponible sur cet appareil)';
+
+function readGroupMessageText(message: GroupEncryptedMessage, groupKey: string | null | undefined): string {
+  if (message.algorithm === GROUP_ENCRYPTED_ALGO) {
+    const opened = groupKey ? decryptGroupMessage(message.ciphertext ?? '', groupKey) : null;
+    return opened ?? GROUP_UNDECRYPTABLE_TEXT;
+  }
+  return readMessageText(message);
+}
 
 const GROUP_MEDIA_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']);
 const GROUP_MEDIA_MAX_BYTES = 100 * 1024 * 1024;
@@ -121,7 +133,7 @@ function GroupMedia({ content }: { content: Extract<GroupContent, { type: 'media
   );
 }
 
-export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, onReact, onDelete }: Props) {
+export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, groupKey, onReact, onDelete }: Props) {
   const { styles, colors } = useThemedStyles();
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
@@ -145,7 +157,8 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
     setSending(true);
     setNotice('');
     try {
-      const { algorithm, ciphertext } = encodePlaintext(serializeGroupContent(content));
+      const payload = serializeGroupContent(content);
+      const { algorithm, ciphertext } = groupKey ? encryptGroupMessage(payload, groupKey) : encodePlaintext(payload);
       const clientMessageId = Crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const response = await emitAck<{ ok: boolean; id?: string; error?: string }>(socket, 'message:send', {
@@ -255,7 +268,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
   return (
     <View style={styles.wrap}>
       <View style={styles.security}>
-        <Text style={styles.securityText}>🔒 Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version.</Text>
+        <Text style={styles.securityText}>{groupKey ? '🔒 Chiffré de bout en bout — même K-ssenger ne peut pas lire ces messages.' : '🔒 Connexion sécurisée (TLS). Le chiffrement de bout en bout s’active dès que ta clé de groupe est prête.'}</Text>
       </View>
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
       {messages.length === 0 ? <Text style={styles.empty}>Aucun message. Lance la conversation du groupe.</Text> : messages.map((message) => {
@@ -269,7 +282,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
             </View>
           );
         }
-        const content = parseGroupContent(readMessageText(message));
+        const content = parseGroupContent(readGroupMessageText(message, groupKey));
         const big = content.type === 'text' && isBigEmoji(content.text);
         const summary = summarizeReactions(message.reactions, currentUserId);
         const mineReaction = myReaction(message.reactions, currentUserId);
