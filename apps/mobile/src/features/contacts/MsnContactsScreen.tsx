@@ -8,7 +8,7 @@ import { elevation, presenceLabel, radius, spacing, type Palette, type TypeToken
 import { useTheme } from '../../theme/ThemeProvider';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, usePulseUntilSeen, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
-import { clearContactAttention, getContactActivity, useAttentionTick, useContactAttention, wireContactAttention } from '../attention/contactAttention';
+import { clearContactAttention, getContactActivity, seedContactActivity, useAttentionTick, useContactAttention, wireContactAttention } from '../attention/contactAttention';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
 export type Contact = {
@@ -43,6 +43,7 @@ type ContactResponse = {
       now_playing_artist: string | null;
       accent_color?: string | null;
     };
+    last_message_at: string | null;
   }>;
   error?: string;
 };
@@ -241,6 +242,11 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       const nowPlaying = row.profiles.now_playing_title
         ? `${row.profiles.now_playing_artist ? `${row.profiles.now_playing_artist} — ` : ''}${row.profiles.now_playing_title}`
         : undefined;
+      // Base the buddy-list order on the real last-message time from the DB
+      // so it survives app restarts, like WhatsApp — live socket activity
+      // (wireContactAttention) still takes priority once it happens this
+      // session since Date.now() is always more recent than a past message.
+      if (row.last_message_at) seedContactActivity(row.profiles.id, Date.parse(row.last_message_at));
       return {
         id: row.profiles.id,
         displayName: row.profiles.display_name,

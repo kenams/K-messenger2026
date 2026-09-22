@@ -30,6 +30,7 @@ export async function listContacts(userId: string) {
     now_playing_title: string | null;
     now_playing_artist: string | null;
     accent_color: string | null;
+    last_message_at: string | null;
   }>(
     `select c.contact_id,
             c.favorite,
@@ -53,12 +54,23 @@ export async function listContacts(userId: string) {
             case
               when coalesce(ps.show_music, 'contacts') = 'nobody' then null
               else p.now_playing_artist
-            end as now_playing_artist
+            end as now_playing_artist,
+            last_dm.created_at as last_message_at
        from public.contacts c
        join public.profiles p on p.id = c.contact_id
        left join public.privacy_settings ps on ps.user_id = p.id
+       left join lateral (
+         select m.created_at
+           from public.conversations conv
+           join public.conversation_members mine on mine.conversation_id = conv.id and mine.user_id = $1
+           join public.conversation_members theirs on theirs.conversation_id = conv.id and theirs.user_id = c.contact_id
+           join public.messages m on m.conversation_id = conv.id
+          where conv.kind = 'direct'
+          order by m.created_at desc
+          limit 1
+       ) last_dm on true
       where c.owner_id = $1
-      order by c.favorite desc, c.list_name asc, p.display_name asc`,
+      order by coalesce(last_dm.created_at, '-infinity') desc, c.favorite desc, c.list_name asc, p.display_name asc`,
     [userId],
   );
 
@@ -78,6 +90,7 @@ export async function listContacts(userId: string) {
       now_playing_artist: row.now_playing_artist,
       accent_color: row.accent_color,
     },
+    last_message_at: row.last_message_at,
   }));
 }
 

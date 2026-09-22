@@ -16,9 +16,24 @@ function bump(contactId: string, patch: Partial<ContactAttention>) {
   notify();
 }
 
-/** Most recent message/K-Pulse timestamp for a contact, or 0 if none this session. */
+/** Most recent message/K-Pulse timestamp for a contact, or 0 if none tracked. */
 export function getContactActivity(contactId: string): number {
   return state.get(contactId)?.lastActivityAt ?? 0;
+}
+
+/**
+ * Seeds the buddy-list sort order from a contact's real last-message time
+ * (server data, on contacts load) rather than only live socket events —
+ * otherwise the list forgot who you were talking to on every app restart.
+ * Never overwrites a more recent value already tracked this session (a live
+ * `bump()` from wireContactAttention, or a previous, more current seed).
+ */
+export function seedContactActivity(contactId: string, timestampMs: number) {
+  if (!Number.isFinite(timestampMs)) return;
+  const current = state.get(contactId);
+  if (current?.lastActivityAt && current.lastActivityAt >= timestampMs) return;
+  state.set(contactId, { unread: 0, pulse: false, ...current, lastActivityAt: timestampMs });
+  notify();
 }
 
 /**
