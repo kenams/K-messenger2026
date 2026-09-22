@@ -25,6 +25,7 @@ export type GroupEncryptedMessage = {
   conversationId: string;
   receiptState?: 'delivered' | 'read';
   reactions?: MessageReaction[];
+  deletedAt?: string | null;
 };
 
 type GroupContent =
@@ -38,6 +39,7 @@ type Props = {
   memberIds: string[];
   messages: GroupEncryptedMessage[];
   onReact?: (messageId: string, reactions: MessageReaction[]) => void;
+  onDelete?: (messageId: string, deletedAt: string) => void;
 };
 
 const GROUP_MEDIA_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']);
@@ -119,13 +121,14 @@ function GroupMedia({ content }: { content: Extract<GroupContent, { type: 'media
   );
 }
 
-export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, onReact }: Props) {
+export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, onReact, onDelete }: Props) {
   const { styles, colors } = useThemedStyles();
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [reactingId, setReactingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const deviceIdRef = useRef('');
   const [deviceReady, setDeviceReady] = useState(false);
 
@@ -189,6 +192,28 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
     }
   };
 
+  const deleteMessage = async (messageId: string) => {
+    if (deletingId) return;
+    setReactingId(null);
+    setDeletingId(messageId);
+    try {
+      // Waits for the server's confirmation before updating the UI (unlike
+      // the direct-chat version, deliberately not optimistic) — a message
+      // marked "deleted" that the server never actually deleted is a worse
+      // lie than a half-second delay. See DirectConversationScreen.tsx for
+      // the incident this avoids.
+      let res = await emitAck<{ ok: boolean }>(socket, 'message:delete', { conversationId: groupId, messageId }).catch(() => ({ ok: false }));
+      if (!res.ok) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        res = await emitAck<{ ok: boolean }>(socket, 'message:delete', { conversationId: groupId, messageId }).catch(() => ({ ok: false }));
+      }
+      if (res.ok) onDelete?.(messageId, new Date().toISOString());
+      else setNotice('Suppression impossible.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const pickAndSendMedia = async () => {
     if (sending || !deviceReady) return;
     setSending(true);
@@ -235,6 +260,15 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
       {messages.length === 0 ? <Text style={styles.empty}>Aucun message. Lance la conversation du groupe.</Text> : messages.map((message) => {
         const mine = message.senderUserId === currentUserId;
+        if (message.deletedAt) {
+          return (
+            <View key={message.id} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
+              <View style={[styles.bubble, styles.bubbleDeleted]}>
+                <Text style={styles.bodyDeleted}>{mine ? 'Tu as supprimé ce message' : 'Ce message a été supprimé'}</Text>
+              </View>
+            </View>
+          );
+        }
         const content = parseGroupContent(readMessageText(message));
         const big = content.type === 'text' && isBigEmoji(content.text);
         const summary = summarizeReactions(message.reactions, currentUserId);
@@ -274,6 +308,17 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, o
                   </TouchableOpacity>
                 ))}
               </View>
+            )}
+            {reactingId === message.id && mine && (
+              <TouchableOpacity
+                onPress={() => void deleteMessage(message.id)}
+                disabled={deletingId === message.id}
+                accessibilityRole="button"
+                accessibilityLabel="Supprimer ce message"
+                style={[styles.deleteBtn, deletingId === message.id && styles.disabled]}
+              >
+                <Text style={styles.deleteBtnText}>{deletingId === message.id ? 'Suppression…' : '🗑️ Supprimer'}</Text>
+              </TouchableOpacity>
             )}
           </View>
         );
@@ -330,6 +375,10 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   rowTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
   bubble: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg },
   bubbleBig: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 2, paddingVertical: 0 },
+  bubbleDeleted: { backgroundColor: 'transparent', borderWidth: 1, borderColor: palette.hairline, borderStyle: 'dashed' },
+  bodyDeleted: { color: palette.inkFaint, fontSize: 14, fontStyle: 'italic' },
+  deleteBtn: { marginTop: 4, paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline },
+  deleteBtnText: { fontSize: 12, fontWeight: '700', color: palette.inkFaint },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   chipsMine: { justifyContent: 'flex-end' },
   chipsTheirs: { justifyContent: 'flex-start' },

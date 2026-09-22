@@ -133,15 +133,23 @@ export function GroupsScreen() {
       if (!payload.messageId) return;
       setHistory((items) => items.map((item) => item.id === payload.messageId ? { ...item, reactions: payload.reactions ?? [] } : item));
     };
+    const onDeleted = (payload: { messageId?: string }) => {
+      if (!payload.messageId) return;
+      setHistory((items) => items.map((item) => item.id === payload.messageId
+        ? { ...item, deletedAt: new Date().toISOString(), ciphertext: undefined, reactions: [] }
+        : item));
+    };
     const onUpdated = () => void loadData(socket).catch(() => undefined);
     socket.on('message:new', onMessage);
     socket.on('message:receipt', onReceipt);
     socket.on('message:reaction', onReaction);
+    socket.on('message:deleted', onDeleted);
     socket.on('group:updated', onUpdated);
     return () => {
       socket.off('message:new', onMessage);
       socket.off('message:receipt', onReceipt);
       socket.off('message:reaction', onReaction);
+      socket.off('message:deleted', onDeleted);
       socket.off('group:updated', onUpdated);
     };
   }, [socket, selectedGroup?.id, currentUserId]);
@@ -240,6 +248,7 @@ export function GroupsScreen() {
           memberIds={selectedGroup.members.map((member) => member.userId)}
           messages={history}
           onReact={(messageId, reactions) => setHistory((items) => items.map((item) => item.id === messageId ? { ...item, reactions } : item))}
+          onDelete={(messageId, deletedAt) => setHistory((items) => items.map((item) => item.id === messageId ? { ...item, deletedAt, ciphertext: undefined, reactions: [] } : item))}
         />
 
         <View style={styles.panel}>
