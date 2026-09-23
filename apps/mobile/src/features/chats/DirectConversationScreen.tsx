@@ -158,7 +158,7 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
 
   if (message.deletedAt) {
     return (
-      <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
+      <View testID={`message-${message.id}`} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
         <View style={[styles.bubble, styles.bubbleDeleted]}>
           <Text style={styles.bodyTextDeleted}>{mine ? 'Tu as supprimé ce message' : 'Ce message a été supprimé'}</Text>
         </View>
@@ -172,7 +172,7 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
   const big = content.type === 'text' && isBigEmoji(content.text);
 
   return (
-    <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
+    <View testID={`message-${message.id}`} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
       <Pressable onPress={onToggleReacting} style={[styles.bubble, mine ? styles.mine : styles.theirs, big && styles.bubbleBig]}>
         {content.type === 'media'
           ? <ChatMedia content={content} />

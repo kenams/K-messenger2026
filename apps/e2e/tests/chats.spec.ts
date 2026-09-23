@@ -66,10 +66,20 @@ test('two people can send and receive messages', async ({ browser }) => {
     // characteristic of this environment, not something this test should
     // chase — the durable, cross-session guarantee (any fresh history fetch
     // reflects the deletion) is already covered by hydrate()/listEncryptedMessages.
-    await kenams.getByText(fromKenams).click();
+    //
+    // Scoped to this specific message's row (data-testid, stable per
+    // message.id) rather than a bare getByText: this bot pair accumulates
+    // "Tu as supprimé ce message" bubbles from every previous run of this
+    // test, so a global text locator eventually resolves to many elements
+    // and fails Playwright's strict mode — that was a test-scoping bug, not
+    // a deletion bug (the deletion itself was always working).
+    const targetRow = kenams.locator('[data-testid^="message-"]').filter({ hasText: fromKenams });
+    const targetTestId = await targetRow.getAttribute('data-testid');
+    await targetRow.getByText(fromKenams).click();
     await kenams.getByRole('button', { name: 'Supprimer ce message' }).click();
-    await expect(kenams.getByText('Tu as supprimé ce message')).toBeVisible({ timeout: 10_000 });
-    await expect(kenams.getByText(fromKenams)).toHaveCount(0);
+    const deletedRow = kenams.locator(`[data-testid="${targetTestId}"]`);
+    await expect(deletedRow.getByText('Tu as supprimé ce message')).toBeVisible({ timeout: 10_000 });
+    await expect(deletedRow.getByText(fromKenams)).toHaveCount(0);
   } finally {
     await kenamsCtx.close();
     await leaCtx.close();
