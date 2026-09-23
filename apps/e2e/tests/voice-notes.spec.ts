@@ -17,6 +17,11 @@ test('records and plays a voice note in a direct chat', async ({ browser }) => {
     await openTab(kenams, 'Contacts');
     await kenams.getByText(BOTS.lea.name).first().click();
     await expect(kenams.getByText(/Connexion sécurisée \(TLS\)|Chiffré de bout en bout/)).toBeVisible();
+    // The mic button stays disabled until the socket/device/conversation
+    // handshake finishes (same `canSend` gate as the text composer) — give
+    // it a moment, or a press right after the chat opens is silently a
+    // no-op instead of starting a recording.
+    await kenams.waitForTimeout(2000);
 
     const mic = kenams.getByLabel('Maintenir pour enregistrer un message vocal');
     await mic.hover();
