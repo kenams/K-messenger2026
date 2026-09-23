@@ -15,7 +15,7 @@ const common = {
   screenshot: 'only-on-failure' as const,
   video: 'retain-on-failure' as const,
   actionTimeout: 15_000,
-  permissions: ['geolocation'],
+  permissions: ['geolocation', 'microphone'],
   geolocation: { latitude: 43.6045, longitude: 1.4442 },
   locale: 'fr-FR',
 };
@@ -29,6 +29,15 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }], ['list']] : [['list']],
   timeout: 60_000,
   expect: { timeout: 15_000 },
+
+  // A fake mic input (silent sine-free noise source) lets voice-note tests
+  // actually drive getUserMedia()/MediaRecorder headlessly, without touching
+  // the OS audio stack or any other spec (nothing else in this suite records audio).
+  use: {
+    launchOptions: {
+      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    },
+  },
 
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/, use: { ...devices['Desktop Chrome'], ...common } },
