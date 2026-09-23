@@ -1,7 +1,7 @@
 import { emitAck, getRealtimeSocket } from './realtime';
 
 export type MediaPurpose = 'avatar' | 'chat' | 'kfeed' | 'moment';
-export type SupportedMediaMime = 'image/jpeg' | 'image/png' | 'image/webp' | 'video/mp4' | 'video/quicktime';
+export type SupportedMediaMime = 'image/jpeg' | 'image/png' | 'image/webp' | 'video/mp4' | 'video/quicktime' | 'audio/m4a' | 'audio/webm';
 
 type PreparedUpload = {
   ok: boolean;

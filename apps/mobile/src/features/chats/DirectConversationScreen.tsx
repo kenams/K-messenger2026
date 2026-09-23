@@ -24,6 +24,9 @@ import {
   type MessageReaction,
 } from '../../lib/chatExtras';
 import { EmojiPanel } from './EmojiPanel';
+import { VoiceComposerButton } from './VoiceComposerButton';
+import { VoiceMessageBubble } from './VoiceMessageBubble';
+import { VOICE_MIME, type VoiceRecordingResult } from '../../lib/voiceRecording';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, waitForSocketReady } from '../../lib/realtime';
 import { onMessageReceived, onMessageSent } from '../../lib/soundKit';
 
@@ -31,7 +34,8 @@ type ReceiptState = 'delivered' | 'read';
 type DirectResponse = { ok: boolean; conversationId?: string; error?: string };
 type ChatContent =
   | { v: 1; type: 'text'; text: string }
-  | { v: 1; type: 'media'; mediaId: string; mimeType: SupportedMediaMime; caption?: string };
+  | { v: 1; type: 'media'; mediaId: string; mimeType: SupportedMediaMime; caption?: string }
+  | { v: 1; type: 'voice'; mediaId: string; mimeType: SupportedMediaMime; durationMs: number };
 type ChatMessage = {
   id: string;
   clientMessageId?: string;
@@ -50,7 +54,9 @@ type HistoryResponse = { ok: boolean; messages?: ChatMessage[]; error?: string }
 type SendResponse = { ok: boolean; id?: string; duplicate?: boolean; error?: string };
 
 const CHAT_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']);
+const VOICE_MIMES = new Set<SupportedMediaMime>(['audio/m4a', 'audio/webm']);
 const CHAT_MAX_BYTES = 100 * 1024 * 1024;
+const MAX_VOICE_DURATION_MS = 600_000;
 
 function parseChatContent(value: string): ChatContent {
   try {
@@ -69,6 +75,14 @@ function parseChatContent(value: string): ChatContent {
         mimeType: parsed.mimeType as SupportedMediaMime,
         ...(typeof parsed.caption === 'string' && parsed.caption.trim() ? { caption: parsed.caption.slice(0, 500) } : {}),
       };
+    }
+    if (
+      parsed.v === 1 && parsed.type === 'voice' && typeof parsed.mediaId === 'string'
+      && typeof parsed.mimeType === 'string' && VOICE_MIMES.has(parsed.mimeType as SupportedMediaMime)
+      && typeof parsed.durationMs === 'number' && Number.isInteger(parsed.durationMs)
+      && parsed.durationMs > 0 && parsed.durationMs <= MAX_VOICE_DURATION_MS
+    ) {
+      return { v: 1, type: 'voice', mediaId: parsed.mediaId, mimeType: parsed.mimeType as SupportedMediaMime, durationMs: parsed.durationMs };
     }
   } catch {
     // Plain string message — show it as text.
@@ -145,6 +159,11 @@ function ChatMedia({ content }: { content: Extract<ChatContent, { type: 'media' 
   );
 }
 
+function VoiceMessageBubbleThemed({ content, mine }: { content: Extract<ChatContent, { type: 'voice' }>; mine: boolean }) {
+  const { colors } = useTheme();
+  return <VoiceMessageBubble mediaId={content.mediaId} durationMs={content.durationMs} mine={mine} colors={colors} />;
+}
+
 function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacting, onReact, onDelete }: {
   message: ChatMessage;
   mine: boolean;
@@ -173,9 +192,9 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
 
   return (
     <View testID={`message-${message.id}`} style={[styles.row, mine ? styles.rowMine : styles.rowTheirs]}>
-      <Pressable onPress={onToggleReacting} style={[styles.bubble, mine ? styles.mine : styles.theirs, big && styles.bubbleBig]}>
-        {content.type === 'media'
-          ? <ChatMedia content={content} />
+      <Pressable onPress={onToggleReacting} style={[styles.bubble, mine ? styles.mine : styles.theirs, big && styles.bubbleBig, content.type === 'voice' && styles.bubbleVoice]}>
+        {content.type === 'media' ? <ChatMedia content={content} />
+          : content.type === 'voice' ? <VoiceMessageBubbleThemed content={content} mine={mine} />
           : <Text style={[big ? styles.bigEmoji : styles.bodyText, !big && mine && styles.bodyTextMine]}>{content.text}</Text>}
         <Text style={[styles.messageMeta, mine && styles.messageMetaMine]}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
       </Pressable>
@@ -232,6 +251,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const [sending, setSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [reactingId, setReactingId] = useState<string | null>(null);
+  const [recordingVoice, setRecordingVoice] = useState(false);
   const deviceIdRef = useRef('');
   const conversationIdRef = useRef('');
   const keysRef = useRef<DirectKeys | null>(null);
@@ -540,6 +560,19 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     } finally { setSending(false); }
   };
 
+  const sendVoiceNote = async (recording: VoiceRecordingResult) => {
+    if (!canSend || !conversationId) return;
+    setSending(true);
+    try {
+      setNotice('Envoi du message vocal…');
+      const { mediaId } = await uploadLocalMedia({ uri: recording.uri, mimeType: VOICE_MIME, purpose: 'chat', conversationId });
+      setSending(false);
+      await sendContent({ v: 1, type: 'voice', mediaId, mimeType: VOICE_MIME, durationMs: recording.durationMs });
+    } catch {
+      setNotice('Message vocal non envoyé.');
+    } finally { setSending(false); }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
@@ -590,26 +623,38 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       {showEmoji && <EmojiPanel onPick={(emoji) => setComposer((c) => (c + emoji).slice(0, 12000))} />}
 
       <View style={styles.composer}>
-        <TouchableOpacity disabled={!canSend} onPress={() => void pickAndSendMedia()} style={[styles.attach, !canSend && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo"><Text style={styles.attachText}>＋</Text></TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowEmoji((v) => !v)} accessibilityRole="button" accessibilityLabel="Ouvrir les emojis" style={[styles.attach, showEmoji && styles.attachActive]}><Text style={styles.attachText}>😊</Text></TouchableOpacity>
-        <TextInput
-          style={styles.input}
-          value={composer}
-          onChangeText={setComposer}
-          placeholder="Écrire un message…"
-          placeholderTextColor={colors.inkFaint}
-          maxLength={12000}
-          multiline
-          editable={!sending}
-          onFocus={() => setShowEmoji(false)}
-          onKeyPress={(e) => {
-            if (isSendKey(e.nativeEvent as unknown as { key?: string; shiftKey?: boolean })) {
-              (e as unknown as { preventDefault?: () => void }).preventDefault?.();
-              void sendMessage();
-            }
-          }}
-        />
-        <TouchableOpacity disabled={!composer.trim() || sending || !canSend} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSend) && styles.disabled]}>{sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
+        {!recordingVoice && <TouchableOpacity disabled={!canSend} onPress={() => void pickAndSendMedia()} style={[styles.attach, !canSend && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo"><Text style={styles.attachText}>＋</Text></TouchableOpacity>}
+        {!recordingVoice && <TouchableOpacity onPress={() => setShowEmoji((v) => !v)} accessibilityRole="button" accessibilityLabel="Ouvrir les emojis" style={[styles.attach, showEmoji && styles.attachActive]}><Text style={styles.attachText}>😊</Text></TouchableOpacity>}
+        {!composer.trim() && (
+          <VoiceComposerButton
+            colors={colors}
+            disabled={!canSend}
+            onRecorded={(r) => void sendVoiceNote(r)}
+            onRecordingStateChange={setRecordingVoice}
+          />
+        )}
+        {!recordingVoice && (
+          <>
+            <TextInput
+              style={styles.input}
+              value={composer}
+              onChangeText={setComposer}
+              placeholder="Écrire un message…"
+              placeholderTextColor={colors.inkFaint}
+              maxLength={12000}
+              multiline
+              editable={!sending}
+              onFocus={() => setShowEmoji(false)}
+              onKeyPress={(e) => {
+                if (isSendKey(e.nativeEvent as unknown as { key?: string; shiftKey?: boolean })) {
+                  (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+                  void sendMessage();
+                }
+              }}
+            />
+            <TouchableOpacity disabled={!composer.trim() || sending || !canSend} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSend) && styles.disabled]}>{sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
+          </>
+        )}
       </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -632,6 +677,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   rowTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
   bubble: { borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2 },
   bubbleBig: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 2, paddingVertical: 0, shadowOpacity: 0, elevation: 0 },
+  bubbleVoice: { minWidth: 190 },
   mine: { backgroundColor: palette.azure, borderBottomRightRadius: 6, ...elevation.hairline },
   theirs: { backgroundColor: palette.surface, borderBottomLeftRadius: 6, borderWidth: 1, borderColor: palette.hairline, ...elevation.hairline },
   bodyText: { ...typo.body },

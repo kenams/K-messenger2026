@@ -10,6 +10,9 @@ import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/ch
 import { QUICK_REACTIONS, isBigEmoji, isSendKey, myReaction, summarizeReactions, type MessageReaction } from '../../lib/chatExtras';
 import { GROUP_ENCRYPTED_ALGO, decryptGroupMessage, encryptGroupMessage } from '../../lib/groupE2ee';
 import { EmojiPanel } from '../chats/EmojiPanel';
+import { VoiceComposerButton } from '../chats/VoiceComposerButton';
+import { VoiceMessageBubble } from '../chats/VoiceMessageBubble';
+import { VOICE_MIME, type VoiceRecordingResult } from '../../lib/voiceRecording';
 import { emitAck, waitForSocketReady } from '../../lib/realtime';
 import { onMessageSent } from '../../lib/soundKit';
 import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
@@ -31,7 +34,8 @@ export type GroupEncryptedMessage = {
 
 type GroupContent =
   | { v: 1; type: 'text'; text: string }
-  | { v: 1; type: 'media'; mediaId: string; mimeType: SupportedMediaMime; caption?: string };
+  | { v: 1; type: 'media'; mediaId: string; mimeType: SupportedMediaMime; caption?: string }
+  | { v: 1; type: 'voice'; mediaId: string; mimeType: SupportedMediaMime; durationMs: number };
 
 type Props = {
   socket: Socket;
@@ -55,7 +59,9 @@ function readGroupMessageText(message: GroupEncryptedMessage, groupKey: string |
 }
 
 const GROUP_MEDIA_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']);
+const GROUP_VOICE_MIMES = new Set<SupportedMediaMime>(['audio/m4a', 'audio/webm']);
 const GROUP_MEDIA_MAX_BYTES = 100 * 1024 * 1024;
+const GROUP_MAX_VOICE_DURATION_MS = 600_000;
 
 function parseGroupContent(value: string): GroupContent {
   try {
@@ -76,6 +82,14 @@ function parseGroupContent(value: string): GroupContent {
         mimeType: parsed.mimeType as SupportedMediaMime,
         ...(typeof parsed.caption === 'string' && parsed.caption.trim() ? { caption: parsed.caption.slice(0, 500) } : {}),
       };
+    }
+    if (
+      parsed.v === 1 && parsed.type === 'voice' && typeof parsed.mediaId === 'string'
+      && typeof parsed.mimeType === 'string' && GROUP_VOICE_MIMES.has(parsed.mimeType as SupportedMediaMime)
+      && typeof parsed.durationMs === 'number' && Number.isInteger(parsed.durationMs)
+      && parsed.durationMs > 0 && parsed.durationMs <= GROUP_MAX_VOICE_DURATION_MS
+    ) {
+      return { v: 1, type: 'voice', mediaId: parsed.mediaId, mimeType: parsed.mimeType as SupportedMediaMime, durationMs: parsed.durationMs };
     }
   } catch {
     // Plain string message — show it as text.
@@ -141,6 +155,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
   const [showEmoji, setShowEmoji] = useState(false);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [recordingVoice, setRecordingVoice] = useState(false);
   const deviceIdRef = useRef('');
   const [deviceReady, setDeviceReady] = useState(false);
 
@@ -269,6 +284,21 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
     }
   };
 
+  const sendVoiceNote = async (recording: VoiceRecordingResult) => {
+    if (sending || !deviceReady) return;
+    setSending(true);
+    try {
+      setNotice('Envoi du message vocal du groupe…');
+      const { mediaId } = await uploadLocalMedia({ uri: recording.uri, mimeType: VOICE_MIME, purpose: 'chat', conversationId: groupId });
+      setSending(false);
+      await sendContent({ v: 1, type: 'voice', mediaId, mimeType: VOICE_MIME, durationMs: recording.durationMs });
+    } catch {
+      setNotice('Message vocal non envoyé.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <View style={styles.wrap}>
       <View style={styles.security}>
@@ -297,8 +327,8 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
               onPress={() => setReactingId((id) => id === message.id ? null : message.id)}
               style={[styles.bubble, mine ? styles.mine : styles.theirs, big && styles.bubbleBig]}
             >
-              {content.type === 'media'
-                ? <GroupMedia content={content} />
+              {content.type === 'media' ? <GroupMedia content={content} />
+                : content.type === 'voice' ? <VoiceMessageBubble mediaId={content.mediaId} durationMs={content.durationMs} mine={mine} colors={colors} />
                 : <Text style={big ? styles.bigEmoji : styles.body}>{content.text}</Text>}
               <Text style={styles.meta}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
             </TouchableOpacity>
@@ -349,32 +379,48 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
       </View>
       {showEmoji && <EmojiPanel onPick={(emoji) => setComposer((c) => (c + emoji).slice(0, 12000))} />}
       <View style={styles.composer}>
-        <TouchableOpacity onPress={() => void pickAndSendMedia()} disabled={sending || !deviceReady} style={[styles.attach, (sending || !deviceReady) && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo au groupe">
-          <Text style={styles.attachText}>＋</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setShowEmoji((v) => !v)} accessibilityRole="button" accessibilityLabel="Ouvrir les emojis" style={[styles.attach, showEmoji && styles.attachActive]}>
-          <Text style={styles.attachText}>😊</Text>
-        </TouchableOpacity>
-        <TextInput
-          style={styles.input}
-          value={composer}
-          onChangeText={setComposer}
-          placeholder="Message au groupe…"
-          placeholderTextColor={colors.inkFaint}
-          multiline
-          maxLength={12000}
-          editable={!sending}
-          onFocus={() => setShowEmoji(false)}
-          onKeyPress={(e) => {
-            if (isSendKey(e.nativeEvent as unknown as { key?: string; shiftKey?: boolean })) {
-              (e as unknown as { preventDefault?: () => void }).preventDefault?.();
-              void send();
-            }
-          }}
-        />
-        <TouchableOpacity onPress={() => void send()} disabled={!composer.trim() || sending || !deviceReady} accessibilityRole="button" accessibilityLabel="Envoyer au groupe" style={[styles.send, (!composer.trim() || sending || !deviceReady) && styles.disabled]}>
-          {sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>➤</Text>}
-        </TouchableOpacity>
+        {!recordingVoice && (
+          <TouchableOpacity onPress={() => void pickAndSendMedia()} disabled={sending || !deviceReady} style={[styles.attach, (sending || !deviceReady) && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo au groupe">
+            <Text style={styles.attachText}>＋</Text>
+          </TouchableOpacity>
+        )}
+        {!recordingVoice && (
+          <TouchableOpacity onPress={() => setShowEmoji((v) => !v)} accessibilityRole="button" accessibilityLabel="Ouvrir les emojis" style={[styles.attach, showEmoji && styles.attachActive]}>
+            <Text style={styles.attachText}>😊</Text>
+          </TouchableOpacity>
+        )}
+        {!composer.trim() && (
+          <VoiceComposerButton
+            colors={colors}
+            disabled={sending || !deviceReady}
+            onRecorded={(r) => void sendVoiceNote(r)}
+            onRecordingStateChange={setRecordingVoice}
+          />
+        )}
+        {!recordingVoice && (
+          <>
+            <TextInput
+              style={styles.input}
+              value={composer}
+              onChangeText={setComposer}
+              placeholder="Message au groupe…"
+              placeholderTextColor={colors.inkFaint}
+              multiline
+              maxLength={12000}
+              editable={!sending}
+              onFocus={() => setShowEmoji(false)}
+              onKeyPress={(e) => {
+                if (isSendKey(e.nativeEvent as unknown as { key?: string; shiftKey?: boolean })) {
+                  (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+                  void send();
+                }
+              }}
+            />
+            <TouchableOpacity onPress={() => void send()} disabled={!composer.trim() || sending || !deviceReady} accessibilityRole="button" accessibilityLabel="Envoyer au groupe" style={[styles.send, (!composer.trim() || sending || !deviceReady) && styles.disabled]}>
+              {sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>➤</Text>}
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );

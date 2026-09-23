@@ -10,7 +10,7 @@ const KSSENGER_MEDIA_BUCKET = 'kssenger-media';
 const NEON_API_BASE = 'https://console.neon.tech/api/v2';
 const MAX_MEDIA_BYTES = 104_857_600;
 
-const mimeSchema = z.enum(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']);
+const mimeSchema = z.enum(['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime', 'audio/m4a', 'audio/webm']);
 const purposeSchema = z.enum(['avatar', 'chat', 'kfeed', 'moment']);
 
 export const mediaPrepareSchema = z.object({
@@ -26,6 +26,7 @@ export const mediaCompleteSchema = z.object({ mediaId: z.string().uuid() }).stri
 
 const extensionByMime: Record<z.infer<typeof mimeSchema>, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'video/mp4': 'mp4', 'video/quicktime': 'mov',
+  'audio/m4a': 'm4a', 'audio/webm': 'webm',
 };
 type FetchLike = typeof fetch;
 type MediaRow = { id: string; owner_id: string; object_key: string; purpose: z.infer<typeof purposeSchema>; conversation_id: string | null; mime_type: z.infer<typeof mimeSchema>; byte_size: string | number; status: 'pending' | 'ready' | 'quarantined' | 'deleted' };
