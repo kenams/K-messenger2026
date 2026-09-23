@@ -99,8 +99,12 @@ const io = new Server(httpServer, {
   // emitted during one of those gaps was silently dropped for that recipient
   // until their next reconnect-triggered resync. Pinging twice as often
   // keeps the connection recognized as active by any such proxy.
-  pingInterval: 12_000,
-  pingTimeout: 15_000,
+  // Tightened again (was 12s/15s): still observed disconnect/reconnect
+  // cycling in E2E against this Render free-tier instance even at 12s pings.
+  // Keeping the ping well under whatever window the proxy enforces reduces
+  // the chance of a still-active socket being treated as idle and recycled.
+  pingInterval: 8_000,
+  pingTimeout: 10_000,
 });
 
 const presenceRuntime = new PresenceRuntime();
