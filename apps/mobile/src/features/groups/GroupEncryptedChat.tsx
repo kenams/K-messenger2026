@@ -10,7 +10,7 @@ import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/ch
 import { QUICK_REACTIONS, isBigEmoji, isSendKey, myReaction, summarizeReactions, type MessageReaction } from '../../lib/chatExtras';
 import { GROUP_ENCRYPTED_ALGO, decryptGroupMessage, encryptGroupMessage } from '../../lib/groupE2ee';
 import { EmojiPanel } from '../chats/EmojiPanel';
-import { emitAck } from '../../lib/realtime';
+import { emitAck, waitForSocketReady } from '../../lib/realtime';
 import { onMessageSent } from '../../lib/soundKit';
 import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -215,9 +215,13 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
       // marked "deleted" that the server never actually deleted is a worse
       // lie than a half-second delay. See DirectConversationScreen.tsx for
       // the incident this avoids.
+      // Same real cause as direct messages (see realtime.ts waitForSocketReady):
+      // emitAck rejects instantly while the socket is mid-reconnect, so a
+      // blind fixed-delay retry can fire before reconnection actually
+      // finishes. Wait for the real 'connect' event between attempts.
       let res = await emitAck<{ ok: boolean }>(socket, 'message:delete', { conversationId: groupId, messageId }).catch(() => ({ ok: false }));
-      if (!res.ok) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+      for (let attempt = 1; !res.ok && attempt < 4; attempt += 1) {
+        await waitForSocketReady(socket, 2500);
         res = await emitAck<{ ok: boolean }>(socket, 'message:delete', { conversationId: groupId, messageId }).catch(() => ({ ok: false }));
       }
       if (res.ok) onDelete?.(messageId, new Date().toISOString());

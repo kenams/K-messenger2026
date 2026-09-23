@@ -24,7 +24,7 @@ import {
   type MessageReaction,
 } from '../../lib/chatExtras';
 import { EmojiPanel } from './EmojiPanel';
-import { emitAck, getAuthenticatedUserId, getRealtimeSocket } from '../../lib/realtime';
+import { emitAck, getAuthenticatedUserId, getRealtimeSocket, waitForSocketReady } from '../../lib/realtime';
 import { onMessageReceived, onMessageSent } from '../../lib/soundKit';
 
 type ReceiptState = 'delivered' | 'read';
@@ -494,21 +494,21 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       let res: { ok: boolean } | undefined;
       // The realtime connection on this app cycles under load; a request in
       // flight exactly during a reconnect is silently dropped rather than
-      // acked either way. Give the socket increasing beats to finish
-      // reconnecting and retry — up to 3 attempts total before giving up,
-      // since a single 1.5s retry wasn't always enough under sustained
-      // multi-session load (observed in ship:web's own E2E run).
-      const backoffsMs = [1500, 3000];
-      for (let attempt = 0; ; attempt += 1) {
+      // acked either way (emitAck rejects instantly while disconnected — see
+      // realtime.ts). A blind fixed-delay retry either fires before
+      // reconnection finishes or wastes time after it already did — wait for
+      // the actual 'connect' event between attempts instead.
+      const maxAttempts = 4;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (attempt > 0) await waitForSocketReady(socket, 2500);
         try {
           res = await attemptDelete();
           break;
         } catch {
-          if (attempt >= backoffsMs.length) throw new Error('DELETE_ACK_UNAVAILABLE');
-          await new Promise((resolve) => setTimeout(resolve, backoffsMs[attempt]));
+          if (attempt === maxAttempts - 1) throw new Error('DELETE_ACK_UNAVAILABLE');
         }
       }
-      if (!res.ok) {
+      if (!res!.ok) {
         // Never leave a message showing "deleted" when the server never
         // actually deleted it — that's a worse lie than showing nothing happened.
         setHistory((items) => items.map((m) => m.id === messageId ? previous : m));

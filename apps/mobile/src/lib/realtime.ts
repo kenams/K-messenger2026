@@ -103,6 +103,24 @@ export function disconnectRealtimeSocket() {
   connecting = null;
 }
 
+/**
+ * Resolves once the socket is actually connected, or after timeoutMs if it
+ * never reconnects in time. Used by callers that retry an emitAck() after a
+ * REALTIME_DISCONNECTED rejection: emitAck fails instantly while
+ * disconnected rather than waiting, so a blind fixed-delay retry either
+ * fires before reconnection finishes or wastes time after it already did.
+ * Watching the real 'connect' event lets a retry fire the moment the socket
+ * is actually usable again.
+ */
+export function waitForSocketReady(socketClient: Socket, timeoutMs: number): Promise<boolean> {
+  if (socketClient.connected) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { socketClient.off('connect', onConnect); resolve(false); }, timeoutMs);
+    const onConnect = () => { clearTimeout(timer); resolve(true); };
+    socketClient.once('connect', onConnect);
+  });
+}
+
 export function emitAck<TResponse>(socketClient: Socket, event: string, payload: unknown = {}): Promise<TResponse> {
   // Socket.IO buffers emits while disconnected. For request/ack commands that is
   // dangerous: the caller can time out, retry with a new id, then have the old
