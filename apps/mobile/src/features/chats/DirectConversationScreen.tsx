@@ -491,17 +491,22 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     });
 
     try {
-      let res: { ok: boolean };
-      try {
-        res = await attemptDelete();
-      } catch {
-        // The realtime connection on this app cycles under load; a request
-        // in flight exactly during a reconnect is silently dropped rather
-        // than acked either way. Give the socket a beat to finish
-        // reconnecting, then retry once — resolves it without the user
-        // having to notice or re-tap.
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        res = await attemptDelete();
+      let res: { ok: boolean } | undefined;
+      // The realtime connection on this app cycles under load; a request in
+      // flight exactly during a reconnect is silently dropped rather than
+      // acked either way. Give the socket increasing beats to finish
+      // reconnecting and retry — up to 3 attempts total before giving up,
+      // since a single 1.5s retry wasn't always enough under sustained
+      // multi-session load (observed in ship:web's own E2E run).
+      const backoffsMs = [1500, 3000];
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          res = await attemptDelete();
+          break;
+        } catch {
+          if (attempt >= backoffsMs.length) throw new Error('DELETE_ACK_UNAVAILABLE');
+          await new Promise((resolve) => setTimeout(resolve, backoffsMs[attempt]));
+        }
       }
       if (!res.ok) {
         // Never leave a message showing "deleted" when the server never
