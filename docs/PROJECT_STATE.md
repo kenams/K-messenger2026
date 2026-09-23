@@ -1,23 +1,22 @@
 # K-ssenger Project State
 
-Last verified: 2026-09-14
+Last verified: 2026-09-23
 
 Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repository root is only a pointer.
 
 ## Repository / release
 
 - Active branch: `feature/device-linking-scaffold`.
-- HEAD: `36395d3b01e858a1dd33035e3e503a16d859d93b` — "feat(contacts): badge unread DMs and blink contacts with unacknowledged K-Pulse".
-- Last public release: `v2.0.0-beta.9` (2026-09-12), marked `Latest` on GitHub Releases.
-- HEAD has not been published as a release yet. It carries changes beyond `beta.9`: direct FCM HTTP v1 push delivery, and unread/K-Pulse attention badges in the contacts list. An APK built from this exact commit exists but has not been validated on physical devices and must not be promoted to any "latest"/stable link until that validation passes.
+- HEAD: `df9b03a528cd2cf2ae2590f6712081b40e728721` — "feat(groups): real end-to-end encryption for group messages".
+- Last public release: `v2.0.0-beta.9` (2026-09-12), marked `Latest` on GitHub Releases. HEAD is well beyond it (real E2EE direct+groups, delete-for-everyone, real browser push, buddy-list activity sort, FCM push, attention badges) and has not been published as a release or validated on physical devices yet.
 
-## Messaging transport — current reality
+## Messaging transport — current reality (superseded 2026-09-22)
 
-- Chat transport identifier: `kssenger-plaintext-v1`.
-- **End-to-end encryption is NOT implemented today.** Direct and group conversation screens call `encodePlaintext()` on send and display "Connexion sécurisée. Le chiffrement de bout en bout sera ajouté dans une prochaine version." in the UI itself.
-- Transport is protected by TLS only (server ↔ client), not E2EE.
-- The previously pinned `org.signal:libsignal-client`/`org.signal:libsignal-android` native stack and all libsignal session/prekey/ratchet machinery described in earlier versions of this document have been retired from the current runtime. Do not assume any libsignal code path is active.
-- E2EE is planned for a later phase, not before the Android messaging flow itself is proven stable on physical devices.
+- **Direct messages are now real end-to-end encrypted.** Each account has a persistent X25519 identity keypair (tweetnacl), private key generated on-device and never leaving it (SecureStore/localStorage), public key in `profiles.e2e_public_key`. Messages between two users who both have a public key are sealed client-side with `nacl.box` before sending; server only stores/relays the opaque `{ciphertext, nonce}` blob under algorithm `kssenger-nacl-box-v1`. Commit `e1c5e5b`, code in `lib/e2ee.ts`.
+- **Group messages are now real end-to-end encrypted too.** One random NaCl secretbox key per group, wrapped individually per member via NaCl box against the same identity keypair. New table `group_keys` (RLS: read your own wrapping only, write only as a fellow member); server only ever sees wrapped blobs + ciphertext, never the group key or plaintext. First member to open the chat generates/self-wraps the key for current members; a later-added member gets it opportunistically wrapped by any online existing member (`group:updated` → `wrapForMissingMembers`). Not a hard delivery guarantee, not a ratchet — stated honestly in-app. Commit `df9b03a`.
+- Transport is TLS + E2EE now, not TLS-only plaintext. The old `kssenger-plaintext-v1` path / "chiffrement à venir" banner described in earlier versions of this doc is gone — do not assume plaintext-over-TLS is still the reality.
+- The retired libsignal native stack (session/prekey/ratchet) is still not used — this is a from-scratch NaCl-based scheme, not libsignal.
+- Not yet proven: real 2-physical-device E2EE round-trip test (see Next steps).
 
 ## Push notifications
 
@@ -38,10 +37,13 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Real email/password Neon Auth registration, login and persisted session, revalidated on app foreground.
 - Contacts search/request/accept/decline/cancel/remove/favorite/block/unblock.
 - Presence and K-Pulse/Wizz.
-- Direct conversations (plaintext transport, see above) with delivery/read receipts and reconnect history sync.
-- Groups: create/invite/remove/roles/leave/ownership transfer, mute/ban/unban, moderator ban listing; block-aware creation/invitation.
+- Direct conversations (real E2EE transport, see above) with delivery/read receipts and reconnect history sync, plus delete-for-everyone on both direct and group messages.
+- Groups: create/invite/remove/roles/leave/ownership transfer, mute/ban/unban, moderator ban listing; block-aware creation/invitation; real E2EE (see above).
 - Private chat media with authorization-aware signed upload/download.
 - K-Feed vertical video, Moments, K-MAP (foreground-only location, explicit opt-in, revoke/Ghost Mode).
+- **K-Live**: real-time audio/video broadcast via LiveKit Cloud — "K-Live" button on the Moi screen to go live, app-wide banner for contacts to join as viewer (`live:start/join/stop` sockets). No 1:1 voice/video call and no voice-message recording exist — this is one-to-many live streaming only. Commit `5d1b155`.
+- Real browser push notifications (Web Push) on web, no tab required. Commit `7126543`.
+- Buddy-list sort persists activity order across app restarts. Commit `fb4c888`.
 - Last.fm now-playing sync is active (`profiles.lastfm_username`, server-side, not per-device).
 - Account export and account deletion (password reauthentication, exact confirmation, hard-scoped Neon deletion).
 
@@ -67,8 +69,8 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 
 ## Next steps (validated order — do not skip ahead)
 
-1. Physical-device validation of the `36395d3b` APK on Kenams' own phone: login, contacts, DM, K-Pulse, media, Last.fm, and push with the app open / backgrounded / fully closed.
-2. Same APK on a second physical phone (a real contact): add contact → DM both directions → delivery → read receipts → K-Pulse → push notifications → close/reopen → reconnect. This is a real two-device messaging test, **not** an E2EE test.
+1. Physical-device validation of a HEAD-built APK on Kenams' own phone: login, contacts, DM, K-Pulse, media, Last.fm, and push with the app open / backgrounded / fully closed.
+2. Same APK on a second physical phone (a real contact): add contact → DM both directions **including a real E2EE round-trip check** (message unreadable to a server-side inspection, readable on both devices) → delivery → read receipts → K-Pulse → push notifications → close/reopen → reconnect → repeat the E2EE check inside a group with 2+ members.
 3. Fix only what those two tests actually surface.
 4. Publish a clean new beta release and point any "latest"/stable link at it.
-5. Only after 1–4 are green: iOS, then the home-screen widget, then K-Map v2. E2EE work is a separate, later phase and must not be assumed or advertised as present before then.
+5. Only after 1–4 are green: iOS, then the home-screen widget, then K-Map v2.
