@@ -61,8 +61,16 @@ export function VoiceComposerButton({ colors, disabled, onRecorded, onRecordingS
 
   const handleRelease = async () => {
     if (cancelledRef.current) return;
-    const result = await recorder.stopAndKeep();
-    if (result) onRecorded(result);
+    try {
+      const result = await recorder.stopAndKeep();
+      if (result) onRecorded(result);
+    } catch (err) {
+      // stopAndKeep had no catch of its own — a rejection here (e.g. the
+      // underlying MediaRecorder/AudioRecorder throwing on stop) used to
+      // vanish as an unhandled promise rejection: phase reset to idle,
+      // nothing sent, no error surfaced anywhere.
+      console.error('[voice] release failed', err);
+    }
   };
 
   const handleCancel = async () => {

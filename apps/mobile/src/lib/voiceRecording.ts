@@ -54,8 +54,20 @@ export function useVoiceRecorder() {
     try {
       await recorder.stop();
       const durationMs = Math.round(Date.now() - startedAtRef.current);
-      const uri = recorder.uri;
-      if (!uri || durationMs < 500) return null;
+      // On web, expo-audio's stop() resolves once MediaRecorder.stop() has
+      // been called, but the recorder only finalizes its blob (and thus
+      // `.uri`) asynchronously on the browser's next tick(s) — reading
+      // `.uri` immediately after `await` can still see the pre-stop value.
+      // Give it a few ticks before giving up.
+      let uri = recorder.uri;
+      for (let attempt = 0; !uri && attempt < 10; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        uri = recorder.uri;
+      }
+      if (!uri || durationMs < 500) {
+        console.error('[voice] stopAndKeep dropped clip', { uri, durationMs });
+        return null;
+      }
       return { uri, durationMs: Math.min(durationMs, VOICE_MAX_DURATION_MS) };
     } finally {
       setPhase('idle');

@@ -446,13 +446,27 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         : encodePlaintext(payload);
       const clientMessageId = Crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      const response = await emitAck<SendResponse>(socket, 'message:send', {
+      const attemptSend = () => emitAck<SendResponse>(socket, 'message:send', {
         clientMessageId, conversationId, senderDeviceId: deviceIdRef.current, algorithm, ciphertext, createdAt,
       });
-      if (!response.ok || !response.id) throw new Error(response.error ?? 'MESSAGE_SEND_FAILED');
+      // Same disconnect-window issue as deleteMessageAction: emitAck rejects
+      // instantly if the socket is mid-reconnect. Retry against the real
+      // 'connect' event — a blind delay either fires too early or wastes time.
+      let response: SendResponse | undefined;
+      const maxAttempts = 4;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (attempt > 0) await waitForSocketReady(socket, 2500);
+        try {
+          response = await attemptSend();
+          break;
+        } catch {
+          if (attempt === maxAttempts - 1) throw new Error('SEND_ACK_UNAVAILABLE');
+        }
+      }
+      if (!response!.ok || !response!.id) throw new Error(response!.error ?? 'MESSAGE_SEND_FAILED');
       setComposer('');
-      setHistory((items) => items.some((item) => item.id === response.id) ? items : [...items, {
-        id: response.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: deviceIdRef.current,
+      setHistory((items) => items.some((item) => item.id === response!.id) ? items : [...items, {
+        id: response!.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: deviceIdRef.current,
         createdAt, algorithm, ciphertext, conversationId, content, reactions: [],
       }]);
       onMessageSent();
