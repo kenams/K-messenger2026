@@ -51,7 +51,7 @@
     "android": {
       "package": "com.kahdigital.kssenger",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 6,
+      "versionCode": 7,
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION"
