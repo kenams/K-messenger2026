@@ -6,6 +6,7 @@ import { getBackend } from '../../lib/backend';
 import { reauthenticateNeonPassword, changeNeonPassword } from '../../lib/neonAuth';
 import { disconnectRealtimeSocket, emitAck, getRealtimeSocket } from '../../lib/realtime';
 import { prepareLocalSignalAccountPurge } from '../../lib/signalCleanup';
+import { resetContactAttention } from '../attention/contactAttention';
 import type { MyProfile } from './useMyProfile';
 import { ScreenHeader } from '../../theme/components';
 import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
@@ -185,6 +186,7 @@ export function AccountDataScreen({ profile, onBack }: { profile: MyProfile; onB
       await purgeLocalSignalState();
       setDeletePassword('');
       setDeleteConfirmation('');
+      resetContactAttention();
       disconnectRealtimeSocket();
       await getBackend().auth.signOut();
       setDeleteNotice('Compte supprimé définitivement. Les clés et sessions Signal locales ont été effacées de cet appareil.');

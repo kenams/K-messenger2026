@@ -52,7 +52,7 @@ Après « Se connecter » sur web : la page se recharge toute seule (normal).
 - [ ] Envoyer une photo, une vidéo → reçues, lisibles
 - [ ] Accusés : « envoyé » puis « lu » (si activé dans Vie privée)
 - [ ] Fermer / rouvrir l'app → l'historique est là
-- [ ] Bandeau « 🔐 Signal/libsignal » visible en haut de la conversation
+- [ ] Bandeau « 🔒 Chiffré de bout en bout » visible en haut de la conversation (pas libsignal — schéma NaCl maison, voir PROJECT_STATE.md)
 - [ ] Couper le wifi de l'ami → envoyer → il reçoit au retour du réseau
 
 ## F. Groupes

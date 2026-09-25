@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
+import { disconnectRealtimeSocket } from '../../lib/realtime';
+import { resetContactAttention } from '../attention/contactAttention';
 import type { MyProfile } from './useMyProfile';
 import { ScreenHeader } from '../../theme/components';
 import { radius, spacing, thirdPartyBrand, type Palette, type TypeTokens } from '../../theme/tokens';
@@ -69,6 +71,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [signOutBusy, setSignOutBusy] = useState(false);
 
   const normalizedUsername = normalizeUsername(username);
   const avatar = useMemo(() => normalizeAvatarUrl(avatarUrl), [avatarUrl]);
@@ -168,6 +171,21 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
     }
   };
 
+  const signOut = async () => {
+    if (signOutBusy || busy || avatarBusy) return;
+    setSignOutBusy(true);
+    try {
+      // Local E2EE identity keys stay on this device (a real sign-out is not
+      // an account deletion): only the session and this run's live in-memory
+      // badge/sort state go away, so re-logging in still decrypts history.
+      resetContactAttention();
+      disconnectRealtimeSocket();
+      await getBackend().auth.signOut();
+    } finally {
+      setSignOutBusy(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
@@ -232,6 +250,16 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
         <TouchableOpacity disabled={!canSave} onPress={() => void save()} accessibilityRole="button" accessibilityLabel="Enregistrer" style={[styles.primary, !canSave && styles.disabled]}>
           {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryText}>Enregistrer</Text>}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          disabled={signOutBusy}
+          onPress={() => void signOut()}
+          accessibilityRole="button"
+          accessibilityLabel="Se déconnecter"
+          style={[styles.signOut, signOutBusy && styles.disabled]}
+        >
+          {signOutBusy ? <ActivityIndicator color={colors.inkSoft} /> : <Text style={styles.signOutText}>Se déconnecter</Text>}
         </TouchableOpacity>
       </ScrollView>
       </KeyboardAvoidingView>
@@ -375,6 +403,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   accentDotSelected: { borderColor: palette.ink },
   accentCheck: { fontWeight: '900', fontSize: 16 },
   primary: { minHeight: 48, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg }, primaryText: { color: palette.white, fontWeight: '900' }, disabled: { opacity: 0.45 },
+  signOut: { minHeight: 44, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, borderWidth: 1, borderColor: palette.hairline, backgroundColor: palette.surface }, signOutText: { color: palette.inkSoft, fontWeight: '800' },
   });
 }
 

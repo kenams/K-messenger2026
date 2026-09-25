@@ -77,6 +77,19 @@ export function clearContactAttention(contactId: string) {
   notify();
 }
 
+/**
+ * Wipes all tracked unread/pulse/activity state — call on sign-out. `state`
+ * is module-level (shared across the whole app lifetime), so without this a
+ * second account signing in on the same device/session would inherit the
+ * previous account's unread badges and buddy-list sort order until those
+ * contact ids happened to get overwritten by fresh events.
+ */
+export function resetContactAttention() {
+  if (state.size === 0) return;
+  state.clear();
+  notify();
+}
+
 export function useContactAttention(contactId: string): ContactAttention {
   const [, setTick] = useState(0);
   useEffect(() => {
