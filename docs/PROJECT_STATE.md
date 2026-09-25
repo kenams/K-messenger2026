@@ -46,6 +46,7 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Buddy-list sort persists activity order across app restarts. Commit `fb4c888`.
 - Last.fm now-playing sync is active (`profiles.lastfm_username`, server-side, not per-device).
 - Account export and account deletion (password reauthentication, exact confirmation, hard-scoped Neon deletion).
+- Real sign-out (not just account deletion): "Se déconnecter" on the profile edit screen, session-only, local E2EE keys untouched. Commit `2fe8f51`.
 
 ## Dedicated backend only
 
