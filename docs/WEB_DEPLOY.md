@@ -33,19 +33,23 @@ n'est pas configuré pour servir le build ; l'hébergement actif est expo.app.)
 
 ## Redéployer le web
 
+**Toujours utiliser la commande unique, jamais un `expo export` tapé à la main :**
+
 ```bash
-cd apps/mobile
-EXPO_PUBLIC_NEON_AUTH_URL='https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth' \
-EXPO_PUBLIC_NEON_DATA_API_URL='https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1' \
-EXPO_PUBLIC_KSSENGER_SOCKET_URL='https://kssenger-server.onrender.com' \
-EXPO_PUBLIC_SPOTIFY_CLIENT_ID='acdb17c786eb432aa1ceacbd49a2de88' \
-EXPO_PUBLIC_LASTFM_CLIENT_ID='6cf2de22fd7a199162deaeab4b3bcb2d' \
-  npx expo export --platform web
-npx eas deploy --prod --alias kssenger
+npm run ship:web
 ```
 
-⚠️ Ces deux dernières variables sont indispensables au « now playing »
-(Spotify/Last.fm, voir `docs/MUSIC_NOW_PLAYING.md`). Elles sont facilement
-oubliées car ce ne sont pas les identifiants « cœur » (auth/socket) — un
-redéploiement sans elles désactive silencieusement le now-playing sur web
-(aucune erreur, la fonctionnalité se cache juste).
+Ce script (`scripts/ship-web.mjs`) est la seule source de vérité pour
+`EXPO_PUBLIC_*` côté web : les valeurs (Neon, socket, Spotify, Last.fm, VAPID)
+y sont câblées en dur avec fallback, `--clear` bust le cache Metro, puis il
+enchaîne typecheck → tests serveur → static gate → export → deploy →
+E2E contre la prod fraîche. Un `expo export` à la main (sans ce script) a
+DÉJÀ cassé deux fois le « now playing » en prod en silence (variable oubliée
+ou mal nommée, aucune erreur affichée) — c'est précisément le bug que ce
+script existe pour rendre impossible. Si une nouvelle variable
+`EXPO_PUBLIC_*` doit un jour être ajoutée, elle se rajoute dans
+`scripts/ship-web.mjs` (objet `MOBILE_ENV`), pas dans une commande copiée
+ailleurs.
+
+`npm run ship:web -- --skip-deploy` relance juste la suite E2E contre la prod
+actuelle, sans réexporter/redéployer.

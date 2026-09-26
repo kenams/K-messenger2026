@@ -9,7 +9,7 @@ import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../
 import { disconnectRealtimeSocket } from '../../lib/realtime';
 import { resetContactAttention } from '../attention/contactAttention';
 import type { MyProfile } from './useMyProfile';
-import { ScreenHeader } from '../../theme/components';
+import { Equalizer, ScreenHeader } from '../../theme/components';
 import { radius, spacing, thirdPartyBrand, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ACCENT_PRESETS, accentOf, onAccent } from '../../theme/accent';
@@ -190,6 +190,15 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
     <SafeAreaView style={styles.safe}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <ScreenHeader title="Modifier mon profil" onBack={onBack} />
+      {(nowPlayingTitle.trim() || nowPlayingArtist.trim()) ? (
+        <View style={styles.selfNowPlayingRow} accessibilityLabel={`En cours d'écoute : ${[nowPlayingTitle, nowPlayingArtist].filter(Boolean).join(' — ')}`}>
+          <Text style={styles.selfNowPlayingName} numberOfLines={1}>{displayName.trim() || username}</Text>
+          <Equalizer size={12} />
+          <Text style={styles.selfNowPlayingText} numberOfLines={1}>
+            {[nowPlayingTitle.trim(), nowPlayingArtist.trim()].filter(Boolean).join(' — ')}
+          </Text>
+        </View>
+      ) : null}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>PSEUDO</Text>
@@ -404,6 +413,9 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   accentCheck: { fontWeight: '900', fontSize: 16 },
   primary: { minHeight: 48, marginTop: spacing.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, borderRadius: radius.lg }, primaryText: { color: palette.white, fontWeight: '900' }, disabled: { opacity: 0.45 },
   signOut: { minHeight: 44, marginTop: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, borderWidth: 1, borderColor: palette.hairline, backgroundColor: palette.surface }, signOutText: { color: palette.inkSoft, fontWeight: '800' },
+  selfNowPlayingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  selfNowPlayingName: { ...typo.name, fontSize: 13, flexShrink: 0 },
+  selfNowPlayingText: { ...typo.micro, fontWeight: '600', color: palette.inkSoft, flexShrink: 1 },
   });
 }
 
