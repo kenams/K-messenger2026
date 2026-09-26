@@ -17,8 +17,17 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brandGradient, elevation, radius, spacing, type Palette, type TypeTokens } from './tokens';
+import { brandGradient, elevation, radius, spacing, thirdPartyBrand, type Palette, type TypeTokens } from './tokens';
 import { useTheme } from './ThemeProvider';
+import {
+  fetchSpotifyPlaybackStatus,
+  isSpotifyConnected,
+  spotifyNext,
+  spotifyPause,
+  spotifyPlay,
+  spotifyPrevious,
+  type SpotifyControlResult,
+} from '../lib/musicNowPlaying';
 
 /** Respect the OS "reduce motion" setting for every decorative animation. */
 export function useReducedMotion(): boolean {
@@ -303,6 +312,107 @@ export function PrimaryButton({
   );
 }
 
+/**
+ * Play/pause/skip transport wired to the Spotify Web API. Renders nothing
+ * unless Spotify is the connected source — Last.fm is scrobble-only and has
+ * no playback-control API at all, on any platform, so no button ever appears
+ * for it (never a disabled fake control: it structurally doesn't exist).
+ */
+function SpotifyPlaybackControls() {
+  const { styles, colors } = useThemedStyles();
+  const [connected, setConnected] = useState<'checking' | 'yes' | 'no'>('checking');
+  const [playback, setPlayback] = useState<{ isPlaying: boolean; hasDevice: boolean; track: { title: string; artist: string } | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const isConnected = await isSpotifyConnected();
+      if (!active) return;
+      if (!isConnected) { setConnected('no'); return; }
+      setConnected('yes');
+      const initial = await fetchSpotifyPlaybackStatus();
+      if (active) setPlayback(initial);
+    })();
+    return () => { active = false; };
+  }, []);
+
+  if (connected !== 'yes') return null;
+
+  const explain = (result: SpotifyControlResult) => {
+    if (result === 'no_device') setNotice('Ouvre Spotify sur un appareil (téléphone, ordi, enceinte) pour en prendre le contrôle ici.');
+    else if (result === 'premium_required') setNotice('Contrôle non disponible : Spotify réserve play/pause/suivant/précédent aux comptes Premium.');
+    else if (result === 'error') setNotice('Commande Spotify impossible pour le moment.');
+    else setNotice('');
+  };
+
+  const run = async (action: () => Promise<SpotifyControlResult>, optimisticIsPlaying?: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await action();
+      explain(result);
+      if (result === 'ok' && optimisticIsPlaying !== undefined) {
+        setPlayback((prev) => (prev ? { ...prev, isPlaying: optimisticIsPlaying } : prev));
+      }
+      if (result === 'ok') {
+        const refreshed = await fetchSpotifyPlaybackStatus();
+        if (refreshed) setPlayback(refreshed);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const isPlaying = playback?.isPlaying ?? false;
+  const track = playback?.track;
+
+  return (
+    <View style={styles.spotifyControls}>
+      <View style={styles.spotifyControlsHead}>
+        <Equalizer size={12} />
+        <Text style={styles.spotifyControlsLabel}>Contrôle Spotify</Text>
+      </View>
+      {track ? (
+        <Text style={styles.spotifyControlsTrack} numberOfLines={1}>
+          {track.artist ? `${track.artist} — ` : ''}{track.title}
+        </Text>
+      ) : null}
+      <View style={styles.spotifyTransport}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Piste précédente"
+          disabled={busy}
+          style={[styles.spotifyTransportBtn, busy && styles.disabled]}
+          onPress={() => void run(spotifyPrevious)}
+        >
+          <Text style={styles.spotifyTransportIcon}>⏮</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={isPlaying ? 'Mettre en pause' : 'Lecture'}
+          disabled={busy}
+          style={[styles.spotifyTransportBtnPrimary, busy && styles.disabled]}
+          onPress={() => void run(isPlaying ? spotifyPause : spotifyPlay, !isPlaying)}
+        >
+          {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.spotifyTransportIconPrimary}>{isPlaying ? '⏸' : '▶'}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Piste suivante"
+          disabled={busy}
+          style={[styles.spotifyTransportBtn, busy && styles.disabled]}
+          onPress={() => void run(spotifyNext)}
+        >
+          <Text style={styles.spotifyTransportIcon}>⏭</Text>
+        </TouchableOpacity>
+      </View>
+      {!!notice && <Text style={styles.spotifyControlsNote}>{notice}</Text>}
+    </View>
+  );
+}
+
 /** Quick inline sheet to set / clear the live "now playing" track. */
 export function NowPlayingSheet({
   visible,
@@ -376,6 +486,7 @@ export function NowPlayingSheet({
           <TouchableOpacity style={styles.sheetClear} disabled={busy} onPress={() => void submit('', '')}>
             <Text style={styles.sheetClearText}>Arrêter le partage</Text>
           </TouchableOpacity>
+          {visible ? <SpotifyPlaybackControls /> : null}
         </Pressable>
       </Pressable>
     </Modal>
@@ -567,6 +678,17 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   },
   sheetClear: { alignItems: 'center', paddingVertical: spacing.sm },
   sheetClearText: { color: palette.inkSoft, fontWeight: '800', fontSize: 12 },
+
+  spotifyControls: { gap: spacing.sm, borderTopWidth: 1, borderTopColor: palette.hairline, paddingTop: spacing.md, marginTop: spacing.xs },
+  spotifyControlsHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  spotifyControlsLabel: { color: palette.inkFaint, fontWeight: '800', fontSize: 11, letterSpacing: 0.4, textTransform: 'uppercase' },
+  spotifyControlsTrack: { color: palette.ink, fontWeight: '700', fontSize: 13 },
+  spotifyTransport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl },
+  spotifyTransportBtn: { width: 44, height: 44, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceSunken },
+  spotifyTransportBtnPrimary: { width: 56, height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: thirdPartyBrand.spotifyGreen },
+  spotifyTransportIcon: { color: palette.ink, fontSize: 18, fontWeight: '900' },
+  spotifyTransportIconPrimary: { color: palette.white, fontSize: 20, fontWeight: '900' },
+  spotifyControlsNote: { color: palette.inkFaint, fontSize: 11.5, fontWeight: '600', textAlign: 'center', lineHeight: 15 },
 
   header: {
     flexDirection: 'row',

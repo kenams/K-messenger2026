@@ -24,7 +24,13 @@ export const lastfmConfigured = LASTFM_CLIENT_ID.length > 0;
 export type NowPlayingTrack = { title: string; artist: string };
 export type MusicSource = 'spotify' | 'lastfm' | null;
 
-const SPOTIFY_SCOPE = 'user-read-currently-playing user-read-playback-state';
+// user-modify-playback-state is required for the in-app play/pause/skip
+// controls (Spotify Web API playback endpoints). Existing connections made
+// before this scope was added only hold the read-only scopes below, so their
+// stored refresh token keeps working for now-playing sync but the playback
+// endpoints will 403 until the user reconnects Spotify once (disconnect +
+// connect again picks up the new scope).
+const SPOTIFY_SCOPE = 'user-read-currently-playing user-read-playback-state user-modify-playback-state';
 const SPOTIFY_NATIVE_REDIRECT = 'kssenger://spotify-callback';
 const K_SPOTIFY = 'kssenger.music.spotify';
 const K_SPOTIFY_VERIFIER = 'kssenger.music.spotify.verifier';
@@ -278,6 +284,86 @@ async function fetchSpotifyNowPlaying(): Promise<NowPlayingTrack | null> {
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Spotify playback controls
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of a Spotify playback control call. Spotify's Web API playback
+ * endpoints are structurally unable to succeed without a Premium account and
+ * an active device — this is never faked or simulated:
+ * - 204 → the command was accepted.
+ * - 404 → no active/reachable Spotify device (app closed everywhere, or idle
+ *   long enough that Spotify dropped the device).
+ * - 403 → the account is not Premium (Spotify restricts playback control,
+ *   including play/pause/skip, to Premium — free accounts can only read).
+ */
+export type SpotifyControlResult = 'ok' | 'no_device' | 'premium_required' | 'error';
+
+export type SpotifyPlaybackStatus = {
+  isPlaying: boolean;
+  hasDevice: boolean;
+  track: NowPlayingTrack | null;
+};
+
+async function spotifyControlRequest(path: string, method: 'PUT' | 'POST'): Promise<SpotifyControlResult> {
+  const token = await validSpotifyAccessToken();
+  if (!token) return 'error';
+  try {
+    const res = await fetch(`https://api.spotify.com/v1/me/player/${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 204 || res.status === 202) return 'ok';
+    if (res.status === 404) return 'no_device';
+    if (res.status === 403) return 'premium_required';
+    return 'error';
+  } catch {
+    return 'error';
+  }
+}
+
+/** Reads current playback state (needed to render a correct play-vs-pause
+ * icon and to tell "no active device" apart from "nothing playing"). */
+export async function fetchSpotifyPlaybackStatus(): Promise<SpotifyPlaybackStatus | null> {
+  const token = await validSpotifyAccessToken();
+  if (!token) return null;
+  try {
+    const res = await fetch('https://api.spotify.com/v1/me/player', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 204) return { isPlaying: false, hasDevice: false, track: null };
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      is_playing?: boolean;
+      device?: { id?: string } | null;
+      item?: { name?: string; artists?: { name?: string }[] } | null;
+    };
+    const track = json.item?.name
+      ? { title: json.item.name.slice(0, 120), artist: (json.item.artists ?? []).map((a) => a.name).filter(Boolean).join(', ').slice(0, 120) }
+      : null;
+    return { isPlaying: !!json.is_playing, hasDevice: !!json.device?.id, track };
+  } catch {
+    return null;
+  }
+}
+
+export async function spotifyPlay(): Promise<SpotifyControlResult> {
+  return spotifyControlRequest('play', 'PUT');
+}
+
+export async function spotifyPause(): Promise<SpotifyControlResult> {
+  return spotifyControlRequest('pause', 'PUT');
+}
+
+export async function spotifyNext(): Promise<SpotifyControlResult> {
+  return spotifyControlRequest('next', 'POST');
+}
+
+export async function spotifyPrevious(): Promise<SpotifyControlResult> {
+  return spotifyControlRequest('previous', 'POST');
 }
 
 // ---------------------------------------------------------------------------

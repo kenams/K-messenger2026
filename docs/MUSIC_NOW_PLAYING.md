@@ -16,6 +16,47 @@ L'UI est la carte « Synchro automatique » dans **Modifier mon profil**.
 
 Les deux fonctionnalités **se cachent** si leur variable d'env est absente.
 
+## Ta propre musique à côté de ton pseudo
+
+Déjà en place (pas besoin d'y retoucher) : `ProfileHeader` (bandeau du haut,
+mobile + rail desktop) et `MeScreen` (onglet **Moi**) affichent tous les deux
+`profile.now_playing_title/artist` — c'est-à-dire **ton propre** morceau,
+pas seulement celui des contacts. La synchro est écrite par ton propre
+appareil via `useNowPlayingSync`, donc dès qu'une source est connectée, ton
+pseudo affiche le morceau en cours, exactement comme pour un contact.
+
+## Contrôles play/pause/suivant/précédent (Spotify uniquement)
+
+Le tiroir « J'écoute en ce moment » (`NowPlayingSheet`, ouvert en tapant le
+badge musique) affiche un transport play/pause/suivant/précédent **seulement
+si Spotify est connecté**. Implémentation dans
+`apps/mobile/src/lib/musicNowPlaying.ts` (`spotifyPlay/Pause/Next/Previous`,
+`fetchSpotifyPlaybackStatus`) et `apps/mobile/src/theme/components.tsx`
+(`SpotifyPlaybackControls`, dans `NowPlayingSheet`).
+
+**Last.fm n'a et n'aura jamais de contrôles** : c'est un service de scrobble
+en lecture seule, il n'existe structurellement aucune API Last.fm pour
+piloter la lecture, quelle que soit l'app source (Deezer, Apple Music…). Le
+composant ne rend rien si la source active n'est pas Spotify — jamais de
+bouton désactivé qui ferait semblant.
+
+**Contrôle Spotify — prérequis structurels de l'API Web Spotify (pas une
+limite K-ssenger)** :
+- Compte **Premium** obligatoire (Spotify refuse play/pause/skip aux comptes
+  gratuits, 403 `PREMIUM_REQUIRED`).
+- Un **appareil Spotify actif** (l'app ouverte quelque part) — sinon 404, et
+  K-ssenger affiche « Ouvre Spotify sur un appareil… ».
+- Scope OAuth étendu : `user-modify-playback-state` (ajouté en plus de
+  `user-read-currently-playing user-read-playback-state`). **Les comptes déjà
+  connectés avant ce changement doivent se déconnecter puis reconnecter
+  Spotify une fois** (bouton dans Modifier mon profil → Synchro automatique)
+  pour obtenir un refresh token avec le nouveau scope — sinon les boutons
+  répondent "Commande Spotify impossible" (403 faute de scope).
+
+Le refresh token reste uniquement sur l'appareil (SecureStore natif /
+localStorage web) — jamais loggé, jamais envoyé au serveur K-ssenger, qui ne
+stocke toujours aucun jeton musique.
+
 ## 1. Spotify — 5 min, une seule fois
 
 1. https://developer.spotify.com/dashboard → **Create app**
