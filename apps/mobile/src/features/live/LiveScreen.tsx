@@ -3,14 +3,14 @@
 // SDK (@livekit/components-react) renders plain HTML under react-native-web,
 // so it drops straight into this RN screen without a native bridge.
 import '@livekit/components-styles';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AudioConference, LiveKitRoom, VideoConference, useTracks } from '@livekit/components-react';
 import { MediaDeviceFailure, Track } from 'livekit-client';
 import { StatusBar } from 'expo-status-bar';
 import { useLiveSocket, type LiveSession } from './useLiveSocket';
-import { ensureLiveKitTheme } from './liveKitTheme.web';
+import { ensureLiveKitTheme, translateLiveKitControls } from './liveKitTheme.web';
 import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -33,6 +33,7 @@ export function LiveScreen({ broadcasterId, onClose }: { broadcasterId: string |
   // never touches the camera, and viewers still join and hear the stream via
   // AudioConference (no video tile expected/rendered).
   const [mode, setMode] = useState<'video' | 'audio'>('video');
+  const roomRef = useRef<HTMLDivElement | null>(null);
   const isBroadcaster = !broadcasterId;
   const wantsVideo = isBroadcaster && mode === 'video';
   const wantsAudio = isBroadcaster; // viewers never publish; they only subscribe
@@ -80,6 +81,7 @@ export function LiveScreen({ broadcasterId, onClose }: { broadcasterId: string |
   if (session) {
     return (
       <LiveKitRoom
+        ref={roomRef}
         serverUrl={session.url}
         token={session.token}
         connect
@@ -94,6 +96,7 @@ export function LiveScreen({ broadcasterId, onClose }: { broadcasterId: string |
         className="kssenger-live"
         data-lk-theme="default"
       >
+        <ControlBarTranslator containerRef={roomRef} />
         <AudioOnlyBadge style={styles.audioBadge} textStyle={styles.audioBadgeText} />
         {isBroadcaster && mode === 'audio' ? <AudioConference /> : <VideoConference />}
       </LiveKitRoom>
@@ -149,6 +152,26 @@ export function LiveScreen({ broadcasterId, onClose }: { broadcasterId: string |
  * ever seeing a video track. Keeps the room visibly "live" instead of a
  * blank/black tile when there is genuinely no picture to show.
  */
+/**
+ * @livekit/components-react bakes its control-bar labels ("Leave", "Share
+ * screen", ...) in as plain English text with no children/i18n override on
+ * VideoConference or AudioConference — translateLiveKitControls patches the
+ * rendered DOM text directly. Runs once on mount and again on every DOM
+ * mutation (device menu open/close, view switch, window resize re-render),
+ * so a relabelled node never reverts if LiveKit re-renders it.
+ */
+function ControlBarTranslator({ containerRef }: { containerRef: React.RefObject<HTMLDivElement | null> }) {
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    translateLiveKitControls(root);
+    const observer = new MutationObserver(() => translateLiveKitControls(root));
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [containerRef]);
+  return null;
+}
+
 function AudioOnlyBadge({ style, textStyle }: { style: unknown; textStyle: unknown }) {
   const cameraTracks = useTracks([Track.Source.Camera]);
   if (cameraTracks.length > 0) return null;

@@ -76,6 +76,13 @@ export function buildLiveKitThemeCss(dark: boolean): string {
   border-top: 1px solid ${c.border};
   gap: 10px;
   padding: 12px 16px;
+  /* Default LiveKit control bar never wraps: on a narrowed desktop window
+     mic/camera/share/chat/leave overflow horizontally with nothing to
+     scroll them into view, so "Quitter" can end up clipped off-screen.
+     Wrap + let it scroll as a fallback so every control stays reachable. */
+  flex-wrap: wrap;
+  overflow-x: auto;
+  row-gap: 8px;
 }
 .kssenger-live .lk-button, .kssenger-live .lk-disconnect-button, .kssenger-live .lk-chat-toggle {
   font-weight: 700;
@@ -104,4 +111,29 @@ export function ensureLiveKitTheme(dark: boolean) {
     document.head.appendChild(tag);
   }
   tag.textContent = buildLiveKitThemeCss(dark);
+}
+
+// @livekit/components-react ships its control-bar labels as hardcoded English
+// text nodes ("Microphone", "Camera", "Share screen"/"Stop screen share",
+// "Chat", "Settings", "Leave") with no i18n/children override exposed by the
+// VideoConference/AudioConference prefabs — the only way to relabel them
+// without forking the library is a small DOM text patch. Exact-match only
+// (never substring), so it can't clobber a name or unrelated text.
+const CONTROL_BAR_TRANSLATIONS: Record<string, string> = {
+  'Leave': 'Quitter',
+  'Share screen': 'Partager l’écran',
+  'Stop screen share': 'Arrêter le partage',
+  'Settings': 'Paramètres',
+};
+
+/** Walks every text node under `root` and swaps known LiveKit control labels for French. Web only, idempotent. */
+export function translateLiveKitControls(root: Node) {
+  if (typeof document === 'undefined' || typeof document.createTreeWalker !== 'function') return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node: Node | null = walker.nextNode();
+  while (node) {
+    const text = node.nodeValue?.trim();
+    if (text && CONTROL_BAR_TRANSLATIONS[text]) node.nodeValue = CONTROL_BAR_TRANSLATIONS[text];
+    node = walker.nextNode();
+  }
 }

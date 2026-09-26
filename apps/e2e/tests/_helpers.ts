@@ -28,10 +28,22 @@ export async function signIn(page: Page, who: { email: string; password: string 
 export async function onAppShell(page: Page): Promise<boolean> {
   try {
     await page.waitForLoadState('domcontentloaded', { timeout: 10_000 });
-    return (await page.getByTestId('tab-Contacts').count()) > 0;
+    // App.tsx renders `tab-${label}` on the narrow/mobile layout but
+    // `desktop-tab-${label}` on the wide desktop-web shell (>= DESKTOP_MIN_WIDTH
+    // in apps/mobile/App.tsx) — Playwright's default viewport is wide, so only
+    // the desktop id ever appears there. Accept either so this doesn't depend
+    // on the test viewport width.
+    const mobile = await page.getByTestId('tab-Contacts').count();
+    const desktop = await page.getByTestId('desktop-tab-Contacts').count();
+    return mobile + desktop > 0;
   } catch {
     return false;
   }
+}
+
+/** Assert-friendly wrapper around onAppShell, for specs that want a real `expect`. */
+export async function expectAppShell(page: Page, timeout = 20_000): Promise<void> {
+  await expect.poll(() => onAppShell(page), { timeout }).toBe(true);
 }
 
 /** Land on the app shell using the stored session (journeys project). */
@@ -47,7 +59,14 @@ export async function signOut(page: Page): Promise<void> {
 }
 
 export async function openTab(page: Page, tab: TabName): Promise<void> {
-  await page.getByTestId(`tab-${tab}`).click();
+  // Same mobile-vs-desktop testid split as onAppShell above.
+  const mobile = page.getByTestId(`tab-${tab}`);
+  const desktop = page.getByTestId(`desktop-tab-${tab}`);
+  if (await desktop.count()) {
+    await desktop.click();
+  } else {
+    await mobile.click();
+  }
 }
 
 /** Fails the test if the page logged an uncaught error / console error. */

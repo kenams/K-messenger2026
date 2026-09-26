@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, openTab } from './_helpers';
+import { expectAppShell, openApp, openTab } from './_helpers';
 
 test.describe('Profile & settings persist', () => {
   test.beforeEach(async ({ page }) => {
@@ -26,7 +26,7 @@ test.describe('Profile & settings persist', () => {
     await page.getByRole('button', { name: 'Couleur #7A5BFF' }).click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
     // saving returns to the main shell
-    await expect(page.getByTestId('tab-Contacts')).toBeVisible({ timeout: 20_000 });
+    await expectAppShell(page);
 
     await page.reload();
     await openTab(page, 'Moi');
@@ -36,7 +36,7 @@ test.describe('Profile & settings persist', () => {
     // restore the default azure so the suite is idempotent
     await page.getByRole('button', { name: 'Couleur #1C6FD6' }).click();
     await page.getByRole('button', { name: 'Enregistrer' }).click();
-    await expect(page.getByTestId('tab-Contacts')).toBeVisible({ timeout: 20_000 });
+    await expectAppShell(page);
   });
 
   test('a privacy toggle saves', async ({ page }) => {
