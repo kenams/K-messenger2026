@@ -59,14 +59,25 @@ export function KStatusStrip({
     const onDeleted = (payload: { statusId?: string }) => {
       setStatuses((prev) => prev.filter((s) => s.id !== payload.statusId));
     };
+    // status:posted only reaches sockets that are connected *at broadcast
+    // time* — io.to(room).emit() never queues for an offline socket. A
+    // contact's update posted while this device was backgrounded/reconnecting
+    // (screen lock, spotty network — the normal case on mobile) is silently
+    // missed and never arrives after the fact, leaving the strip stuck on a
+    // stale or empty status until something else happens to remount it. Every
+    // other live list in this app (MsnContactsScreen, ChatsHubScreen,
+    // GroupsScreen, useRealtimePresence) resyncs on the socket's own 'connect'
+    // event for exactly this reason — K-Statut was missing that same resync.
     socket?.on('status:posted', onPosted);
     socket?.on('status:deleted', onDeleted);
+    socket?.on('connect', onPosted);
     // Re-render every minute so the countdown labels stay accurate and an
     // expired-but-not-yet-server-purged card disappears client-side too.
     const tick = setInterval(() => setRefreshTick((n) => n + 1), 60_000);
     return () => {
       socket?.off('status:posted', onPosted);
       socket?.off('status:deleted', onDeleted);
+      socket?.off('connect', onPosted);
       clearInterval(tick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,6 +98,19 @@ export function KStatusStrip({
 
   const myEntry = latestByOwner.find((e) => e.ownerId === currentUserId);
   const opened = openedId ? visible.find((s) => s.id === openedId) : null;
+
+  // A status card, once opened, pins to that status's id. If its owner posts
+  // a newer one while the card is still open, the old row is still valid
+  // (posting never deletes the previous one) so the pinned id keeps
+  // resolving — the viewer would otherwise show the same stale text forever
+  // instead of following the owner's latest, even though the strip's own
+  // bubble already moved on. Snap the open card forward to the latest status
+  // for the same owner whenever a fresher one shows up.
+  useEffect(() => {
+    if (!opened) return;
+    const latestForOwner = latestByOwner.find((e) => e.ownerId === opened.ownerId)?.latest;
+    if (latestForOwner && latestForOwner.id !== opened.id) setOpenedId(latestForOwner.id);
+  }, [opened, latestByOwner]);
 
   const submitStatus = async () => {
     if (!draft.trim() || posting) return;
