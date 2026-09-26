@@ -158,6 +158,10 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
   const [recordingVoice, setRecordingVoice] = useState(false);
   const deviceIdRef = useRef('');
   const [deviceReady, setDeviceReady] = useState(false);
+  const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+  const typingSentRef = useRef(false);
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peerTypingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     let active = true;
@@ -166,6 +170,59 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
       .catch(() => { if (active) setNotice('Impossible d’initialiser l’envoi pour le moment.'); });
     return () => { active = false; };
   }, [currentUserId]);
+
+  // Group typing indicator: same ephemeral socket signal as direct messages
+  // (typing:update, metadata-only, never persisted), but tracked per-sender
+  // since several group members can type at once. Each sender's "typing"
+  // state self-clears after 8s if a stop ping is lost (backgrounded app),
+  // mirroring the direct-chat safety net in DirectConversationScreen.tsx.
+  useEffect(() => {
+    const handler = (payload: { conversationId?: string; userId?: string; isTyping?: boolean }) => {
+      if (payload.conversationId !== groupId || !payload.userId || payload.userId === currentUserId) return;
+      const uid = payload.userId;
+      const timers = peerTypingTimersRef.current;
+      const existing = timers.get(uid);
+      if (existing) clearTimeout(existing);
+      if (payload.isTyping) {
+        setTypingUserIds((prev) => (prev.includes(uid) ? prev : [...prev, uid]));
+        timers.set(uid, setTimeout(() => {
+          setTypingUserIds((prev) => prev.filter((id) => id !== uid));
+          timers.delete(uid);
+        }, 8000));
+      } else {
+        timers.delete(uid);
+        setTypingUserIds((prev) => prev.filter((id) => id !== uid));
+      }
+    };
+    socket.on('typing:update', handler);
+    return () => {
+      socket.off('typing:update', handler);
+      for (const timer of peerTypingTimersRef.current.values()) clearTimeout(timer);
+      peerTypingTimersRef.current.clear();
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      if (typingSentRef.current) {
+        socket.emit('typing:update', { conversationId: groupId, isTyping: false });
+        typingSentRef.current = false;
+      }
+    };
+  }, [socket, groupId, currentUserId]);
+
+  const notifyTyping = (isTyping: boolean) => {
+    if (isTyping === typingSentRef.current) return;
+    typingSentRef.current = isTyping;
+    socket.emit('typing:update', { conversationId: groupId, isTyping });
+  };
+
+  const onComposerChange = (text: string) => {
+    setComposer(text);
+    if (typingStopTimerRef.current) { clearTimeout(typingStopTimerRef.current); typingStopTimerRef.current = null; }
+    if (text.trim()) {
+      notifyTyping(true);
+      typingStopTimerRef.current = setTimeout(() => notifyTyping(false), 3000);
+    } else {
+      notifyTyping(false);
+    }
+  };
 
   const sendContent = async (content: GroupContent) => {
     if (sending || !deviceReady) return;
@@ -198,6 +255,8 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
     const body = composer.trim();
     if (!body) return;
     setShowEmoji(false);
+    if (typingStopTimerRef.current) { clearTimeout(typingStopTimerRef.current); typingStopTimerRef.current = null; }
+    notifyTyping(false);
     await sendContent({ v: 1, type: 'text', text: body });
   };
 
@@ -305,6 +364,9 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
         <Text style={styles.securityText}>{groupKey ? '🔒 Chiffré de bout en bout — même K-ssenger ne peut pas lire ces messages.' : '🔒 Connexion sécurisée (TLS). Le chiffrement de bout en bout s’active dès que ta clé de groupe est prête.'}</Text>
       </View>
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
+      {typingUserIds.length > 0 && (
+        <Text style={styles.typingSub}>{typingUserIds.length === 1 ? 'quelqu’un écrit…' : `${typingUserIds.length} personnes écrivent…`}</Text>
+      )}
       {messages.length === 0 ? <Text style={styles.empty}>Aucun message. Lance la conversation du groupe.</Text> : messages.map((message) => {
         const mine = message.senderUserId === currentUserId;
         if (message.deletedAt) {
@@ -402,7 +464,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
             <TextInput
               style={styles.input}
               value={composer}
-              onChangeText={setComposer}
+              onChangeText={onComposerChange}
               placeholder="Message au groupe…"
               placeholderTextColor={colors.inkFaint}
               multiline
@@ -432,6 +494,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   security: { backgroundColor: palette.azureSoft, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm },
   securityText: { color: palette.azureDeep, textAlign: 'center', fontSize: 11, fontWeight: '800' },
   notice: { color: palette.azureDeep, fontWeight: '700', textAlign: 'center', marginBottom: spacing.sm },
+  typingSub: { color: palette.azureDeep, fontWeight: '700', textAlign: 'center', marginBottom: spacing.sm, fontSize: 12 },
   empty: { color: palette.inkSoft, textAlign: 'center', paddingVertical: spacing.lg },
   row: { marginBottom: spacing.sm, maxWidth: '86%' },
   rowMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
