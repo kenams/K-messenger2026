@@ -13,6 +13,7 @@ import { Equalizer, ScreenHeader } from '../../theme/components';
 import { radius, spacing, thirdPartyBrand, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ACCENT_PRESETS, accentOf, onAccent } from '../../theme/accent';
+import { AVATAR_PRESET_IDS, PresetAvatarGlyph, presetAvatarValue, presetIdFromAvatar, type AvatarPresetId } from '../../theme/avatarPresets';
 import {
   beginSpotifyAuth,
   disconnectLastfm,
@@ -68,6 +69,8 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
   const [avatarUrl, setAvatarUrl] = useState(isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : '');
   const [avatarMediaId, setAvatarMediaId] = useState(profile.avatar_media_id);
   const [avatarPreviewUri, setAvatarPreviewUri] = useState<string | null>(isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : null);
+  const [selectedPreset, setSelectedPreset] = useState(presetIdFromAvatar(profile.avatar_url));
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -94,12 +97,23 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
   const setHttpsAvatar = (value: string) => {
     setAvatarUrl(value);
     setAvatarMediaId(null);
+    setSelectedPreset(null);
   };
 
   const clearAvatar = () => {
     setAvatarUrl('');
     setAvatarMediaId(null);
     setAvatarPreviewUri(null);
+    setSelectedPreset(null);
+  };
+
+  const choosePreset = (id: AvatarPresetId) => {
+    setSelectedPreset(id);
+    setAvatarUrl('');
+    setAvatarMediaId(null);
+    setAvatarPreviewUri(null);
+    setAvatarPickerOpen(false);
+    setNotice('');
   };
 
   const pickAvatar = async () => {
@@ -132,6 +146,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
       setAvatarUrl('');
       setAvatarPreviewUri(asset.uri);
       setAvatarMediaId(mediaId);
+      setSelectedPreset(null);
       setNotice('Avatar importe. Enregistre le profil pour le publier.');
     } catch {
       setNotice('Upload avatar impossible. Formats acceptes : JPG, PNG ou WebP, 10 Mo maximum.');
@@ -155,7 +170,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
           now_playing_artist: nowPlayingArtist.trim().slice(0, 120) || null,
           bio: bio.trim().slice(0, 500) || null,
           accent_color: accentColor,
-          avatar_url: avatarMediaId ? `media:${avatarMediaId}` : avatar,
+          avatar_url: selectedPreset ? presetAvatarValue(selectedPreset) : avatarMediaId ? `media:${avatarMediaId}` : avatar,
           avatar_media_id: avatarMediaId,
           updated_at: new Date().toISOString(),
         })
@@ -241,20 +256,43 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
 
         <Text style={styles.label}>AVATAR</Text>
         <View style={styles.avatarRow}>
-          {avatarPreviewUri
+          {selectedPreset
+            ? <View style={styles.avatarPresetPreviewWrap}><PresetAvatarGlyph id={selectedPreset} size={78} /></View>
+            : avatarPreviewUri
             ? <Image source={{ uri: avatarPreviewUri }} style={styles.avatarPreview} />
             : <View style={styles.avatarPreview}><Text style={styles.avatarPreviewText}>{displayName[0]?.toUpperCase() ?? 'K'}</Text></View>}
           <View style={styles.avatarActions}>
             <TouchableOpacity disabled={avatarBusy || busy} onPress={() => void pickAvatar()} style={[styles.avatarButton, (avatarBusy || busy) && styles.disabled]}>
               {avatarBusy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.avatarButtonText}>Choisir une photo</Text>}
             </TouchableOpacity>
+            <TouchableOpacity disabled={avatarBusy || busy} onPress={() => setAvatarPickerOpen((open) => !open)} style={styles.avatarSecondary}>
+              <Text style={styles.avatarSecondaryText}>{avatarPickerOpen ? 'Fermer la galerie' : 'Choisir un avatar'}</Text>
+            </TouchableOpacity>
             <TouchableOpacity disabled={avatarBusy || busy} onPress={clearAvatar} style={styles.avatarSecondary}>
               <Text style={styles.avatarSecondaryText}>Retirer</Text>
             </TouchableOpacity>
           </View>
         </View>
+        {avatarPickerOpen ? (
+          <View style={styles.avatarPresetGrid}>
+            {AVATAR_PRESET_IDS.map((id) => {
+              const selected = selectedPreset === id;
+              return (
+                <TouchableOpacity
+                  key={id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Avatar prédéfini ${id}`}
+                  onPress={() => choosePreset(id)}
+                  style={[styles.avatarPresetCell, selected && styles.avatarPresetCellSelected]}
+                >
+                  <PresetAvatarGlyph id={id} size={52} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
         <TextInput autoCapitalize="none" autoCorrect={false} value={avatarUrl} onChangeText={setHttpsAvatar} placeholder="URL HTTPS optionnelle" style={[styles.input, styles.stackedInput]} />
-        <Text style={[styles.hint, !avatarValid && styles.error]}>Photo stockee en media prive K-ssenger. Les URL HTTPS restent acceptees pour les anciens profils.</Text>
+        <Text style={[styles.hint, !avatarValid && styles.error]}>Photo stockee en media prive K-ssenger, avatar de la galerie, ou URL HTTPS pour les anciens profils.</Text>
 
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
         <TouchableOpacity disabled={!canSave} onPress={() => void save()} accessibilityRole="button" accessibilityLabel="Enregistrer" style={[styles.primary, !canSave && styles.disabled]}>
@@ -406,7 +444,10 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   safe: { flex: 1, backgroundColor: palette.sky },
   flex: { flex: 1 },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl }, label: { marginTop: spacing.lg, marginBottom: spacing.xs, ...typo.label, textTransform: 'uppercase' }, input: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink }, stackedInput: { marginTop: spacing.sm }, multiline: { minHeight: 100, textAlignVertical: 'top' }, hint: { ...typo.micro, fontWeight: '500', lineHeight: 14, marginTop: spacing.xs }, error: { color: palette.danger }, notice: { marginTop: spacing.lg, color: palette.azureDeep, fontWeight: '700' },
-  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md }, avatarPreview: { width: 78, height: 78, borderRadius: radius.xl, backgroundColor: palette.azure, borderWidth: 4, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarPreviewText: { color: palette.white, fontSize: 30, fontWeight: '900' }, avatarActions: { flex: 1, gap: spacing.sm }, avatarButton: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azure }, avatarButtonText: { color: palette.white, fontWeight: '900' }, avatarSecondary: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azureSoft, borderWidth: 1, borderColor: palette.hairline }, avatarSecondaryText: { color: palette.inkSoft, fontWeight: '900' },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md }, avatarPreview: { width: 78, height: 78, borderRadius: radius.xl, backgroundColor: palette.azure, borderWidth: 4, borderColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarPreviewText: { color: palette.white, fontSize: 30, fontWeight: '900' }, avatarPresetPreviewWrap: { width: 78, height: 78, borderRadius: radius.xl, overflow: 'hidden', borderWidth: 4, borderColor: palette.azureSoft }, avatarActions: { flex: 1, gap: spacing.sm }, avatarButton: { minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azure }, avatarButtonText: { color: palette.white, fontWeight: '900' }, avatarSecondary: { minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.azureSoft, borderWidth: 1, borderColor: palette.hairline }, avatarSecondaryText: { color: palette.inkSoft, fontWeight: '900' },
+  avatarPresetGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm, padding: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.md },
+  avatarPresetCell: { width: 60, height: 60, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', padding: 2 },
+  avatarPresetCellSelected: { borderColor: palette.azure },
   accentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   accentDot: { width: 40, height: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
   accentDotSelected: { borderColor: palette.ink },

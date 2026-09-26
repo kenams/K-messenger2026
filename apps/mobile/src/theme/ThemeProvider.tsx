@@ -27,7 +27,7 @@ export type { ThemeSkin };
 const STORAGE_KEY = 'kssenger_theme_mode';
 const SKIN_STORAGE_KEY = 'kssenger_theme_skin';
 
-const SKIN_VALUES: ThemeSkin[] = ['classic', 'pro', 'douceur', 'sport', 'aurora'];
+const SKIN_VALUES: ThemeSkin[] = ['classic', 'pro', 'douceur', 'sport', 'aurora', 'anthracite'];
 
 function isThemeMode(value: string | null): value is ThemeMode {
   return value === 'light' || value === 'dark' || value === 'system';

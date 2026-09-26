@@ -321,7 +321,7 @@ export const palette = lightPalette;
  * here so every screen reading `colors.xxx` via `useTheme()` stays correct
  * across all five skins × two modes.
  */
-export type ThemeSkin = 'classic' | 'pro' | 'douceur' | 'sport' | 'aurora';
+export type ThemeSkin = 'classic' | 'pro' | 'douceur' | 'sport' | 'aurora' | 'anthracite';
 
 function skinFrom(base: Palette, overrides: Partial<Palette>): Palette {
   return { ...base, ...overrides };
@@ -333,6 +333,7 @@ export const skinLabel: Record<ThemeSkin, string> = {
   douceur: 'Douceur',
   sport: 'Sport',
   aurora: 'Aurora',
+  anthracite: 'Anthracite',
 };
 
 /** One representative swatch colour per skin, for the picker UI (always the *light* accent). */
@@ -342,6 +343,7 @@ export const skinSwatch: Record<ThemeSkin, string> = {
   douceur: '#C97B93',
   sport: '#FF5A36',
   aurora: '#7C5CFF',
+  anthracite: '#0E7681',
 };
 
 const proLight = skinFrom(lightPalette, {
@@ -434,10 +436,39 @@ const auroraDark = skinFrom(darkPalette, {
   wizz: '#FF8FD4', wizzSoft: 'rgba(255,143,212,0.18)',
 });
 
+// Anthracite — "console de commande" futuriste : graphite métallique profond,
+// hairlines nets, accent chrome-cyan électrique (jamais l'or de Classique ni
+// le bleu-acier sobre de Pro). Texture perçue via bordures fines et surfaces
+// étagées plutôt que via une couleur plate.
+const anthraciteLight = skinFrom(lightPalette, {
+  azure: '#0E7681', azureDeep: '#0B5E67', azurePress: '#094B52', azureSoft: '#E3F3F5', azureHalo: 'rgba(14,118,129,0.16)',
+  ink: '#1A1D21', inkSoft: '#4B535A', inkFaint: '#868E96', inkOnAzure: '#FFFFFF',
+  sky: '#F1F2F4', skyTop: '#E9EBEE', skyBottom: '#F8F9FA',
+  surface: '#FFFFFF', surfaceRaised: '#FFFFFF', surfaceSunken: '#E6E8EB',
+  hairline: '#DCDFE3', hairlineStrong: '#C7CBD1', hairlineSoft: '#EDEFF1',
+  music: '#4C7A8C', musicDeep: '#375C6B', musicSoft: '#E4EFF2',
+  brass: '#8A97A3', brassSoft: '#EEF0F2',
+  wizz: '#5C7A99', wizzSoft: '#E7EDF3',
+  favoriteSoft: '#EDEFF2', favoriteBorder: '#AEB6BF', favoriteText: '#4B535A',
+});
+
+const anthraciteDark = skinFrom(darkPalette, {
+  azure: '#2DD4DE', azureDeep: '#22B8C2', azurePress: '#1B99A2', azureSoft: 'rgba(45,212,222,0.16)', azureHalo: 'rgba(45,212,222,0.26)',
+  ink: '#EDEFF1', inkSoft: '#AEB4BA', inkFaint: '#767D84', inkOnAzure: '#06181A',
+  sky: '#0E0F11', skyTop: '#131518', skyBottom: '#08090A',
+  surface: '#17191C', surfaceRaised: '#1E2124', surfaceSunken: '#0A0B0C',
+  hairline: '#2A2D31', hairlineStrong: '#3A3E43', hairlineSoft: '#202327',
+  music: '#5FA8BC', musicDeep: '#4A8A9C', musicSoft: 'rgba(95,168,188,0.16)',
+  brass: '#9FA9B3', brassSoft: 'rgba(159,169,179,0.16)',
+  wizz: '#7FA0BF', wizzSoft: 'rgba(127,160,191,0.18)',
+  favoriteSoft: 'rgba(159,169,179,0.18)', favoriteBorder: '#9FA9B3', favoriteText: '#D3D8DD',
+});
+
 export const skinPalettes: Record<ThemeSkin, { light: Palette; dark: Palette }> = {
   classic: { light: lightPalette, dark: darkPalette },
   pro: { light: proLight, dark: proDark },
   douceur: { light: douceurLight, dark: douceurDark },
   sport: { light: sportLight, dark: sportDark },
   aurora: { light: auroraLight, dark: auroraDark },
+  anthracite: { light: anthraciteLight, dark: anthraciteDark },
 };

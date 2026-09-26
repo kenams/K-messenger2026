@@ -26,6 +26,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, immersive, layout, radius, spacing, type Palette, type TypeTokens } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, SectionLabel, Segmented, useAndroidBack } from './src/theme/components';
 import { useTheme, type ThemeMode, type ThemeSkin } from './src/theme/ThemeProvider';
+import { PresetAvatarGlyph, presetIdFromAvatar } from './src/theme/avatarPresets';
 import { accentOf } from './src/theme/accent';
 import { MobileAppQr } from './src/features/profile/MobileAppQr';
 
@@ -669,6 +670,10 @@ function Avatar({ profile, size = 'small' }: { profile: MyProfile; size?: 'small
     return () => { active = false; };
   }, [profile.avatar_media_id]);
 
+  const presetId = presetIdFromAvatar(profile.avatar_url);
+  if (presetId) {
+    return <View style={[style, styles.avatarPresetClip]}><PresetAvatarGlyph id={presetId} size={size === 'large' ? 96 : 44} /></View>;
+  }
   const avatarUri = signedAvatarUrl ?? (isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : null);
   if (avatarUri) return <Image source={{ uri: avatarUri }} style={style} />;
   return <View style={style}><Text style={textStyle}>{profile.display_name[0]?.toUpperCase() ?? 'K'}</Text></View>;
@@ -708,6 +713,7 @@ const THEME_SKIN_OPTIONS: { value: ThemeSkin; hint: string }[] = [
   { value: 'douceur', hint: 'Rose gold pastel' },
   { value: 'sport', hint: 'Énergique, vif' },
   { value: 'aurora', hint: 'Violet nocturne' },
+  { value: 'anthracite', hint: 'Graphite chrome, console futuriste' },
 ];
 
 function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups, onNowPlaying, onLive }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void; onNowPlaying: () => void; onLive: () => void }) {
@@ -870,6 +876,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   avatarRing: { position: 'relative' },
   avatar: { width: 54, height: 54, borderRadius: radius.md, backgroundColor: palette.azure, borderWidth: 2, borderColor: palette.white, alignItems: 'center', justifyContent: 'center', ...elevation.hairline },
   avatarText: { color: palette.white, fontSize: 22, fontWeight: '900' },
+  avatarPresetClip: { overflow: 'hidden' },
   heroBadge: { position: 'absolute', right: -3, bottom: -3 },
   name: { ...typo.heading, marginTop: 0 },
   status: { ...typo.meta, marginTop: 1 },
