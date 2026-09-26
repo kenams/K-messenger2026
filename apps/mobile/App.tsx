@@ -25,7 +25,7 @@ import { disconnectRealtimeSocket } from './src/lib/realtime';
 import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, immersive, layout, radius, spacing, type Palette, type TypeTokens } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, SectionLabel, Segmented, useAndroidBack } from './src/theme/components';
-import { useTheme, type ThemeMode } from './src/theme/ThemeProvider';
+import { useTheme, type ThemeMode, type ThemeSkin } from './src/theme/ThemeProvider';
 import { accentOf } from './src/theme/accent';
 import { MobileAppQr } from './src/features/profile/MobileAppQr';
 
@@ -702,9 +702,17 @@ const APPEARANCE_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'system', label: 'Système' },
 ];
 
+const THEME_SKIN_OPTIONS: { value: ThemeSkin; hint: string }[] = [
+  { value: 'classic', hint: 'Or antique & ivoire' },
+  { value: 'pro', hint: 'Sobre, graphite' },
+  { value: 'douceur', hint: 'Rose gold pastel' },
+  { value: 'sport', hint: 'Énergique, vif' },
+  { value: 'aurora', hint: 'Violet nocturne' },
+];
+
 function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups, onNowPlaying, onLive }: { profile: MyProfile; userAge: number; onEdit: () => void; onAccountData: () => void; onPrivacy: () => void; onGroups: () => void; onNowPlaying: () => void; onLive: () => void }) {
   const { styles } = useAppStyles();
-  const { mode, setMode } = useTheme();
+  const { mode, setMode, skin, setSkin, skinLabel: skinLabels, skinSwatch: skinSwatches } = useTheme();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
 
@@ -752,6 +760,29 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
       <View style={styles.appearanceSection}>
         <SectionLabel>Apparence</SectionLabel>
         <Segmented value={mode} options={APPEARANCE_OPTIONS} onChange={setMode} />
+      </View>
+      <View style={styles.appearanceSection}>
+        <SectionLabel>Thème</SectionLabel>
+        <View style={styles.skinGrid}>
+          {THEME_SKIN_OPTIONS.map((option) => {
+            const active = option.value === skin;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                testID={`skin-${option.value}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Thème ${skinLabels[option.value]}`}
+                onPress={() => setSkin(option.value)}
+                style={[styles.skinCard, active && styles.skinCardActive]}
+              >
+                <View style={[styles.skinSwatch, { backgroundColor: skinSwatches[option.value] }]} />
+                <Text style={[styles.skinCardLabel, active && styles.skinCardLabelActive]}>{skinLabels[option.value]}</Text>
+                <Text style={styles.skinCardHint}>{option.hint}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
       <TouchableOpacity disabled={signingOut} style={[styles.signOutButton, signingOut && styles.disabled]} onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Se déconnecter de K-ssenger">
         {signingOut ? <ActivityIndicator /> : <Text style={styles.signOutText}>Se déconnecter</Text>}
@@ -884,6 +915,17 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   signOutButton: { marginTop: spacing.xl, minWidth: 190, alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairlineStrong, borderRadius: radius.md },
   signOutText: { color: palette.inkSoft, fontWeight: '900' },
   appearanceSection: { width: '100%', marginTop: spacing.xl },
+  skinGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  skinCard: {
+    width: '31%', minWidth: 96, alignItems: 'center', backgroundColor: palette.surface,
+    borderWidth: 1.5, borderColor: palette.hairline, borderRadius: radius.md,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.xs, ...elevation.hairline,
+  },
+  skinCardActive: { borderColor: palette.azure, backgroundColor: palette.azureSoft },
+  skinSwatch: { width: 26, height: 26, borderRadius: radius.pill, borderWidth: 2, borderColor: palette.white, ...elevation.hairline },
+  skinCardLabel: { marginTop: spacing.xs, color: palette.inkSoft, fontSize: 12, fontWeight: '800' },
+  skinCardLabelActive: { color: palette.azureDeep },
+  skinCardHint: { marginTop: 2, color: palette.inkFaint, fontSize: 9.5, fontWeight: '600', textAlign: 'center' },
 
   // Desktop web only ("full-screen MSN app" shell) — no max-width column,
   // no site margins: fills the entire browser viewport, only inner panes

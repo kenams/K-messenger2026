@@ -308,3 +308,136 @@ export const layout = {
 
 /** Back-compat static export — the light palette. Screens should prefer `useTheme().colors`. */
 export const palette = lightPalette;
+
+/**
+ * Theme "skins" — alternate K-ssenger identities, orthogonal to the
+ * light/dark mode axis. Each skin ships its own light + dark palette pair,
+ * built from the classic MSN-KAH palette as a base so presence dots,
+ * danger/success feedback and the KAH navy brand mark stay universal, while
+ * ink, surfaces and accents change enough to read as a genuinely different
+ * product mood — never just a hue-shifted copy of the same background.
+ *
+ * Never add a raw hex colour to a screen for a skin — extend the palette
+ * here so every screen reading `colors.xxx` via `useTheme()` stays correct
+ * across all five skins × two modes.
+ */
+export type ThemeSkin = 'classic' | 'pro' | 'douceur' | 'sport' | 'aurora';
+
+function skinFrom(base: Palette, overrides: Partial<Palette>): Palette {
+  return { ...base, ...overrides };
+}
+
+export const skinLabel: Record<ThemeSkin, string> = {
+  classic: 'Classique',
+  pro: 'Pro',
+  douceur: 'Douceur',
+  sport: 'Sport',
+  aurora: 'Aurora',
+};
+
+/** One representative swatch colour per skin, for the picker UI (always the *light* accent). */
+export const skinSwatch: Record<ThemeSkin, string> = {
+  classic: '#A67C3D',
+  pro: '#3B5978',
+  douceur: '#C97B93',
+  sport: '#FF5A36',
+  aurora: '#7C5CFF',
+};
+
+const proLight = skinFrom(lightPalette, {
+  azure: '#3B5978', azureDeep: '#2C4159', azurePress: '#233347', azureSoft: '#E7ECF1', azureHalo: 'rgba(59,89,120,0.14)',
+  ink: '#1A1D22', inkSoft: '#4C535C', inkFaint: '#8A9099', inkOnAzure: '#F5F7FA',
+  sky: '#F4F5F7', skyTop: '#EDEFF2', skyBottom: '#FAFBFC',
+  surface: '#FFFFFF', surfaceRaised: '#FFFFFF', surfaceSunken: '#ECEEF1',
+  hairline: '#E3E6EA', hairlineStrong: '#D2D7DD', hairlineSoft: '#EDEFF2',
+  music: '#5C8A99', musicDeep: '#436672', musicSoft: '#E9F1F3',
+  brass: '#B9975B', brassSoft: '#F3EDE0',
+  wizz: '#B97A63', wizzSoft: '#F3E7E2',
+});
+
+const proDark = skinFrom(darkPalette, {
+  azure: '#6D93B8', azureDeep: '#5A7EA0', azurePress: '#4A6A89', azureSoft: 'rgba(109,147,184,0.16)', azureHalo: 'rgba(109,147,184,0.22)',
+  ink: '#EDEEF0', inkSoft: '#A9AEB5', inkFaint: '#767B82',
+  sky: '#111316', skyTop: '#17191D', skyBottom: '#0A0B0D',
+  surface: '#1B1D21', surfaceRaised: '#22252A', surfaceSunken: '#0D0E10',
+  hairline: '#2A2D32', hairlineStrong: '#3A3E44', hairlineSoft: '#242629',
+  music: '#7FA6B3', musicDeep: '#5C8492', musicSoft: 'rgba(127,166,179,0.16)',
+  brass: '#C9AD78', brassSoft: 'rgba(201,173,120,0.16)',
+  wizz: '#C99280', wizzSoft: 'rgba(201,146,128,0.16)',
+});
+
+const douceurLight = skinFrom(lightPalette, {
+  azure: '#C97B93', azureDeep: '#A85B77', azurePress: '#8F4A64', azureSoft: '#FBE4EC', azureHalo: 'rgba(201,123,147,0.16)',
+  ink: '#3B2733', inkSoft: '#6E5262', inkFaint: '#A4899A', inkOnAzure: '#FFF8FA',
+  sky: '#FDEFEF', skyTop: '#FCE8EC', skyBottom: '#FFF6F5',
+  surface: '#FFFFFF', surfaceRaised: '#FFFDFE', surfaceSunken: '#FBE9EE',
+  hairline: '#F3D9E0', hairlineStrong: '#EBC3CF', hairlineSoft: '#FCEEF2',
+  music: '#9C8FD9', musicDeep: '#7C6DC4', musicSoft: '#F0EDFB',
+  brass: '#E3A8B9', brassSoft: '#FCEEF2',
+  wizz: '#F2A488', wizzSoft: '#FDEEE7',
+  favoriteSoft: '#FCEFD8', favoriteBorder: '#E8B9C9', favoriteText: '#A85B77',
+});
+
+const douceurDark = skinFrom(darkPalette, {
+  azure: '#E39BB2', azureDeep: '#D383A0', azurePress: '#C06C8A', azureSoft: 'rgba(227,155,178,0.18)', azureHalo: 'rgba(227,155,178,0.24)',
+  ink: '#F6E9EE', inkSoft: '#C9AFBC', inkFaint: '#8F7684',
+  sky: '#241621', skyTop: '#2B1A28', skyBottom: '#180F17',
+  surface: '#2E1C29', surfaceRaised: '#382332', surfaceSunken: '#150D13',
+  hairline: '#3D2A35', hairlineStrong: '#4E3745', hairlineSoft: '#301F2B',
+  music: '#B6A8E8', musicDeep: '#9384CE', musicSoft: 'rgba(182,168,232,0.16)',
+  brass: '#E8BFCE', brassSoft: 'rgba(232,191,206,0.16)',
+  wizz: '#F0B39B', wizzSoft: 'rgba(240,179,155,0.16)',
+  favoriteSoft: 'rgba(232,191,206,0.18)', favoriteBorder: '#E8BFCE', favoriteText: '#F3D6E1',
+});
+
+const sportLight = skinFrom(lightPalette, {
+  azure: '#FF5A36', azureDeep: '#D9431F', azurePress: '#B93816', azureSoft: '#FFE4DA', azureHalo: 'rgba(255,90,54,0.16)',
+  ink: '#12181A', inkSoft: '#485257', inkFaint: '#84909A', inkOnAzure: '#FFFFFF',
+  sky: '#F5F7F8', skyTop: '#EEF1F3', skyBottom: '#FBFCFD',
+  surface: '#FFFFFF', surfaceRaised: '#FFFFFF', surfaceSunken: '#ECEFF1',
+  hairline: '#E2E7E9', hairlineStrong: '#CFD7DA', hairlineSoft: '#EEF1F3',
+  music: '#00A9B7', musicDeep: '#00838E', musicSoft: '#DEF6F8',
+  brass: '#F0A400', brassSoft: '#FEF2D9',
+  wizz: '#FF5A36', wizzSoft: '#FFE4DA',
+});
+
+const sportDark = skinFrom(darkPalette, {
+  azure: '#FF6A3D', azureDeep: '#FF8557', azurePress: '#E85A2E', azureSoft: 'rgba(255,106,61,0.18)', azureHalo: 'rgba(255,106,61,0.26)',
+  ink: '#F2F5F6', inkSoft: '#AEB8BC', inkFaint: '#727C80',
+  sky: '#0B0E10', skyTop: '#111517', skyBottom: '#050607',
+  surface: '#14181B', surfaceRaised: '#1B2023', surfaceSunken: '#08090A',
+  hairline: '#242A2D', hairlineStrong: '#333B3F', hairlineSoft: '#1D2124',
+  music: '#28E1E8', musicDeep: '#1CB8BF', musicSoft: 'rgba(40,225,232,0.16)',
+  brass: '#FFC24D', brassSoft: 'rgba(255,194,77,0.16)',
+  wizz: '#FF8557', wizzSoft: 'rgba(255,133,87,0.18)',
+});
+
+const auroraLight = skinFrom(lightPalette, {
+  azure: '#7C5CFF', azureDeep: '#5F3FE0', azurePress: '#4C2FC4', azureSoft: '#EDE7FF', azureHalo: 'rgba(124,92,255,0.16)',
+  ink: '#1D1B3A', inkSoft: '#4E4B75', inkFaint: '#8B87AD', inkOnAzure: '#FFFFFF',
+  sky: '#F5F3FF', skyTop: '#EEEAFC', skyBottom: '#FBFAFF',
+  surface: '#FFFFFF', surfaceRaised: '#FFFFFF', surfaceSunken: '#EFEAFC',
+  hairline: '#E4DFF7', hairlineStrong: '#D3CBF2', hairlineSoft: '#F1EDFC',
+  music: '#33D6C0', musicDeep: '#22AE9C', musicSoft: '#E1F9F5',
+  brass: '#C9A0FF', brassSoft: '#F3E9FF',
+  wizz: '#FF7CC8', wizzSoft: '#FFE7F4',
+});
+
+const auroraDark = skinFrom(darkPalette, {
+  azure: '#9B82FF', azureDeep: '#8468F0', azurePress: '#6E51DE', azureSoft: 'rgba(155,130,255,0.18)', azureHalo: 'rgba(155,130,255,0.26)',
+  ink: '#F1EEFF', inkSoft: '#BDB6E6', inkFaint: '#7B76A3',
+  sky: '#0D0B1F', skyTop: '#141127', skyBottom: '#070613',
+  surface: '#171433', surfaceRaised: '#1E1A40', surfaceSunken: '#08071A',
+  hairline: '#2A2650', hairlineStrong: '#3A3468', hairlineSoft: '#1C1938',
+  music: '#3FF0D6', musicDeep: '#28C9B1', musicSoft: 'rgba(63,240,214,0.16)',
+  brass: '#D9B8FF', brassSoft: 'rgba(217,184,255,0.16)',
+  wizz: '#FF8FD4', wizzSoft: 'rgba(255,143,212,0.18)',
+});
+
+export const skinPalettes: Record<ThemeSkin, { light: Palette; dark: Palette }> = {
+  classic: { light: lightPalette, dark: darkPalette },
+  pro: { light: proLight, dark: proDark },
+  douceur: { light: douceurLight, dark: douceurDark },
+  sport: { light: sportLight, dark: sportDark },
+  aurora: { light: auroraLight, dark: auroraDark },
+};
