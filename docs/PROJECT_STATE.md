@@ -47,7 +47,10 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Last.fm now-playing sync is active (`profiles.lastfm_username`, server-side, not per-device).
 - Account export and account deletion (password reauthentication, exact confirmation, hard-scoped Neon deletion).
 - Real sign-out (not just account deletion): "Se déconnecter" on the profile edit screen, session-only, local E2EE keys untouched. Commit `2fe8f51`.
-- Typing indicator ("écrit…") on direct conversations: ephemeral `typing:update` socket event, metadata-only (never persisted, never logged), membership/block-checked and rate-limited like the other message events. Client debounces on composer input and self-clears after 8s if a stop ping is lost. Groups do not have it yet. See `docs/VISION_ROADMAP_2027.md` for the rest of the prioritized feature backlog.
+- Typing indicator ("écrit…") on direct **and group** conversations: ephemeral `typing:update` socket event, metadata-only (never persisted, never logged), membership/block-checked and rate-limited like the other message events. Client debounces on composer input and self-clears after 8s if a stop ping is lost. The server side was already conversation-generic; groups now track per-sender typing state (several members can type at once) in `GroupEncryptedChat.tsx`.
+- "Vu à HH:MM": tapping the receipt line on your own last-read direct message toggles between "✓✓ Lu" and the exact `readAt` timestamp the server already returns on `message:receipt`. Realtime-only for now — reopening/reloading history does not backfill past `readAt` (would need a join in `listEncryptedMessages`, not done this session). Groups don't have read receipts UI at all yet (out of scope, no receipt state shown there today).
+
+See `docs/VISION_ROADMAP_2027.md` for the status of the rest of the 2027 backlog (features 3–13): none were implemented this session beyond 1–2 above — see that document for why, ordered by risk/effort.
 
 ## Dedicated backend only
 

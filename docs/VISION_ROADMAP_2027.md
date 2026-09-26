@@ -18,7 +18,17 @@ Chaque idée : mécanisme concret → pourquoi c'est différenciant → impact/e
 
 ## Fort impact / faible effort
 
-### 1. Indicateur de frappe — **implémenté cette session**
+## Statut d'implémentation (session du 2026-09-26)
+
+Fait cette session : #1 (groupes) et #2. Reportées : #3 à #13 — voir la
+raison sous chaque idée. Aucune n'a été bâclée : le budget de la session a
+été concentré sur les deux items les plus sûrs/à plus fort ratio
+valeur/risque plutôt que de livrer 13 features partielles ou cassées.
+Priorité pour la prochaine session : #3 (K-Tone, effort faible, zéro
+risque sécu) puis #6 (stickers groupe, réutilise le pipeline media
+existant), avant d'attaquer le natif (#5) ou LiveKit (#8).
+
+### 1. Indicateur de frappe — **implémenté cette session (DM + groupes)**
 **Mécanisme** : côté client, chaque frappe dans le composer déclenche un event
 socket `typing:update {conversationId, isTyping}` débouncé (envoi à la première
 frappe, `isTyping:false` auto après 3s d'inactivité ou à l'envoi). Le serveur
@@ -33,7 +43,7 @@ avec le narratif "K-ssenger ne peut rien lire", contrairement à WhatsApp/Meta
 qui pourrait techniquement journaliser ce méta-signal.
 **Statut** : DM fait, groupes pas encore (diffusion à N users au lieu d'1).
 
-### 2. "Vu à HH:MM" au lieu de simples doubles-coches
+### 2. "Vu à HH:MM" au lieu de simples doubles-coches — **implémenté cette session (realtime seulement)**
 **Mécanisme** : la table `receiptStore` a déjà `read_at` en timestamp exact —
 il ne manque que l'affichage. Sur long-press ou tap du dernier message envoyé,
 afficher "Vu à 14:32" au lieu de la simple coche bleue. Zéro nouvelle donnée
@@ -45,7 +55,12 @@ potes" plutôt qu'un outil pro, assumer la transparence horaire colle au vibe
 MSN ("Untel a lu à...") sans être intrusif puisque déjà opt-in via
 `privacy_settings.read_receipts`.
 
-### 3. Son/vibration custom par contact ("K-Tone")
+### 3. Son/vibration custom par contact ("K-Tone") — **reporté, prochaine priorité**
+Raison : nécessite une migration Neon (`contacts.custom_sound_id`) et un
+changement de `soundKit.ts` ; pas fait faute de budget de session restant,
+pas pour une raison de risque — c'est l'item non fait le plus sûr à livrer
+en premier la prochaine fois.
+
 **Mécanisme** : ajouter `contacts.custom_sound_id` (nullable), un picker dans
 l'écran profil du contact réutilisant `assets/sounds` existants + upload d'un
 son court (<3s, même pipeline que la media privée). `soundKit.ts` choisit le
@@ -56,7 +71,9 @@ mais pas par ami individuel ; WhatsApp n'a aucune personnalisation sonore par
 contact. Renforce le narratif "chaque pote a sa signature" plutôt qu'un flux
 homogène.
 
-### 4. "Vu récemment" sur K-Map au lieu du point live seul
+### 4. "Vu récemment" sur K-Map au lieu du point live seul — **reporté**
+Raison : pas fait faute de budget de session ; effort réel faible (juste du rendu sur un snapshot déjà en base), donc bon candidat pour une prochaine petite session après #3.
+
 **Mécanisme** : K-Map est déjà foreground-only par design (invariant sécu). Au
 lieu de faire disparaître le pion dès que l'app passe en arrière-plan,
 persister la dernière position connue + timestamp, et l'afficher grisée avec
@@ -73,7 +90,9 @@ la fraîcheur des données.
 
 ## Fort impact / effort moyen
 
-### 5. Widget écran d'accueil (roadmap #4)
+### 5. Widget écran d'accueil (roadmap #4) — **reporté, hors scope de cette session**
+Raison : nécessite du code natif Android (`AppWidgetProvider`) / iOS (`WidgetKit`) via config plugin Expo, au-delà de ce qui est vérifiable proprement sans build natif réel ; à traiter dans une session dédiée.
+
 **Mécanisme** : module natif Expo (config plugin + widget Android
 `AppWidgetProvider` / iOS `WidgetKit`) affichant tête d'un pote favori +
 now-playing Last.fm (déjà synchronisé serveur) + dernier Moment vu, rafraîchi
@@ -85,7 +104,9 @@ installs sur un seul widget) — matérialiser la présence d'un pote sur l'écr
 d'accueil au lieu de devoir ouvrir une app est un boucle virale prouvée, que
 Snap et Meta n'ont jamais réussi à répliquer avec le même effet nostalgique.
 
-### 6. Stickers/mèmes custom par groupe
+### 6. Stickers/mèmes custom par groupe — **reporté**
+Raison : pas fait faute de budget ; réutilise le pipeline media privé déjà en place, bon candidat pour la session suivante après #3/#4.
+
 **Mécanisme** : table `group_stickers` (conversationId, uploaderId, mediaId),
 upload via le pipeline media privé déjà en place (autorisation-aware signed
 upload), limite 5-8 par groupe. `QUICK_REACTIONS` reste le set global fixe ;
@@ -95,7 +116,9 @@ tray des stickers maison de ce groupe précis.
 "boost" ou une gestion d'admin lourde ; ici c'est 1 tap, sans rôle ni
 permission, cohérent avec le refus explicite d'un "Discord complet".
 
-### 7. "K-Rewind" — digest hebdo entre potes
+### 7. "K-Rewind" — digest hebdo entre potes — **reporté, arbitrage confidentialité à trancher par Kenams**
+Raison : arbitrage obligatoire (calcul client-only vs remontée serveur) noté dans ce document lui-même ; non implémenté par prudence plutôt que de décider unilatéralement de casser l'invariant E2EE.
+
 **Mécanisme** : job cron serveur (dimanche soir) qui agrège par utilisateur :
 contact le plus wizzé/K-Pulsé de la semaine, mot ou emoji le plus utilisé dans
 ses groupes (comptage côté serveur sur le texte déjà déchiffré... **attention**
@@ -112,7 +135,9 @@ fait revenir — ici en hebdo et centré sur les relations plutôt que sur un
 produit à vendre (musique), aucune appli de messagerie ne fait ce rituel de
 retour actuellement.
 
-### 8. K-Rooms audio — salon vocal éphémère par groupe
+### 8. K-Rooms audio — salon vocal éphémère par groupe — **reporté**
+Raison : réutilise LiveKit existant mais nécessite un test audio multi-device réel pour valider proprement l'ouverture/fermeture de room ; pas vérifiable de façon fiable dans cette session.
+
 **Mécanisme** : réutilise directement l'infra LiveKit déjà branchée pour
 K-Live (transport prouvé), mais scope le salon à un groupe existant plutôt
 qu'à un broadcast public un-à-plusieurs. Un membre du groupe "ouvre" un salon
@@ -127,7 +152,9 @@ publique ni la modération de flux public que l'équipe a explicitement exclue.
 
 ## Idées audacieuses — mécaniques sociales pas déjà vues ailleurs
 
-### 9. "Présence fantôme" (Ghost Sync) — statut d'activité partagée en temps réel sans contenu
+### 9. "Présence fantôme" (Ghost Sync) — statut d'activité partagée en temps réel sans contenu — **reporté**
+Raison : mécanique de coïncidence serveur-side nouvelle, pas assez cadrée (fenêtre de tolérance, anti-abus) pour être livrée sans plus de design préalable.
+
 **Mécanisme** : au lieu d'un simple "en ligne/hors ligne", un canal de
 présence enrichi et strictement éphémère (jamais stocké, socket only, comme le
 typing indicator) : "en train d'écouter [morceau]", "en train de regarder ton
@@ -142,7 +169,9 @@ force un moment simultané imposé par le serveur — ici c'est organique,
 détecté, jamais forcé. C'est une mécanique de "synchronicité" qui n'existe
 nulle part sous cette forme.
 
-### 10. "Capsule à retardement" — message chiffré qui ne se déverrouille qu'à une condition sociale, pas temporelle
+### 10. "Capsule à retardement" — message chiffré qui ne se déverrouille qu'à une condition sociale, pas temporelle — **reporté**
+Raison : le verrou est UX (pas crypto) et doit être annoncé honnêtement dans l'app — demande un vrai passage design avant de coder l'écran, pas fait faute de budget de session.
+
 **Mécanisme** : un message ou média est envoyé chiffré avec une condition de
 déverrouillage définie par l'expéditeur au moment de l'envoi : "à débloquer
 quand vous serez tous les deux en ligne en même temps", "à débloquer dans X
@@ -158,7 +187,9 @@ c'est l'expéditeur qui choisit une condition sociale et personnalisée par
 message — aucune appli ne laisse composer sa propre règle de déverrouillage
 par message.
 
-### 11. "Chambre" de profil vivante et générative (MySpace 2.0, roadmap #6, poussé plus loin)
+### 11. "Chambre" de profil vivante et générative (MySpace 2.0, roadmap #6, poussé plus loin) — **reporté, hors scope de cette session**
+Raison : plus gros morceau visuel de la liste (Skia/Reanimated + passage design premium complet, pas un placeholder) ; à traiter dans une session dédiée avec vérification navigateur/app réelle.
+
 **Mécanisme** : au-delà d'un simple thème/couleur d'accent (déjà présent via
 `accentColor`), une page de profil "chambre" composée de blocs que le user
 arrange librement : dernier morceau écouté (déjà dispo via Last.fm), citation
@@ -173,7 +204,9 @@ personnalisation comme expression de soi — n'a jamais été repris sérieuseme
 depuis. Ici, contrairement à MySpace, le guestbook reste strictement
 ami-à-ami donc pas de mur public à modérer.
 
-### 12. "Écho" — reformulation IA optionnelle d'un message avant envoi, jamais du contenu qui transite en clair
+### 12. "Écho" — reformulation IA optionnelle d'un message avant envoi, jamais du contenu qui transite en clair — **reporté, arbitrage confidentialité à trancher par Kenams**
+Raison : arbitrage opt-in IA tiers explicitement noté dans ce document ; non implémenté par prudence plutôt que d'activer sans confirmation explicite de Kenams sur le wording/consentement exact de la fuite de confidentialité que ça implique.
+
 **Mécanisme** : bouton optionnel "reformuler" dans le composer qui appelle un
 LLM (Claude API) **avant chiffrement** — donc le texte en clair ne quitte
 l'appareil que vers l'API IA (opt-in explicite, désactivable), jamais vers le
@@ -188,7 +221,9 @@ groupe entier — aucune appli E2EE grand public ne propose une reformulation
 pré-chiffrement avec ce niveau de transparence sur la fuite de confidentialité
 que ça implique.
 
-### 13. Statuts éphémères 24h amis-only, chiffrés ("K-Statut")
+### 13. Statuts éphémères 24h amis-only, chiffrés ("K-Statut") — **reporté**
+Raison : demande une nouvelle table avec purge TTL serveur (cron/`expires_at`) et un écran dédié complet (chiffrement + design premium) — plus gros morceau que #3/#4/#6, à prioriser après ceux-ci.
+
 **Mécanisme** : contenu chiffré comme un Moment classique mais avec TTL 24h
 côté serveur (purge automatique, pas juste un flag de masquage côté client),
 visible uniquement aux contacts acceptés, défilement chronologique simple
