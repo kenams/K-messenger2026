@@ -40,7 +40,6 @@ import {
 } from '../../lib/musicNowPlaying';
 
 const AVATAR_MAX_BYTES = 10 * 1024 * 1024;
-const IMAGE_MIMES = new Set<SupportedMediaMime>(['image/jpeg', 'image/png', 'image/webp']);
 
 function normalizeUsername(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 32);
@@ -61,11 +60,17 @@ function isHttpsAvatarUrl(value: string | null | undefined): value is string {
   return !!value && /^https:\/\//i.test(value);
 }
 
-function mimeFromExtension(uri: string): SupportedMediaMime | null {
-  const clean = uri.toLowerCase().split('?')[0];
-  if (clean.endsWith('.png')) return 'image/png';
-  if (clean.endsWith('.webp')) return 'image/webp';
-  if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) return 'image/jpeg';
+/** Magic-byte signatures for the 3 image formats we accept as an avatar. Checking the
+ * real leading bytes (not just a caller-reported label) is what makes this a safe
+ * fail-closed default instead of trusting an absent/unverified Content-Type. */
+function sniffImageMimeFromBytes(bytes: Uint8Array): SupportedMediaMime | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) return 'image/webp';
   return null;
 }
 
@@ -74,24 +79,23 @@ function mimeFromExtension(uri: string): SupportedMediaMime | null {
  * is not always trustworthy: web `blob:` URIs and some Android `content://`
  * providers carry no file extension and no (or an unsupported, e.g. HEIC)
  * `mimeType`. That used to hard-block the whole upload with "format non
- * supporté" even though the picked file was a perfectly normal photo. Sniff
- * the real bytes (the browser/OS-reported Blob `type`) before giving up.
+ * supporté" even though the picked file was a perfectly normal photo — but a
+ * caller-reported label (extension, asset.mimeType, HTTP Content-Type) can
+ * also be spoofed, so none of those alone are enough to safely accept a file.
+ * This always sniffs the actual leading bytes and enforces AVATAR_MAX_BYTES
+ * against the real payload size (asset.fileSize is frequently absent for the
+ * same blob:/content:// sources above) — returns null (reject) rather than
+ * ever defaulting to "assume it's a JPEG".
  */
 async function inferAvatarMime(asset: ImagePicker.ImagePickerAsset): Promise<SupportedMediaMime | null> {
-  const normalized = asset.mimeType?.toLowerCase();
-  if (normalized && IMAGE_MIMES.has(normalized as SupportedMediaMime)) return normalized as SupportedMediaMime;
-  const fromExt = mimeFromExtension(asset.uri);
-  if (fromExt) return fromExt;
   try {
     const response = await fetch(asset.uri);
-    const blobType = response.headers.get('content-type')?.toLowerCase().split(';')[0]?.trim();
-    if (blobType && IMAGE_MIMES.has(blobType as SupportedMediaMime)) return blobType as SupportedMediaMime;
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > AVATAR_MAX_BYTES) return null;
+    return sniffImageMimeFromBytes(new Uint8Array(buffer));
   } catch {
-    // fall through to the safe default below
+    return null;
   }
-  // Still image-only (the picker enforces that): default to JPEG rather than
-  // refusing an otherwise valid photo just because metadata was missing.
-  return 'image/jpeg';
 }
 
 export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyProfile; onSaved: () => Promise<void>; onBack: () => void }) {
