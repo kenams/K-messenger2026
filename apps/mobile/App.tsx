@@ -416,6 +416,78 @@ type DesktopShellProps = {
   onProfileChanged: () => Promise<void>;
 };
 
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 360;
+const SIDEBAR_WIDTH_STORAGE_KEY = 'kssenger.desktop.sidebarWidth';
+
+function loadStoredSidebarWidth(): number {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH;
+  try {
+    const raw = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    const parsed = raw ? parseInt(raw, 10) : NaN;
+    if (!Number.isFinite(parsed)) return SIDEBAR_DEFAULT_WIDTH;
+    return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, parsed));
+  } catch {
+    return SIDEBAR_DEFAULT_WIDTH;
+  }
+}
+
+function persistSidebarWidth(width: number) {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(width)));
+  } catch {
+    // storage unavailable (private mode, quota) — width just won't persist
+  }
+}
+
+/** Drag handle between the buddy-list sidebar and the conversation pane.
+ * Mouse-only (desktop web): mousedown on the handle starts tracking window
+ * mousemove/mouseup so the drag keeps working even if the pointer leaves the
+ * thin handle strip. Width is clamped to [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH]. */
+function SidebarResizeHandle({ onResize, onResizeEnd }: { onResize: (deltaX: number) => void; onResizeEnd: () => void }) {
+  const { styles } = useAppStyles();
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    if (!active || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    let lastX: number | null = null;
+    const handleMove = (e: MouseEvent) => {
+      if (lastX === null) { lastX = e.clientX; return; }
+      const deltaX = e.clientX - lastX;
+      lastX = e.clientX;
+      onResize(deltaX);
+    };
+    const handleUp = () => { setActive(false); onResizeEnd(); };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  return (
+    <View
+      testID="desktop-sidebar-resize-handle"
+      accessibilityRole="none"
+      style={[styles.sidebarResizeHandle, active && styles.sidebarResizeHandleActive, Platform.OS === 'web' ? ({ cursor: 'col-resize' } as any) : null]}
+      // @ts-expect-error web-only DOM mouse handler, harmless no-op on native
+      onMouseDown={(e: any) => { e.preventDefault?.(); setActive(true); }}
+    >
+      <View style={[styles.sidebarResizeGrip, active && styles.sidebarResizeGripActive]} />
+    </View>
+  );
+}
+
 const DESKTOP_NAV_ITEMS: { tab: TabName; icon: string; label: string }[] = [
   { tab: 'contacts', icon: '👥', label: 'Contacts' },
   { tab: 'chats', icon: '💬', label: 'Chats' },
@@ -441,6 +513,16 @@ function DesktopShell(props: DesktopShellProps) {
   } = props;
   const { styles, colors } = useAppStyles();
   const { scheme } = useTheme();
+  const [sidebarWidth, setSidebarWidth] = useState(loadStoredSidebarWidth);
+  const sidebarWidthRef = React.useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
+
+  const handleSidebarResize = useCallback((deltaX: number) => {
+    setSidebarWidth((prev) => Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, prev + deltaX)));
+  }, []);
+  const handleSidebarResizeEnd = useCallback(() => {
+    persistSidebarWidth(sidebarWidthRef.current);
+  }, []);
 
   const overlay: 'editProfile' | 'accountData' | 'privacy' | 'groups' | 'live' | null =
     liveScreen ? 'live'
@@ -537,10 +619,13 @@ function DesktopShell(props: DesktopShellProps) {
           )}
         </View>
         {showBuddyList && (
-          <View style={styles.sidebarPane}>
-            <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />
-            <MsnContactsScreen onOpen={setSelected} />
-          </View>
+          <>
+            <View style={[styles.sidebarPane, { width: sidebarWidth }]}>
+              <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />
+              <MsnContactsScreen onOpen={setSelected} />
+            </View>
+            <SidebarResizeHandle onResize={handleSidebarResize} onResizeEnd={handleSidebarResizeEnd} />
+          </>
         )}
         <View style={styles.mainPane}>{mainContent}</View>
       </View>
@@ -820,10 +905,18 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   navRailLiveText: { color: palette.white, fontWeight: '900', fontSize: 10.5 },
 
   sidebarPane: {
-    width: 360, borderRightWidth: 1, borderRightColor: palette.hairline,
+    borderRightWidth: 1, borderRightColor: palette.hairline,
     backgroundColor: palette.sky,
   },
   mainPane: { flex: 1, backgroundColor: palette.surface },
+
+  sidebarResizeHandle: {
+    width: 6, marginHorizontal: -3, zIndex: 2, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  sidebarResizeHandleActive: { backgroundColor: palette.azure + '22' },
+  sidebarResizeGrip: { width: 3, height: 36, borderRadius: radius.pill, backgroundColor: palette.hairlineStrong },
+  sidebarResizeGripActive: { backgroundColor: palette.azure, height: 56 },
 
   emptyConvo: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
   emptyConvoIcon: { fontSize: 44, marginBottom: spacing.md },
