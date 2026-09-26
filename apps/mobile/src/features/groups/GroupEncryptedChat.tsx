@@ -445,7 +445,8 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
         mimeType,
         ...(composer.trim() ? { caption: composer.trim().slice(0, 500) } : {}),
       });
-    } catch {
+    } catch (err) {
+      console.error('[media] group pickAndSendMedia failed', err instanceof Error ? err.message : String(err));
       setNotice('Média non envoyé. Formats acceptés : JPG, PNG, WebP, MP4/MOV · 100 Mo max.');
     } finally {
       setSending(false);
@@ -460,7 +461,8 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
       const { mediaId } = await uploadLocalMedia({ uri: recording.uri, mimeType: VOICE_MIME, purpose: 'chat', conversationId: groupId });
       setSending(false);
       await sendContent({ v: 1, type: 'voice', mediaId, mimeType: VOICE_MIME, durationMs: recording.durationMs });
-    } catch {
+    } catch (err) {
+      console.error('[voice] group sendVoiceNote failed', err instanceof Error ? err.message : String(err));
       setNotice('Message vocal non envoyé.');
     } finally {
       setSending(false);

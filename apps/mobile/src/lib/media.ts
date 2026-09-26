@@ -1,4 +1,5 @@
-import { emitAck, getRealtimeSocket } from './realtime';
+import { emitAck, getRealtimeSocket, waitForSocketReady } from './realtime';
+import type { Socket } from 'socket.io-client';
 
 export type MediaPurpose = 'avatar' | 'chat' | 'kfeed' | 'moment';
 export type SupportedMediaMime = 'image/jpeg' | 'image/png' | 'image/webp' | 'video/mp4' | 'video/quicktime' | 'audio/m4a' | 'audio/webm';
@@ -68,6 +69,32 @@ function assertSignedMediaRequest(
   }
 }
 
+// Same disconnect-window issue documented in DirectConversationScreen's
+// message:send / message:delete: this app's realtime connection cycles
+// under load, and emitAck rejects instantly (not after waiting) whenever a
+// request happens to land mid-reconnect (see realtime.ts). Voice notes and
+// picked media go through this exact window every time — recording/picking
+// takes a few seconds, which is plenty of time for a cycle to land right as
+// prepare/complete fires. message:send and message:delete already retry
+// against the real 'connect' event instead of a blind delay; media uploads
+// never got the same treatment, so every "recording works but never sends"
+// report traces back to prepare-upload or complete-upload eating a
+// REALTIME_DISCONNECTED/REALTIME_TIMEOUT with no retry and no visible error.
+async function emitAckWithRetry<TResponse>(socket: Socket, event: string, payload: unknown): Promise<TResponse> {
+  const maxAttempts = 4;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (attempt > 0) await waitForSocketReady(socket, 2500);
+    try {
+      return await emitAck<TResponse>(socket, event, payload);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  console.error('[media] emitAck exhausted retries', { event, error: lastError instanceof Error ? lastError.message : String(lastError) });
+  throw lastError instanceof Error ? lastError : new Error('KSSENGER_MEDIA_ACK_UNAVAILABLE');
+}
+
 export async function uploadLocalMedia(input: UploadLocalMediaInput): Promise<{ mediaId: string }> {
   assertLocalMediaInput(input);
 
@@ -84,7 +111,7 @@ export async function uploadLocalMedia(input: UploadLocalMediaInput): Promise<{ 
   }
 
   const socket = await getRealtimeSocket();
-  const prepared = await emitAck<PreparedUpload>(socket, 'media:prepare-upload', {
+  const prepared = await emitAckWithRetry<PreparedUpload>(socket, 'media:prepare-upload', {
     purpose: input.purpose,
     mimeType: input.mimeType,
     byteSize: actualByteSize,
@@ -100,7 +127,7 @@ export async function uploadLocalMedia(input: UploadLocalMediaInput): Promise<{ 
   });
   if (!uploaded.ok) throw new Error(`KSSENGER_MEDIA_UPLOAD_${uploaded.status}`);
 
-  const completed = await emitAck<CompletedUpload>(socket, 'media:complete-upload', { mediaId: prepared.mediaId });
+  const completed = await emitAckWithRetry<CompletedUpload>(socket, 'media:complete-upload', { mediaId: prepared.mediaId });
   if (!completed.ok || completed.status !== 'ready') throw new Error(completed.error ?? 'KSSENGER_MEDIA_VERIFY_FAILED');
   return { mediaId: prepared.mediaId };
 }

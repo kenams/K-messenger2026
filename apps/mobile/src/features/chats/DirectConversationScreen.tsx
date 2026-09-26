@@ -635,7 +635,8 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType, byteSize: asset.fileSize ?? undefined, purpose: 'chat', conversationId });
       setSending(false);
       await sendContent({ v: 1, type: 'media', mediaId, mimeType, ...(composer.trim() ? { caption: composer.trim().slice(0, 500) } : {}) });
-    } catch {
+    } catch (err) {
+      console.error('[media] pickAndSendMedia failed', err instanceof Error ? err.message : String(err));
       setNotice('Média non envoyé. Formats acceptés : JPG, PNG, WebP, MP4/MOV · 100 Mo max.');
     } finally { setSending(false); }
   };
@@ -648,7 +649,8 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       const { mediaId } = await uploadLocalMedia({ uri: recording.uri, mimeType: VOICE_MIME, purpose: 'chat', conversationId });
       setSending(false);
       await sendContent({ v: 1, type: 'voice', mediaId, mimeType: VOICE_MIME, durationMs: recording.durationMs });
-    } catch {
+    } catch (err) {
+      console.error('[voice] sendVoiceNote failed', err instanceof Error ? err.message : String(err));
       setNotice('Message vocal non envoyé.');
     } finally { setSending(false); }
   };
