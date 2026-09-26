@@ -28,6 +28,7 @@ import {
   receiptSchema,
   messageReactSchema,
   messageDeleteSchema,
+  typingSchema,
   wizzSchema,
 } from './validation.js';
 import { createOrGetDirectConversation } from './directConversationStore.js';
@@ -53,6 +54,7 @@ import {
   messageLimiter,
   presenceLimiter,
   socialLimiter,
+  typingLimiter,
   wizzLimiter,
 } from './rateLimit.js';
 import { logger } from './logger.js';
@@ -506,6 +508,25 @@ io.on('connection', (socket) => {
       ack?.({ ok: true });
     } catch (error) {
       logger.warn('message_delete_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('typing:update', async (raw, ack) => {
+    try {
+      if (!typingLimiter.consume(`${userId}:typing`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = typingSchema.parse(raw);
+      await requireConversationMember(userId, request.conversationId);
+      await requireConversationNotBlocked(userId, request.conversationId);
+      // Metadata-only, ephemeral signal: never persisted, no message content involved.
+      socket.to(`conversation:${request.conversationId}`).emit('typing:update', {
+        conversationId: request.conversationId,
+        userId,
+        isTyping: request.isTyping,
+      });
+      ack?.({ ok: true });
+    } catch (error) {
+      logger.warn('typing_update_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });

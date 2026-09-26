@@ -252,9 +252,14 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const [showEmoji, setShowEmoji] = useState(false);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [recordingVoice, setRecordingVoice] = useState(false);
+  const [peerTyping, setPeerTyping] = useState(false);
   const deviceIdRef = useRef('');
   const conversationIdRef = useRef('');
   const keysRef = useRef<DirectKeys | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const typingSentRef = useRef(false);
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peerTypingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [e2eeActive, setE2eeActive] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const canSend = useMemo(
@@ -269,12 +274,14 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     let receiptHandler: ((receipt: { messageId?: string; state?: ReceiptState }) => void) | null = null;
     let reactionHandler: ((payload: { messageId?: string; reactions?: MessageReaction[] }) => void) | null = null;
     let deletedHandler: ((payload: { messageId?: string }) => void) | null = null;
+    let typingHandler: ((payload: { conversationId?: string; userId?: string; isTyping?: boolean }) => void) | null = null;
     let connectHandler: (() => void) | null = null;
     let disconnectHandler: (() => void) | null = null;
 
     void Promise.all([getRealtimeSocket(), getAuthenticatedUserId()]).then(async ([client, userId]) => {
       if (!active) return;
       clientRef = client;
+      socketRef.current = client;
       setSocket(client);
       setCurrentUserId(userId);
       deviceIdRef.current = await ensureChatDevice(userId);
@@ -398,16 +405,27 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
           ? { ...message, deletedAt: new Date().toISOString(), content: { v: 1, type: 'text', text: '' }, reactions: [] }
           : message));
       };
+      typingHandler = (payload) => {
+        if (payload.conversationId !== id || payload.userId !== contact.id) return;
+        if (peerTypingClearRef.current) { clearTimeout(peerTypingClearRef.current); peerTypingClearRef.current = null; }
+        setPeerTyping(!!payload.isTyping);
+        // Safety net: if a "stopped typing" ping is lost (backgrounded app,
+        // dropped packet), the indicator self-clears instead of sticking forever.
+        if (payload.isTyping) {
+          peerTypingClearRef.current = setTimeout(() => setPeerTyping(false), 8000);
+        }
+      };
       connectHandler = () => {
         if (!active) return;
         setNotice('Connexion rétablie · resynchronisation…');
         void syncConversation(true).then(() => { if (active) setNotice(''); }).catch(() => { if (active) setNotice('Connexion rétablie, resynchronisation à retenter.'); });
       };
-      disconnectHandler = () => { if (active) setNotice('Hors ligne · les messages partiront à la reconnexion.'); };
+      disconnectHandler = () => { if (active) { setNotice('Hors ligne · les messages partiront à la reconnexion.'); setPeerTyping(false); } };
       client.on('message:new', messageHandler);
       client.on('message:receipt', receiptHandler);
       client.on('message:reaction', reactionHandler);
       client.on('message:deleted', deletedHandler);
+      client.on('typing:update', typingHandler);
       client.on('connect', connectHandler);
       client.on('disconnect', disconnectHandler);
 
@@ -420,10 +438,36 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       if (clientRef && receiptHandler) clientRef.off('message:receipt', receiptHandler);
       if (clientRef && reactionHandler) clientRef.off('message:reaction', reactionHandler);
       if (clientRef && deletedHandler) clientRef.off('message:deleted', deletedHandler);
+      if (clientRef && typingHandler) clientRef.off('typing:update', typingHandler);
       if (clientRef && connectHandler) clientRef.off('connect', connectHandler);
       if (clientRef && disconnectHandler) clientRef.off('disconnect', disconnectHandler);
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      if (peerTypingClearRef.current) clearTimeout(peerTypingClearRef.current);
+      if (clientRef && typingSentRef.current && conversationIdRef.current) {
+        clientRef.emit('typing:update', { conversationId: conversationIdRef.current, isTyping: false });
+      }
     };
   }, [contact.id]);
+
+  const notifyTyping = (isTyping: boolean) => {
+    const client = socketRef.current;
+    const id = conversationIdRef.current;
+    if (!client || !id) return;
+    if (isTyping === typingSentRef.current) return;
+    typingSentRef.current = isTyping;
+    client.emit('typing:update', { conversationId: id, isTyping });
+  };
+
+  const handleComposerChange = (text: string) => {
+    setComposer(text);
+    if (typingStopTimerRef.current) { clearTimeout(typingStopTimerRef.current); typingStopTimerRef.current = null; }
+    if (text.trim()) {
+      notifyTyping(true);
+      typingStopTimerRef.current = setTimeout(() => notifyTyping(false), 3000);
+    } else {
+      notifyTyping(false);
+    }
+  };
 
   const sendKPulse = async () => {
     if (!socket) return;
@@ -465,6 +509,8 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       }
       if (!response!.ok || !response!.id) throw new Error(response!.error ?? 'MESSAGE_SEND_FAILED');
       setComposer('');
+      if (typingStopTimerRef.current) { clearTimeout(typingStopTimerRef.current); typingStopTimerRef.current = null; }
+      notifyTyping(false);
       setHistory((items) => items.some((item) => item.id === response!.id) ? items : [...items, {
         id: response!.id!, clientMessageId, senderUserId: currentUserId, senderDeviceId: deviceIdRef.current,
         createdAt, algorithm, ciphertext, conversationId, content, reactions: [],
@@ -593,7 +639,12 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       <View style={[styles.header, contact.accentColor ? { borderBottomColor: accentOf(contact.accentColor), borderBottomWidth: 2 } : null]}>
         <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
         <View style={[styles.avatar, contact.accentColor ? { backgroundColor: accentOf(contact.accentColor) } : null]}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
-        <View style={styles.flex}><Text style={[styles.name, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]}>{contact.nickname}</Text><Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text></View>
+        <View style={styles.flex}>
+          <Text style={[styles.name, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]}>{contact.nickname}</Text>
+          {peerTyping
+            ? <Text style={[styles.sub, styles.typingSub]}>écrit…</Text>
+            : <Text style={styles.sub}>{contact.handle} · {presenceLabel[contact.presence] ?? contact.presence}</Text>}
+        </View>
         <TouchableOpacity style={styles.pulse} onPress={() => void sendKPulse()} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}><Text style={styles.pulseText}>⚡</Text></TouchableOpacity>
       </View>
       <View style={styles.security}><Text style={styles.securityText}>{e2eeActive ? '🔒 Chiffré de bout en bout — même K-ssenger ne peut pas lire ces messages.' : '🔒 Connexion sécurisée (TLS). Le chiffrement de bout en bout s’active dès que les deux appareils l’ont initialisé.'}</Text></View>
@@ -652,7 +703,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
             <TextInput
               style={styles.input}
               value={composer}
-              onChangeText={setComposer}
+              onChangeText={handleComposerChange}
               placeholder="Écrire un message…"
               placeholderTextColor={colors.inkFaint}
               maxLength={12000}
@@ -682,6 +733,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   back: { fontSize: 30, lineHeight: 30, color: palette.azureDeep, fontWeight: '900', width: 30, textAlign: 'center' },
   avatar: { width: 44, height: 44, borderRadius: radius.sm, backgroundColor: palette.azureSoft, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: palette.azureDeep, fontSize: 17, fontWeight: '900' },
   name: { ...typo.name }, sub: { ...typo.micro, color: palette.inkSoft, marginTop: 2 },
+  typingSub: { color: palette.azureDeep, fontWeight: '700' },
   pulse: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: palette.wizzSoft, borderWidth: 1, borderColor: palette.wizz, alignItems: 'center', justifyContent: 'center' }, pulseText: { fontSize: 20 },
   security: { backgroundColor: palette.surfaceSunken, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: palette.hairline }, securityText: { ...typo.micro, color: palette.inkSoft, textAlign: 'center', lineHeight: 14 },
   body: { flex: 1 }, content: { padding: spacing.lg, paddingBottom: spacing.xl, maxWidth: layout.maxReading, alignSelf: 'center', width: '100%' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, notice: { color: palette.azureDeep, fontWeight: '800', marginBottom: spacing.sm, textAlign: 'center', fontSize: 12 },

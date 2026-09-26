@@ -43,6 +43,11 @@ export const conversationJoinSchema = z.object({
   conversationId: z.string().uuid(),
 }).strict();
 
+export const typingSchema = z.object({
+  conversationId: z.string().uuid(),
+  isTyping: z.boolean(),
+}).strict();
+
 export const groupCreateSchema = z.object({
   title: z.string().trim().min(1).max(80),
   memberIds: z.array(z.string().uuid()).min(1).max(49)

@@ -52,3 +52,6 @@ export const presenceLimiter = new FixedWindowRateLimiter(30, 60_000);
 export const joinLimiter = new FixedWindowRateLimiter(60, 60_000);
 export const socialLimiter = new FixedWindowRateLimiter(30, 60_000);
 export const wizzLimiter = new FixedWindowRateLimiter(6, 60_000);
+// Typing pings are transient UI signals, not messages: generous but capped so a
+// misbehaving client can't spam a conversation room.
+export const typingLimiter = new FixedWindowRateLimiter(60, 60_000);
