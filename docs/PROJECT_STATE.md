@@ -1,6 +1,16 @@
 # K-ssenger Project State
 
-Last verified: 2026-09-23
+Last verified: 2026-09-26
+
+## Latest APK (test terrain)
+
+- Built locally 2026-09-26 (EAS Android free-tier quota exhausted, resets 2026-10-01) at `C:\kssenger` (short path, per the CMake path-length trap below), `apps/mobile/android`, `./gradlew.bat assembleRelease`.
+- Commit included: `c1cbea893d40bd4a42eadaae51135c46fb2cbca8` (HEAD of `feature/device-linking-scaffold` at build time) — includes typing indicator, K-Tone, group stickers, K-Statut, K-Map, voice notes fix, K-Pulse fix, music+controls, desktop web layout, themes (Anthracite), avatar presets.
+- `versionCode` bumped to 6 in `apps/mobile/app.json` (not committed to the tracked repo from this session's build tree — only built locally).
+- **Signed with the local debug keystore** (`android/app/debug.keystore`), NOT the EAS remote release keystore used for prior distributed builds (last one 2026-09-07). Signature mismatch is certain — anyone with the old APK installed must uninstall it first or the install will fail/be rejected.
+- Published as a GitHub Release (public repo) for direct download:
+  `https://github.com/kenams/K-messenger2026/releases/download/kssenger-preview-20260926-2221/app-release.apk`
+- Not validated on a physical device this session (no device/emulator in this environment) — only confirmed `BUILD SUCCESSFUL`, gradle produced a valid signed APK. Physical-device smoke test (open without crash, login, DM, E2EE round-trip) is still owed — see Next steps.
 
 Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repository root is only a pointer.
 
