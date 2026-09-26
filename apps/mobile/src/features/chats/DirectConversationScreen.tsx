@@ -46,6 +46,7 @@ type ChatMessage = {
   ciphertext?: string;
   conversationId: string;
   receiptState?: ReceiptState;
+  readAt?: string | null;
   content?: ChatContent;
   reactions?: MessageReaction[];
   deletedAt?: string | null;
@@ -174,6 +175,7 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
   onDelete: () => void;
 }) {
   const { styles } = useThemedStyles();
+  const [showReadTime, setShowReadTime] = useState(false);
 
   if (message.deletedAt) {
     return (
@@ -196,7 +198,22 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
         {content.type === 'media' ? <ChatMedia content={content} />
           : content.type === 'voice' ? <VoiceMessageBubbleThemed content={content} mine={mine} />
           : <Text style={[big ? styles.bigEmoji : styles.bodyText, !big && mine && styles.bodyTextMine]}>{content.text}</Text>}
-        <Text style={[styles.messageMeta, mine && styles.messageMetaMine]}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
+        <Pressable
+          disabled={!(mine && message.receiptState === 'read' && message.readAt)}
+          onPress={() => setShowReadTime((v) => !v)}
+          accessibilityRole={mine && message.receiptState === 'read' && message.readAt ? 'button' : undefined}
+          accessibilityLabel={mine && message.readAt ? `Vu à ${new Date(message.readAt).toLocaleTimeString()}` : undefined}
+        >
+          <Text style={[styles.messageMeta, mine && styles.messageMetaMine]}>
+            {new Date(message.createdAt).toLocaleTimeString()}
+            {' '}
+            {mine && message.receiptState
+              ? (message.receiptState === 'read'
+                ? (showReadTime && message.readAt ? ` · Vu à ${new Date(message.readAt).toLocaleTimeString()}` : ' · ✓✓ Lu')
+                : ' · ✓ Reçu')
+              : ''}
+          </Text>
+        </Pressable>
       </Pressable>
 
       {summary.length > 0 && (
@@ -271,7 +288,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     let active = true;
     let clientRef: Socket | null = null;
     let messageHandler: ((message: ChatMessage) => void) | null = null;
-    let receiptHandler: ((receipt: { messageId?: string; state?: ReceiptState }) => void) | null = null;
+    let receiptHandler: ((receipt: { messageId?: string; state?: ReceiptState; readAt?: string | null }) => void) | null = null;
     let reactionHandler: ((payload: { messageId?: string; reactions?: MessageReaction[] }) => void) | null = null;
     let deletedHandler: ((payload: { messageId?: string }) => void) | null = null;
     let typingHandler: ((payload: { conversationId?: string; userId?: string; isTyping?: boolean }) => void) | null = null;
@@ -393,7 +410,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       };
       receiptHandler = (receipt) => {
         if (!receipt.messageId || !receipt.state) return;
-        setHistory((items) => items.map((message) => message.id === receipt.messageId ? { ...message, receiptState: receipt.state } : message));
+        setHistory((items) => items.map((message) => message.id === receipt.messageId ? { ...message, receiptState: receipt.state, readAt: receipt.readAt ?? message.readAt } : message));
       };
       reactionHandler = (payload) => {
         if (!payload.messageId) return;
