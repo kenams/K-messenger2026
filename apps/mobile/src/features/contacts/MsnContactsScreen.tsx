@@ -10,6 +10,7 @@ import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, u
 import { accentOf } from '../../theme/accent';
 import { clearContactAttention, getContactActivity, seedContactActivity, seedContactUnread, useAttentionTick, useContactAttention, wireContactAttention } from '../attention/contactAttention';
 import { onMessageReceivedFrom, playSound } from '../../lib/soundKit';
+import { KStatusStrip } from '../status/KStatusStrip';
 import {
   TONE_SOUND_OPTIONS,
   VIBRATION_PATTERN_OPTIONS,
@@ -635,6 +636,12 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
     <SkyBackground>
       <Animated.View style={[styles.fill, shakeStyle]}>
         <ScrollView style={styles.page} contentContainerStyle={styles.content}>
+          {!!currentUserId && (
+            <KStatusStrip
+              currentUserId={currentUserId}
+              nicknameByUserId={(userId) => contactsRef.current.find((c) => c.id === userId)?.nickname ?? 'K-ssenger'}
+            />
+          )}
           <View style={styles.toolbar}>
             <Text style={styles.searchIcon}>⌕</Text>
             <TextInput testID="contact-search" value={search} onChangeText={setSearch} placeholder="Rechercher un contact ou @pseudo" placeholderTextColor={colors.inkFaint} style={styles.search} autoCapitalize="none" />

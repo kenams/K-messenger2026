@@ -43,6 +43,8 @@ import {
 import { banGroupMember, setGroupMute, unbanGroupMember } from './groupModerationStore.js';
 import { registerGroupBanListHandler } from './groupModerationSocket.js';
 import { registerGroupStickerHandlers } from './groupStickerSocket.js';
+import { registerKStatusHandlers } from './kStatusSocket.js';
+import { purgeExpiredKStatuses } from './kStatusStore.js';
 import { registerMediaHandlers } from './mediaSocket.js';
 import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { registerDeviceLinkHandlers } from './deviceLinkSocket.js';
@@ -181,6 +183,13 @@ io.on('connection', (socket) => {
     socket,
     userId,
     consumeRateLimit: (action) => socialLimiter.consume(`${userId}:group:${action}`),
+  });
+
+  registerKStatusHandlers({
+    io,
+    socket,
+    userId,
+    consumeRateLimit: (action) => socialLimiter.consume(`${userId}:status:${action}`),
   });
 
   // CRITICAL FIX (2026-09-05): mediaSocket.ts's handlers (media:prepare-upload,
@@ -783,6 +792,14 @@ setInterval(() => {
   presenceLimiter.clearExpired();
   socialLimiter.clearExpired();
   wizzLimiter.clearExpired();
+}, 60_000).unref();
+
+// K-Statut TTL is a real deletion, not just a filtered read: hard-purge rows
+// past expires_at on the same cadence as the rate-limiter cleanup above.
+setInterval(() => {
+  void purgeExpiredKStatuses().catch((error) => {
+    logger.warn('k_status_purge_failed', { error: error instanceof Error ? error.message : 'unknown' });
+  });
 }, 60_000).unref();
 
 httpServer.listen(config.PORT, () => {

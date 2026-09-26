@@ -55,11 +55,14 @@ potes" plutôt qu'un outil pro, assumer la transparence horaire colle au vibe
 MSN ("Untel a lu à...") sans être intrusif puisque déjà opt-in via
 `privacy_settings.read_receipts`.
 
-### 3. Son/vibration custom par contact ("K-Tone") — **reporté, prochaine priorité**
-Raison : nécessite une migration Neon (`contacts.custom_sound_id`) et un
-changement de `soundKit.ts` ; pas fait faute de budget de session restant,
-pas pour une raison de risque — c'est l'item non fait le plus sûr à livrer
-en premier la prochaine fois.
+### 3. Son/vibration custom par contact ("K-Tone") — **implémenté (session du 2026-09-26)**
+Réalisé en client-only (pas de migration Neon, décision prise en cours de
+route : c'est cosmétique/non-sensible, donc `SecureStore`/`localStorage` par
+appareil suffit, cf. `apps/mobile/src/lib/kTone.ts`) — voir
+`docs/PROJECT_STATE.md` pour le détail. Écart vs l'idée initiale : pas de
+nouveaux sons enregistrés (4-6 tons courts) faute de pouvoir fabriquer des
+fichiers audio fiables cette session — réutilise les 3 sons existants
+(`send`/`receive`/`ping`) comme presets.
 
 **Mécanisme** : ajouter `contacts.custom_sound_id` (nullable), un picker dans
 l'écran profil du contact réutilisant `assets/sounds` existants + upload d'un
@@ -104,8 +107,10 @@ installs sur un seul widget) — matérialiser la présence d'un pote sur l'écr
 d'accueil au lieu de devoir ouvrir une app est un boucle virale prouvée, que
 Snap et Meta n'ont jamais réussi à répliquer avec le même effet nostalgique.
 
-### 6. Stickers/mèmes custom par groupe — **reporté**
-Raison : pas fait faute de budget ; réutilise le pipeline media privé déjà en place, bon candidat pour la session suivante après #3/#4.
+### 6. Stickers/mèmes custom par groupe — **implémenté (session du 2026-09-26)**
+Réalisé comme décrit ci-dessous, cap serveur à 8/groupe. Voir
+`docs/PROJECT_STATE.md` pour le détail (migration 0029, non appliquée en
+prod cette session faute de `DB_URL`).
 
 **Mécanisme** : table `group_stickers` (conversationId, uploaderId, mediaId),
 upload via le pipeline media privé déjà en place (autorisation-aware signed
@@ -221,8 +226,13 @@ groupe entier — aucune appli E2EE grand public ne propose une reformulation
 pré-chiffrement avec ce niveau de transparence sur la fuite de confidentialité
 que ça implique.
 
-### 13. Statuts éphémères 24h amis-only, chiffrés ("K-Statut") — **reporté**
-Raison : demande une nouvelle table avec purge TTL serveur (cron/`expires_at`) et un écran dédié complet (chiffrement + design premium) — plus gros morceau que #3/#4/#6, à prioriser après ceux-ci.
+### 13. Statuts éphémères 24h amis-only, chiffrés ("K-Statut") — **implémenté (session du 2026-09-26)**
+Réalisé avec le même schéma de wrap-par-destinataire que `group_keys`
+(`k_status` + `k_status_keys`, migration 0030). Purge TTL serveur réelle
+(hard-delete toutes les 60s, pas juste un filtre de lecture), en plus du
+filtre RLS `expires_at > now()`. Voir `docs/PROJECT_STATE.md` pour le détail
+et l'honnêteté sur les limites (contact ajouté après coup = ne peut pas
+lire rétroactivement, comme pour les clés de groupe).
 
 **Mécanisme** : contenu chiffré comme un Moment classique mais avec TTL 24h
 côté serveur (purge automatique, pas juste un flag de masquage côté client),

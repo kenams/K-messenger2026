@@ -112,6 +112,22 @@ export const groupStickerRemoveSchema = z.object({
   stickerId: z.string().uuid(),
 }).strict();
 
+export const statusPostSchema = z.object({
+  ciphertext: z.string().min(1).max(4000),
+  // {viewerUserId, wrappedKey, wrappedNonce, wrappedByPublicKey} per current
+  // accepted contact, wrapped client-side before this ever reaches the wire.
+  wrappedKeys: z.array(z.object({
+    viewerUserId: z.string().uuid(),
+    wrappedKey: z.string().min(1).max(4000),
+    wrappedNonce: z.string().min(1).max(4000),
+    wrappedByPublicKey: z.string().min(1).max(4000),
+  })).max(2000),
+}).strict();
+
+export const statusDeleteSchema = z.object({
+  statusId: z.string().uuid(),
+}).strict();
+
 export const wizzSchema = z.object({
   recipientId: z.string().uuid(),
   variant: z.enum(['classic', 'love', 'fire', 'troll']).default('classic'),
