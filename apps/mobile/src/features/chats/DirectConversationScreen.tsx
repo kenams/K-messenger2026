@@ -24,6 +24,8 @@ import {
   type MessageReaction,
 } from '../../lib/chatExtras';
 import { EmojiPanel } from './EmojiPanel';
+import { ComposerResizeHandle } from './ComposerResizeHandle';
+import { useResizableComposerHeight } from '../../lib/composerResize';
 import { VoiceComposerButton } from './VoiceComposerButton';
 import { VoiceMessageBubble } from './VoiceMessageBubble';
 import { VOICE_MIME, type VoiceRecordingResult } from '../../lib/voiceRecording';
@@ -279,6 +281,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const peerTypingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [e2eeActive, setE2eeActive] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const { height: composerHeight, handleResize: handleComposerResize, handleResizeEnd: handleComposerResizeEnd } = useResizableComposerHeight();
   const canSend = useMemo(
     () => !!socket && !!conversationId && !!currentUserId && !!deviceIdRef.current && !sending,
     [socket, conversationId, currentUserId, sending],
@@ -704,6 +707,15 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
 
       {showEmoji && <EmojiPanel onPick={(emoji) => setComposer((c) => (c + emoji).slice(0, 12000))} />}
 
+      <View style={styles.composerWrap}>
+        {Platform.OS === 'web' && !recordingVoice && (
+          <ComposerResizeHandle
+            onResize={handleComposerResize}
+            onResizeEnd={handleComposerResizeEnd}
+            accentColor={colors.azure}
+            gripColor={colors.hairlineStrong}
+          />
+        )}
       <View style={styles.composer}>
         {!recordingVoice && <TouchableOpacity disabled={!canSend} onPress={() => void pickAndSendMedia()} style={[styles.attach, !canSend && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo"><Text style={styles.attachText}>＋</Text></TouchableOpacity>}
         {!recordingVoice && <TouchableOpacity onPress={() => setShowEmoji((v) => !v)} accessibilityRole="button" accessibilityLabel="Ouvrir les emojis" style={[styles.attach, showEmoji && styles.attachActive]}><Text style={styles.attachText}>😊</Text></TouchableOpacity>}
@@ -718,7 +730,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         {!recordingVoice && (
           <>
             <TextInput
-              style={styles.input}
+              style={[styles.input, Platform.OS === 'web' ? { height: composerHeight, maxHeight: composerHeight } : null]}
               value={composer}
               onChangeText={handleComposerChange}
               placeholder="Écrire un message…"
@@ -737,6 +749,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
             <TouchableOpacity disabled={!composer.trim() || sending || !canSend} onPress={() => void sendMessage()} accessibilityRole="button" accessibilityLabel="Envoyer le message" style={[styles.send, (!composer.trim() || sending || !canSend) && styles.disabled]}>{sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendText}>➤</Text>}</TouchableOpacity>
           </>
         )}
+      </View>
       </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -786,6 +799,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline },
   quickBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   quickEmoji: { fontSize: 20 },
+  composerWrap: { backgroundColor: palette.surface },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, padding: spacing.sm + 2, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline },
   input: { flex: 1, maxHeight: 120, minHeight: 46, backgroundColor: palette.surfaceSunken, borderWidth: 1.5, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink, fontSize: 15, fontWeight: '500', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : null) },
   send: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azure, ...elevation.hairline },

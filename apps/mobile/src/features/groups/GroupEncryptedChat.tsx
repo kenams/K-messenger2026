@@ -10,6 +10,8 @@ import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/ch
 import { QUICK_REACTIONS, isBigEmoji, isSendKey, myReaction, summarizeReactions, type MessageReaction } from '../../lib/chatExtras';
 import { GROUP_ENCRYPTED_ALGO, decryptGroupMessage, encryptGroupMessage } from '../../lib/groupE2ee';
 import { EmojiPanel } from '../chats/EmojiPanel';
+import { ComposerResizeHandle } from '../chats/ComposerResizeHandle';
+import { useResizableComposerHeight } from '../../lib/composerResize';
 import { VoiceComposerButton } from '../chats/VoiceComposerButton';
 import { VoiceMessageBubble } from '../chats/VoiceMessageBubble';
 import { VOICE_MIME, type VoiceRecordingResult } from '../../lib/voiceRecording';
@@ -195,6 +197,7 @@ function StickerTrayThumb({ mediaId }: { mediaId: string }) {
 export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, groupKey, onReact, onDelete }: Props) {
   const { styles, colors } = useThemedStyles();
   const [composer, setComposer] = useState('');
+  const { height: composerHeight, handleResize: handleComposerResize, handleResizeEnd: handleComposerResizeEnd } = useResizableComposerHeight();
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
@@ -582,6 +585,15 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
         </View>
       )}
       {showEmoji && <EmojiPanel onPick={(emoji) => setComposer((c) => (c + emoji).slice(0, 12000))} />}
+      <View style={styles.composerWrap}>
+        {Platform.OS === 'web' && !recordingVoice && (
+          <ComposerResizeHandle
+            onResize={handleComposerResize}
+            onResizeEnd={handleComposerResizeEnd}
+            accentColor={colors.azure}
+            gripColor={colors.hairlineStrong}
+          />
+        )}
       <View style={styles.composer}>
         {!recordingVoice && (
           <TouchableOpacity onPress={() => void pickAndSendMedia()} disabled={sending || !deviceReady} style={[styles.attach, (sending || !deviceReady) && styles.disabled]} accessibilityLabel="Envoyer une photo ou une vidéo au groupe">
@@ -604,7 +616,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
         {!recordingVoice && (
           <>
             <TextInput
-              style={styles.input}
+              style={[styles.input, Platform.OS === 'web' ? { height: composerHeight, maxHeight: composerHeight } : null]}
               value={composer}
               onChangeText={onComposerChange}
               placeholder="Message au groupe…"
@@ -625,6 +637,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
             </TouchableOpacity>
           </>
         )}
+      </View>
       </View>
     </View>
   );
@@ -676,7 +689,8 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   meta: { color: palette.inkFaint, fontSize: 9, marginTop: 5, textAlign: 'right' },
   mediaPreview: { width: 230, height: 230, borderRadius: radius.md, backgroundColor: palette.hairline, marginBottom: 6 },
   mediaError: { color: palette.danger, fontSize: 12, fontWeight: '700' },
-  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, marginTop: spacing.sm, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: palette.hairline },
+  composerWrap: { marginTop: spacing.sm },
+  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: palette.hairline },
   attach: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.azureSoft, borderWidth: 1, borderColor: palette.hairline },
   attachText: { color: palette.azure, fontSize: 26, lineHeight: 28, fontWeight: '700' },
   input: { flex: 1, minHeight: 44, maxHeight: 120, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, color: palette.ink },
