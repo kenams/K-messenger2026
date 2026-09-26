@@ -27,13 +27,18 @@ export function useKPulse(): { fire: (from?: string) => void; node: React.ReactN
     setBurst({ id: seq.current, from });
   }, []);
 
-  const node = burst ? (
-    <KPulseBurstView
-      key={burst.id}
-      from={burst.from}
-      onDone={() => setBurst((current) => (current?.id === burst.id ? null : current))}
-    />
-  ) : null;
+  // Stable across re-renders of the parent (e.g. navigating to reply while
+  // the burst is still playing) — only changes when the burst itself
+  // changes. An inline arrow here used to get a new identity on every Root
+  // re-render, which restarted KPulseBurstView's animation effect (it
+  // depends on `onDone`) instead of ever reaching a natural finish, so the
+  // overlay could get stuck on screen after replying.
+  const burstId = burst?.id;
+  const onDone = useCallback(() => {
+    setBurst((current) => (current?.id === burstId ? null : current));
+  }, [burstId]);
+
+  const node = burst ? <KPulseBurstView key={burst.id} from={burst.from} onDone={onDone} /> : null;
 
   return { fire, node };
 }
