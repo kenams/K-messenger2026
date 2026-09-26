@@ -38,6 +38,14 @@ cd apps/mobile
 EXPO_PUBLIC_NEON_AUTH_URL='https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-central-1.aws.neon.tech/kssenger/auth' \
 EXPO_PUBLIC_NEON_DATA_API_URL='https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1' \
 EXPO_PUBLIC_KSSENGER_SOCKET_URL='https://kssenger-server.onrender.com' \
+EXPO_PUBLIC_SPOTIFY_CLIENT_ID='acdb17c786eb432aa1ceacbd49a2de88' \
+EXPO_PUBLIC_LASTFM_CLIENT_ID='6cf2de22fd7a199162deaeab4b3bcb2d' \
   npx expo export --platform web
 npx eas deploy --prod --alias kssenger
 ```
+
+⚠️ Ces deux dernières variables sont indispensables au « now playing »
+(Spotify/Last.fm, voir `docs/MUSIC_NOW_PLAYING.md`). Elles sont facilement
+oubliées car ce ne sont pas les identifiants « cœur » (auth/socket) — un
+redéploiement sans elles désactive silencieusement le now-playing sur web
+(aucune erreur, la fonctionnalité se cache juste).

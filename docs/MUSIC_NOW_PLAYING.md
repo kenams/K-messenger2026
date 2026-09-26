@@ -40,8 +40,13 @@ profils `preview` / `production`) et une redirect URI native
 2. La passer au build :
 
 ```bash
-EXPO_PUBLIC_LASTFM_API_KEY='xxxxxxxx'
+EXPO_PUBLIC_LASTFM_CLIENT_ID='xxxxxxxx'
 ```
+
+⚠️ Le nom exact de la variable lue par le code est `EXPO_PUBLIC_LASTFM_CLIENT_ID`
+(voir `apps/mobile/src/lib/musicNowPlaying.ts`). Toute autre variante
+(`EXPO_PUBLIC_LASTFM_API_KEY`…) est silencieusement ignorée : `lastfmConfigured`
+reste `false` et Last.fm ne s'affiche jamais, sans erreur visible.
 
 ## Redéploiement web complet
 
@@ -51,7 +56,7 @@ EXPO_PUBLIC_NEON_AUTH_URL='https://ep-long-smoke-b1c368ej.neonauth.c-5.eu-centra
 EXPO_PUBLIC_NEON_DATA_API_URL='https://ep-long-smoke-b1c368ej.apirest.c-5.eu-central-1.aws.neon.tech/kssenger/rest/v1' \
 EXPO_PUBLIC_KSSENGER_SOCKET_URL='https://kssenger-server.onrender.com' \
 EXPO_PUBLIC_SPOTIFY_CLIENT_ID='<client id spotify>' \
-EXPO_PUBLIC_LASTFM_API_KEY='<api key last.fm>' \
+EXPO_PUBLIC_LASTFM_CLIENT_ID='<api key last.fm>' \
   npx expo export --platform web
 npx eas deploy --prod --alias kssenger
 ```
