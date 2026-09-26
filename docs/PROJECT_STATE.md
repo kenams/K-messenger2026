@@ -32,6 +32,10 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 - Contacts list shows a numeric unread badge per contact and an unacknowledged-K-Pulse marker, with a blinking avatar (respects reduced-motion) until that contact's chat is opened.
 - Direct-message only by design; a group message's sender who is also a 1:1 contact can badge them without a real new DM existing (accepted trade-off, not a bug to chase).
 
+## Web desktop shell (new)
+
+- Web only, viewport >= 900px (`useIsDesktopWeb` in `apps/mobile/App.tsx`): full-screen "real app" layout instead of the phone-shaped centered column — fixed left nav rail, a persistent buddy-list sidebar (Contacts tab), and a conversation/content pane filling the rest of the browser window. No page scroll/margins, only inner panes scroll. Narrow web (<900px) and native Android/iOS are untouched, still the original bottom-tab single-column shell. Commit `362c2fa`.
+
 ## Other active surfaces
 
 - Real email/password Neon Auth registration, login and persisted session, revalidated on app foreground.
