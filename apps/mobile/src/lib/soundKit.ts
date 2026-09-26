@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { getContactTone, type VibrationPatternKey } from './kTone';
 
 /**
  * K-ssenger's sound + haptic identity: short original tones (not derived from
@@ -95,6 +96,46 @@ export function onMessageSent() {
 export function onMessageReceived() {
   void playSound('receive');
   void hapticLight();
+}
+
+async function playVibrationPattern(pattern: VibrationPatternKey) {
+  if (!enabled || pattern === 'none') return;
+  try {
+    const mod = await loadHaptics();
+    if (!mod) return;
+    const impact = () => mod.impactAsync(mod.ImpactFeedbackStyle.Medium);
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    if (pattern === 'simple') {
+      await impact();
+    } else if (pattern === 'double') {
+      await impact();
+      await wait(150);
+      await impact();
+    } else if (pattern === 'longue') {
+      await mod.notificationAsync(mod.NotificationFeedbackType.Warning);
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Message/K-Pulse received from a specific contact: looks up that contact's
+ * K-Tone override (per-device preference) and plays it instead of the
+ * default 'receive' sound+light haptic. Falls back to the default behavior
+ * when no override is set for this contact.
+ */
+export function onMessageReceivedFrom(myUserId: string, contactId: string) {
+  void (async () => {
+    const tone = await getContactTone(myUserId, contactId);
+    if (!tone.soundKey && !tone.vibrationPattern) {
+      onMessageReceived();
+      return;
+    }
+    void playSound(tone.soundKey ?? 'receive');
+    if (tone.vibrationPattern) void playVibrationPattern(tone.vibrationPattern);
+    else void hapticLight();
+  })();
 }
 
 /** Added to a group, got a contact request, or another social nudge. */

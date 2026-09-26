@@ -9,6 +9,17 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, usePulseUntilSeen, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
 import { clearContactAttention, getContactActivity, seedContactActivity, seedContactUnread, useAttentionTick, useContactAttention, wireContactAttention } from '../attention/contactAttention';
+import { onMessageReceivedFrom, playSound } from '../../lib/soundKit';
+import {
+  TONE_SOUND_OPTIONS,
+  VIBRATION_PATTERN_OPTIONS,
+  clearContactTone,
+  getContactTone,
+  setContactTone,
+  type ContactTonePreference,
+  type ToneSoundKey,
+  type VibrationPatternKey,
+} from '../../lib/kTone';
 
 export type Presence = 'online' | 'busy' | 'away' | 'invisible' | 'offline';
 export type Contact = {
@@ -124,22 +135,99 @@ function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: stri
   );
 }
 
+function KTonePanel({ myUserId, contactId }: { myUserId: string; contactId: string }) {
+  const { styles } = useThemedStyles();
+  const [prefs, setPrefs] = useState<ContactTonePreference>({ soundKey: null, vibrationPattern: null });
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void getContactTone(myUserId, contactId).then((p) => { if (active) { setPrefs(p); setLoaded(true); } });
+    return () => { active = false; };
+  }, [myUserId, contactId]);
+
+  const choose = (patch: Partial<ContactTonePreference>) => {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      void setContactTone(myUserId, contactId, next);
+      return next;
+    });
+  };
+
+  const reset = () => {
+    setPrefs({ soundKey: null, vibrationPattern: null });
+    void clearContactTone(myUserId, contactId);
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <View style={styles.toneCard}>
+      <Text style={styles.toneSectionLabel}>Son</Text>
+      <View style={styles.toneOptionsRow}>
+        {TONE_SOUND_OPTIONS.map((option) => {
+          const active = (prefs.soundKey ?? 'receive') === option.key;
+          return (
+            <View key={option.key} style={[styles.toneChip, active && styles.toneChipActive]}>
+              <TouchableOpacity onPress={() => choose({ soundKey: option.key })} accessibilityRole="button">
+                <Text style={[styles.toneChipText, active && styles.toneChipTextActive]}>{option.label}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void playSound(option.key)}
+                accessibilityLabel={`Écouter ${option.label}`}
+                style={styles.tonePreviewBtn}
+              >
+                <Text style={styles.tonePreviewText}>▶</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </View>
+      <Text style={styles.toneSectionLabel}>Vibration</Text>
+      <View style={styles.toneOptionsRow}>
+        {VIBRATION_PATTERN_OPTIONS.map((option) => {
+          const active = (prefs.vibrationPattern ?? 'simple') === option.key;
+          return (
+            <TouchableOpacity
+              key={option.key}
+              style={[styles.toneChip, active && styles.toneChipActive]}
+              onPress={() => choose({ vibrationPattern: option.key })}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.toneChipText, active && styles.toneChipTextActive]}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <TouchableOpacity style={styles.toneResetBtn} onPress={reset} accessibilityRole="button">
+        <Text style={styles.toneResetText}>Réinitialiser</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function ContactRow({
   contact,
   managing,
+  myUserId,
+  toneOpen,
   onOpen,
   onToggleFavorite,
   onSendPulse,
   onToggleManage,
+  onToggleTone,
   onRemove,
   onBlock,
 }: {
   contact: Contact;
   managing: boolean;
+  myUserId: string;
+  toneOpen: boolean;
   onOpen: (contact: Contact) => void;
   onToggleFavorite: (contact: Contact) => void;
   onSendPulse: (contact: Contact) => void;
   onToggleManage: () => void;
+  onToggleTone: () => void;
   onRemove: () => void;
   onBlock: () => void;
 }) {
@@ -194,10 +282,12 @@ function ContactRow({
       </View>
       {managing && (
         <View style={styles.manageRow}>
+          <TouchableOpacity style={styles.secondaryAction} onPress={onToggleTone}><Text style={styles.secondaryActionText}>🔔 Son personnalisé</Text></TouchableOpacity>
           <TouchableOpacity style={styles.secondaryAction} onPress={onRemove}><Text style={styles.secondaryActionText}>Retirer le contact</Text></TouchableOpacity>
           <TouchableOpacity style={styles.dangerAction} onPress={onBlock}><Text style={styles.dangerActionText}>Bloquer</Text></TouchableOpacity>
         </View>
       )}
+      {managing && toneOpen && <KTonePanel myUserId={myUserId} contactId={contact.id} />}
     </View>
   );
 }
@@ -224,6 +314,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   const [loading, setLoading] = useState(isRealtimeConfigured);
   const [notice, setNotice] = useState('');
   const [managingContactId, setManagingContactId] = useState<string | null>(null);
+  const [toneOpenContactId, setToneOpenContactId] = useState<string | null>(null);
   const contactsRef = useRef<Contact[]>([]);
   const loginNotificationsRef = useRef<LoginNotifications>('favorites');
   const { style: shakeStyle, trigger: triggerShake } = useNudgeShake();
@@ -331,6 +422,7 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
       const onKPulse = ({ senderId }: { senderId: string }) => {
         const sender = contactsRef.current.find((item) => item.id === senderId);
         triggerShake();
+        if (senderId) onMessageReceivedFrom(userId, senderId);
         setNotice(`⚡ K-Pulse reçu${sender ? ` de ${sender.nickname}` : ''} !`);
       };
 
@@ -646,10 +738,13 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
                     key={contact.id}
                     contact={contact}
                     managing={managingContactId === contact.id}
+                    myUserId={currentUserId}
+                    toneOpen={toneOpenContactId === contact.id}
                     onOpen={onOpen}
                     onToggleFavorite={(c) => void toggleFavorite(c)}
                     onSendPulse={(c) => void sendKPulse(c)}
                     onToggleManage={() => setManagingContactId((id) => id === contact.id ? null : contact.id)}
+                    onToggleTone={() => setToneOpenContactId((id) => id === contact.id ? null : contact.id)}
                     onRemove={() => void removeContact(contact)}
                     onBlock={() => void blockContact(contact)}
                   />
@@ -725,7 +820,19 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   pulseBtn: { backgroundColor: palette.pulseSoft, borderColor: palette.brass },
   favoriteActive: { backgroundColor: palette.favoriteSoft, borderColor: palette.favoriteBorder },
   favoriteActiveText: { color: palette.favoriteText },
-  manageRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+  manageRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+
+  toneCard: { marginHorizontal: spacing.md, marginBottom: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline, gap: spacing.sm },
+  toneSectionLabel: { ...typo.label, color: palette.inkSoft, textTransform: 'uppercase', fontSize: 10.5 },
+  toneOptionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  toneChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 6 },
+  toneChipActive: { backgroundColor: palette.azureSoft, borderColor: palette.azure },
+  toneChipText: { color: palette.inkSoft, fontSize: 11.5, fontWeight: '800' },
+  toneChipTextActive: { color: palette.azureDeep },
+  tonePreviewBtn: { paddingHorizontal: 4 },
+  tonePreviewText: { color: palette.azure, fontSize: 11, fontWeight: '900' },
+  toneResetBtn: { alignSelf: 'flex-start' },
+  toneResetText: { color: palette.inkFaint, fontSize: 11, fontWeight: '800', textDecorationLine: 'underline' },
 
   emptyState: { alignItems: 'center', marginTop: 60, paddingHorizontal: spacing.xl },
   emptyIcon: { fontSize: 40 },

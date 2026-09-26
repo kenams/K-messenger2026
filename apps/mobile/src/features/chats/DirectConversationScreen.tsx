@@ -28,7 +28,7 @@ import { VoiceComposerButton } from './VoiceComposerButton';
 import { VoiceMessageBubble } from './VoiceMessageBubble';
 import { VOICE_MIME, type VoiceRecordingResult } from '../../lib/voiceRecording';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, waitForSocketReady } from '../../lib/realtime';
-import { onMessageReceived, onMessageSent } from '../../lib/soundKit';
+import { onMessageReceivedFrom, onMessageSent } from '../../lib/soundKit';
 
 type ReceiptState = 'delivered' | 'read';
 type DirectResponse = { ok: boolean; conversationId?: string; error?: string };
@@ -400,7 +400,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
         if (!active) return;
         setHistory((items) => {
           if (items.some((item) => item.id === resolved.id)) return items;
-          if (resolved.senderUserId !== userId) onMessageReceived();
+          if (resolved.senderUserId !== userId) onMessageReceivedFrom(userId, contact.id);
           return [...items, resolved];
         });
         if (resolved.senderUserId !== userId) {
