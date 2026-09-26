@@ -33,6 +33,23 @@ type SafePoint = {
 type VisibleShare = LocationShare & { point: SafePoint | null };
 type ContactOption = { id: string; label: string };
 
+/**
+ * "il y a 5 min" / "il y a 2h" freshness badge for a shared point's
+ * captured_at. Purely a read of a timestamp already stored — K-Map stays
+ * foreground-only (no new tracking, no background fetch introduced here);
+ * this only makes better use of a snapshot that already existed.
+ */
+function relativeAge(capturedAtIso: string): string {
+  const diffMs = Date.now() - new Date(capturedAtIso).getTime();
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'à l’instant';
+  if (minutes < 60) return `il y a ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `il y a ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `il y a ${days} j`;
+}
+
 export function KMapScreen() {
   const { styles, colors } = useThemedStyles();
   const [mine, setMine] = useState<LocationShare[]>([]);
@@ -44,6 +61,13 @@ export function KMapScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [notice, setNotice] = useState('');
+  // Ticks once a minute purely to re-render the "il y a X min" badges below —
+  // no new location read, no background work, just a render trigger.
+  const [, setAgeTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setAgeTick((t) => t + 1), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const load = async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -270,6 +294,10 @@ export function KMapScreen() {
                 <Text style={styles.cardTitle}>{share.precision === 'precise' ? '📍 Position précise' : '⭕ Zone approximative'}</Text>
                 {share.point ? <>
                   <Text style={styles.coords}>{share.point.latitude.toFixed(share.point.precision_level === 'precise' ? 5 : 2)}, {share.point.longitude.toFixed(share.point.precision_level === 'precise' ? 5 : 2)}</Text>
+                  <View style={styles.lastSeenRow}>
+                    <View style={styles.lastSeenDot} />
+                    <Text style={styles.lastSeenText}>Vu {relativeAge(share.point.captured_at)}</Text>
+                  </View>
                   <Text style={styles.meta}>{share.point.precision_level === 'approximate' ? 'Coordonnées volontairement dégradées par Neon avant lecture.' : `Précision déclarée : ${Math.round(share.point.accuracy_meters ?? 0)} m`}</Text>
                 </> : <Text style={styles.meta}>Point indisponible ou partage expiré/révoqué.</Text>}
                 <Text style={styles.meta}>Expire {new Date(share.expires_at).toLocaleString()}</Text>
@@ -301,6 +329,9 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   cardTitle: { ...typo.name },
   meta: { ...typo.micro, fontWeight: '500', marginTop: 3, lineHeight: 15 },
   coords: { color: palette.azureDeep, fontWeight: '900', marginTop: 5 },
+  lastSeenRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+  lastSeenDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: palette.inkFaint },
+  lastSeenText: { color: palette.inkFaint, fontWeight: '800', fontSize: 10.5 },
   revoke: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, backgroundColor: palette.dangerSoft, borderRadius: radius.sm },
   revokeText: { color: palette.danger, fontWeight: '900', fontSize: 10 },
   shareComposer: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, borderRadius: radius.lg, padding: spacing.md },
