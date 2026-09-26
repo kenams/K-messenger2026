@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -95,9 +95,20 @@ function WebShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Web-only: viewport wide enough to earn the full-screen desktop
+ * (MSN-style) shell — fixed buddy-list rail + a conversation pane that
+ * fills the rest of the window — instead of the phone-shaped mobile
+ * column. Native (Android/iOS) never takes this branch. */
+const DESKTOP_MIN_WIDTH = 900;
+function useIsDesktopWeb(): boolean {
+  const { width } = useWindowDimensions();
+  return Platform.OS === 'web' && width >= DESKTOP_MIN_WIDTH;
+}
+
 export default function App({ profile, onProfileChanged }: AppProps) {
   const { styles, colors } = useAppStyles();
   const { scheme } = useTheme();
+  const isDesktopWeb = useIsDesktopWeb();
   const [tab, setTab] = useState<TabName>('contacts');
   const [visitedTabs, setVisitedTabs] = useState<Set<TabName>>(() => new Set(['contacts']));
   useEffect(() => {
@@ -267,6 +278,37 @@ export default function App({ profile, onProfileChanged }: AppProps) {
     );
   }
 
+  if (isDesktopWeb) {
+    return (
+      <DesktopShell
+        profile={profile}
+        tab={tab}
+        setTab={setTab}
+        selected={selected}
+        setSelected={setSelected}
+        editingProfile={editingProfile}
+        setEditingProfile={setEditingProfile}
+        accountData={accountData}
+        setAccountData={setAccountData}
+        privacySettings={privacySettings}
+        setPrivacySettings={setPrivacySettings}
+        groupsScreen={groupsScreen}
+        setGroupsScreen={setGroupsScreen}
+        liveScreen={liveScreen}
+        setLiveScreen={setLiveScreen}
+        liveBroadcasts={liveBroadcasts}
+        userAge={userAge}
+        nowPlayingOpen={nowPlayingOpen}
+        setNowPlayingOpen={setNowPlayingOpen}
+        saveNowPlaying={saveNowPlaying}
+        onProfileChanged={onProfileChanged}
+      />
+    );
+  }
+
+  if (liveScreen) {
+    return <LiveScreen broadcasterId={liveScreen.broadcasterId} onClose={() => setLiveScreen(null)} />;
+  }
   if (selected) {
     return (
       <WebShell>
@@ -284,9 +326,6 @@ export default function App({ profile, onProfileChanged }: AppProps) {
         <GroupsScreen />
       </WebShell>
     );
-  }
-  if (liveScreen) {
-    return <LiveScreen broadcasterId={liveScreen.broadcasterId} onClose={() => setLiveScreen(null)} />;
   }
 
   const immersive = tab === 'feed';
@@ -350,6 +389,180 @@ export default function App({ profile, onProfileChanged }: AppProps) {
         onSubmit={saveNowPlaying}
       />
     </SafeAreaView>
+  );
+}
+
+type DesktopShellProps = {
+  profile: MyProfile;
+  tab: TabName;
+  setTab: (t: TabName) => void;
+  selected: Contact | null;
+  setSelected: (c: Contact | null) => void;
+  editingProfile: boolean;
+  setEditingProfile: (b: boolean) => void;
+  accountData: boolean;
+  setAccountData: (b: boolean) => void;
+  privacySettings: boolean;
+  setPrivacySettings: (b: boolean) => void;
+  groupsScreen: boolean;
+  setGroupsScreen: (b: boolean) => void;
+  liveScreen: { broadcasterId: string | null } | null;
+  setLiveScreen: (v: { broadcasterId: string | null } | null) => void;
+  liveBroadcasts: Map<string, string>;
+  userAge: number;
+  nowPlayingOpen: boolean;
+  setNowPlayingOpen: (b: boolean) => void;
+  saveNowPlaying: (title: string, artist: string) => Promise<void>;
+  onProfileChanged: () => Promise<void>;
+};
+
+const DESKTOP_NAV_ITEMS: { tab: TabName; icon: string; label: string }[] = [
+  { tab: 'contacts', icon: '👥', label: 'Contacts' },
+  { tab: 'chats', icon: '💬', label: 'Chats' },
+  { tab: 'feed', icon: '▶️', label: 'K-Feed' },
+  { tab: 'map', icon: '📍', label: 'K-Map' },
+  { tab: 'moments', icon: '✨', label: 'Moments' },
+  { tab: 'me', icon: '🙂', label: 'Moi' },
+];
+
+/** Real full-screen "app" shell for wide web viewports — a fixed buddy-list
+ * rail on the left and a conversation/content pane that fills every
+ * remaining pixel of the browser window, MSN-Messenger-style. No page
+ * scroll, no site margins: only the panes below scroll internally. Native
+ * builds and narrow web never mount this — they keep the phone-shaped
+ * single-column flow above untouched. */
+function DesktopShell(props: DesktopShellProps) {
+  const {
+    profile, tab, setTab, selected, setSelected,
+    editingProfile, setEditingProfile, accountData, setAccountData,
+    privacySettings, setPrivacySettings, groupsScreen, setGroupsScreen,
+    liveScreen, setLiveScreen, liveBroadcasts, userAge,
+    nowPlayingOpen, setNowPlayingOpen, saveNowPlaying, onProfileChanged,
+  } = props;
+  const { styles, colors } = useAppStyles();
+  const { scheme } = useTheme();
+
+  const overlay: 'editProfile' | 'accountData' | 'privacy' | 'groups' | 'live' | null =
+    liveScreen ? 'live'
+    : editingProfile ? 'editProfile'
+    : accountData ? 'accountData'
+    : privacySettings ? 'privacy'
+    : groupsScreen ? 'groups'
+    : null;
+
+  const closeOverlay = () => {
+    setEditingProfile(false);
+    setAccountData(false);
+    setPrivacySettings(false);
+    setGroupsScreen(false);
+    setLiveScreen(null);
+  };
+
+  const showBuddyList = tab === 'contacts' && !overlay;
+
+  let mainContent: React.ReactNode;
+  if (overlay === 'live') {
+    mainContent = <LiveScreen broadcasterId={liveScreen!.broadcasterId} onClose={closeOverlay} />;
+  } else if (overlay === 'editProfile') {
+    mainContent = <ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={closeOverlay} />;
+  } else if (overlay === 'accountData') {
+    mainContent = <AccountDataScreen profile={profile} onBack={closeOverlay} />;
+  } else if (overlay === 'privacy') {
+    mainContent = <PrivacySettingsScreen userId={profile.id} onBack={closeOverlay} />;
+  } else if (overlay === 'groups') {
+    mainContent = (
+      <>
+        <ScreenHeader title="Groupes" subtitle="Connexion sécurisée" onBack={closeOverlay} />
+        <GroupsScreen />
+      </>
+    );
+  } else if (tab === 'contacts') {
+    mainContent = selected
+      ? <DirectConversationScreen key={selected.id} contact={selected} onBack={() => setSelected(null)} />
+      : <EmptyConversationPane profile={profile} />;
+  } else if (tab === 'chats') {
+    mainContent = <ChatsHubScreen />;
+  } else if (tab === 'feed') {
+    mainContent = <FeedScreen userAge={userAge} />;
+  } else if (tab === 'map') {
+    mainContent = <KMapScreen />;
+  } else if (tab === 'moments') {
+    mainContent = <MomentsScreen />;
+  } else {
+    mainContent = (
+      <MeScreen
+        profile={profile}
+        userAge={userAge}
+        onEdit={() => setEditingProfile(true)}
+        onAccountData={() => setAccountData(true)}
+        onPrivacy={() => setPrivacySettings(true)}
+        onGroups={() => setGroupsScreen(true)}
+        onNowPlaying={() => setNowPlayingOpen(true)}
+        onLive={() => setLiveScreen({ broadcasterId: null })}
+      />
+    );
+  }
+
+  return (
+    <View style={styles.desktopRoot}>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <View style={styles.desktopBody}>
+        <View style={styles.navRail}>
+          <View style={styles.navRailBrand}>
+            <Avatar profile={profile} />
+          </View>
+          {DESKTOP_NAV_ITEMS.map((item) => (
+            <TouchableOpacity
+              key={item.tab}
+              testID={`desktop-tab-${item.label}`}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === item.tab && !overlay }}
+              style={[styles.navRailItem, tab === item.tab && !overlay && styles.navRailItemActive]}
+              onPress={() => { closeOverlay(); setTab(item.tab); }}
+            >
+              <Text style={styles.navRailIcon}>{item.icon}</Text>
+              <Text style={[styles.navRailLabel, tab === item.tab && !overlay && styles.navRailLabelActive]}>{item.label}</Text>
+              {item.tab === 'chats' && liveBroadcasts.size > 0 && <View style={styles.navRailDot} />}
+            </TouchableOpacity>
+          ))}
+          <View style={styles.flex} />
+          {liveBroadcasts.size > 0 && (
+            <TouchableOpacity
+              style={styles.navRailLive}
+              onPress={() => setLiveScreen({ broadcasterId: [...liveBroadcasts.keys()][0] })}
+              accessibilityRole="button"
+            >
+              <Text style={styles.navRailLiveText}>🔴 Live</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {showBuddyList && (
+          <View style={styles.sidebarPane}>
+            <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />
+            <MsnContactsScreen onOpen={setSelected} />
+          </View>
+        )}
+        <View style={styles.mainPane}>{mainContent}</View>
+      </View>
+      <NowPlayingSheet
+        visible={nowPlayingOpen}
+        initialTitle={profile.now_playing_title ?? ''}
+        initialArtist={profile.now_playing_artist ?? ''}
+        onClose={() => setNowPlayingOpen(false)}
+        onSubmit={saveNowPlaying}
+      />
+    </View>
+  );
+}
+
+function EmptyConversationPane({ profile }: { profile: MyProfile }) {
+  const { styles } = useAppStyles();
+  return (
+    <View style={styles.emptyConvo}>
+      <Text style={styles.emptyConvoIcon}>💬</Text>
+      <Text style={styles.emptyConvoTitle}>Choisis un contact</Text>
+      <Text style={styles.emptyConvoCopy}>Sélectionne un ami dans ta liste pour ouvrir la conversation, {profile.display_name.split(' ')[0]}.</Text>
+    </View>
   );
 }
 
@@ -586,5 +799,35 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   signOutButton: { marginTop: spacing.xl, minWidth: 190, alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairlineStrong, borderRadius: radius.md },
   signOutText: { color: palette.inkSoft, fontWeight: '900' },
   appearanceSection: { width: '100%', marginTop: spacing.xl },
+
+  // Desktop web only ("full-screen MSN app" shell) — no max-width column,
+  // no site margins: fills the entire browser viewport, only inner panes
+  // scroll.
+  desktopRoot: { flex: 1, ...(Platform.OS === 'web' ? ({ height: '100vh' } as unknown as { height: number }) : null), backgroundColor: palette.surfaceSunken },
+  desktopBody: { flex: 1, flexDirection: 'row', width: '100%', overflow: 'hidden' },
+  navRail: {
+    width: 84, alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.xs,
+    backgroundColor: palette.navy, borderRightWidth: 1, borderRightColor: palette.hairlineStrong,
+  },
+  navRailBrand: { marginBottom: spacing.md },
+  navRailItem: { width: 64, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.md, gap: 2 },
+  navRailItemActive: { backgroundColor: palette.navyGlow },
+  navRailIcon: { fontSize: 20, opacity: 0.75 },
+  navRailLabel: { color: palette.inkOnAzure, opacity: 0.55, fontSize: 9.5, fontWeight: '700' },
+  navRailLabelActive: { opacity: 1 },
+  navRailDot: { position: 'absolute', top: 6, right: 12, width: 8, height: 8, borderRadius: 4, backgroundColor: palette.danger },
+  navRailLive: { marginBottom: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: palette.danger },
+  navRailLiveText: { color: palette.white, fontWeight: '900', fontSize: 10.5 },
+
+  sidebarPane: {
+    width: 360, borderRightWidth: 1, borderRightColor: palette.hairline,
+    backgroundColor: palette.sky,
+  },
+  mainPane: { flex: 1, backgroundColor: palette.surface },
+
+  emptyConvo: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
+  emptyConvoIcon: { fontSize: 44, marginBottom: spacing.md },
+  emptyConvoTitle: { ...typo.title, color: palette.ink },
+  emptyConvoCopy: { ...typo.body, color: palette.inkSoft, marginTop: spacing.sm, textAlign: 'center', maxWidth: 320 },
   });
 }
