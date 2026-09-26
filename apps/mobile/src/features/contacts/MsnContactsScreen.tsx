@@ -8,7 +8,7 @@ import { elevation, presenceLabel, radius, spacing, type Palette, type TypeToken
 import { useTheme } from '../../theme/ThemeProvider';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, usePulseUntilSeen, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
-import { PresetAvatarGlyph, presetIdFromAvatar } from '../../theme/avatarPresets';
+import { AvatarGlyph, decodeAvatarConfig } from '../../theme/avatarPresets';
 import { clearContactAttention, getContactActivity, seedContactActivity, seedContactUnread, useAttentionTick, useContactAttention, wireContactAttention } from '../attention/contactAttention';
 import { onMessageReceivedFrom, playSound } from '../../lib/soundKit';
 import { KStatusStrip } from '../status/KStatusStrip';
@@ -111,7 +111,7 @@ function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: stri
   const { styles } = useThemedStyles();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => httpsAvatar(avatarUrl));
   const mediaId = mediaIdFromAvatar(avatarUrl);
-  const presetId = presetIdFromAvatar(avatarUrl);
+  const presetConfig = decodeAvatarConfig(avatarUrl);
 
   useEffect(() => {
     let active = true;
@@ -130,8 +130,8 @@ function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: stri
   const online = presence === 'online';
   return (
     <View style={styles.avatarWrap}>
-      {presetId
-        ? <View style={[styles.avatar, styles.avatarPresetClip, online && styles.avatarOnline]}><PresetAvatarGlyph id={presetId} size={46} /></View>
+      {presetConfig
+        ? <View style={[styles.avatar, styles.avatarPresetClip, online && styles.avatarOnline]}><AvatarGlyph config={presetConfig} size={46} /></View>
         : resolvedUrl
         ? <Image source={{ uri: resolvedUrl }} style={[styles.avatar, online && styles.avatarOnline]} />
         : <View style={[styles.avatar, online && styles.avatarOnline]}><Text style={styles.avatarText}>{displayName[0]?.toUpperCase() ?? '?'}</Text></View>}

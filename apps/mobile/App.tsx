@@ -26,7 +26,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, immersive, layout, radius, spacing, type Palette, type TypeTokens } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, SectionLabel, Segmented, useAndroidBack } from './src/theme/components';
 import { useTheme, type ThemeMode, type ThemeSkin } from './src/theme/ThemeProvider';
-import { PresetAvatarGlyph, presetIdFromAvatar } from './src/theme/avatarPresets';
+import { AvatarGlyph, decodeAvatarConfig } from './src/theme/avatarPresets';
 import { accentOf } from './src/theme/accent';
 import { MobileAppQr } from './src/features/profile/MobileAppQr';
 
@@ -670,9 +670,9 @@ function Avatar({ profile, size = 'small' }: { profile: MyProfile; size?: 'small
     return () => { active = false; };
   }, [profile.avatar_media_id]);
 
-  const presetId = presetIdFromAvatar(profile.avatar_url);
-  if (presetId) {
-    return <View style={[style, styles.avatarPresetClip]}><PresetAvatarGlyph id={presetId} size={size === 'large' ? 96 : 44} /></View>;
+  const presetConfig = decodeAvatarConfig(profile.avatar_url);
+  if (presetConfig) {
+    return <View style={[style, styles.avatarPresetClip]}><AvatarGlyph config={presetConfig} size={size === 'large' ? 96 : 44} /></View>;
   }
   const avatarUri = signedAvatarUrl ?? (isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : null);
   if (avatarUri) return <Image source={{ uri: avatarUri }} style={style} />;

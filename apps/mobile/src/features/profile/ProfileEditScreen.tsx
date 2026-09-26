@@ -13,7 +13,21 @@ import { Equalizer, ScreenHeader } from '../../theme/components';
 import { radius, spacing, thirdPartyBrand, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ACCENT_PRESETS, accentOf, onAccent } from '../../theme/accent';
-import { AVATAR_PRESET_IDS, PresetAvatarGlyph, presetAvatarValue, presetIdFromAvatar, type AvatarPresetId } from '../../theme/avatarPresets';
+import {
+  AvatarGlyph,
+  BODY_TYPES,
+  decodeAvatarConfig,
+  DEFAULT_AVATAR_CONFIG,
+  encodeAvatarConfig,
+  HAIR_STYLES,
+  OUTFIT_STYLES,
+  SKIN_TONES,
+  type AvatarConfig,
+  type BodyId,
+  type HairId,
+  type OutfitId,
+  type SkinId,
+} from '../../theme/avatarPresets';
 import {
   beginSpotifyAuth,
   disconnectLastfm,
@@ -47,14 +61,37 @@ function isHttpsAvatarUrl(value: string | null | undefined): value is string {
   return !!value && /^https:\/\//i.test(value);
 }
 
-function inferAvatarMime(asset: ImagePicker.ImagePickerAsset): SupportedMediaMime | null {
+function mimeFromExtension(uri: string): SupportedMediaMime | null {
+  const clean = uri.toLowerCase().split('?')[0];
+  if (clean.endsWith('.png')) return 'image/png';
+  if (clean.endsWith('.webp')) return 'image/webp';
+  if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) return 'image/jpeg';
+  return null;
+}
+
+/**
+ * The library picker restricts selection to images, but the asset metadata
+ * is not always trustworthy: web `blob:` URIs and some Android `content://`
+ * providers carry no file extension and no (or an unsupported, e.g. HEIC)
+ * `mimeType`. That used to hard-block the whole upload with "format non
+ * supporté" even though the picked file was a perfectly normal photo. Sniff
+ * the real bytes (the browser/OS-reported Blob `type`) before giving up.
+ */
+async function inferAvatarMime(asset: ImagePicker.ImagePickerAsset): Promise<SupportedMediaMime | null> {
   const normalized = asset.mimeType?.toLowerCase();
   if (normalized && IMAGE_MIMES.has(normalized as SupportedMediaMime)) return normalized as SupportedMediaMime;
-  const uri = asset.uri.toLowerCase();
-  if (uri.endsWith('.png')) return 'image/png';
-  if (uri.endsWith('.webp')) return 'image/webp';
-  if (uri.endsWith('.jpg') || uri.endsWith('.jpeg')) return 'image/jpeg';
-  return null;
+  const fromExt = mimeFromExtension(asset.uri);
+  if (fromExt) return fromExt;
+  try {
+    const response = await fetch(asset.uri);
+    const blobType = response.headers.get('content-type')?.toLowerCase().split(';')[0]?.trim();
+    if (blobType && IMAGE_MIMES.has(blobType as SupportedMediaMime)) return blobType as SupportedMediaMime;
+  } catch {
+    // fall through to the safe default below
+  }
+  // Still image-only (the picker enforces that): default to JPEG rather than
+  // refusing an otherwise valid photo just because metadata was missing.
+  return 'image/jpeg';
 }
 
 export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyProfile; onSaved: () => Promise<void>; onBack: () => void }) {
@@ -69,8 +106,9 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
   const [avatarUrl, setAvatarUrl] = useState(isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : '');
   const [avatarMediaId, setAvatarMediaId] = useState(profile.avatar_media_id);
   const [avatarPreviewUri, setAvatarPreviewUri] = useState<string | null>(isHttpsAvatarUrl(profile.avatar_url) ? profile.avatar_url : null);
-  const [selectedPreset, setSelectedPreset] = useState(presetIdFromAvatar(profile.avatar_url));
+  const [selectedPreset, setSelectedPreset] = useState<AvatarConfig | null>(decodeAvatarConfig(profile.avatar_url));
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [draftAvatar, setDraftAvatar] = useState<AvatarConfig>(() => decodeAvatarConfig(profile.avatar_url) ?? DEFAULT_AVATAR_CONFIG);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -107,8 +145,17 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
     setSelectedPreset(null);
   };
 
-  const choosePreset = (id: AvatarPresetId) => {
-    setSelectedPreset(id);
+  const openAvatarComposer = () => {
+    setDraftAvatar(selectedPreset ?? DEFAULT_AVATAR_CONFIG);
+    setAvatarPickerOpen((open) => !open);
+  };
+
+  const updateDraft = <K extends keyof AvatarConfig>(key: K, value: AvatarConfig[K]) => {
+    setDraftAvatar((current) => ({ ...current, [key]: value }));
+  };
+
+  const confirmAvatarComposer = () => {
+    setSelectedPreset(draftAvatar);
     setAvatarUrl('');
     setAvatarMediaId(null);
     setAvatarPreviewUri(null);
@@ -135,8 +182,9 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
       if (picked.canceled) return;
       const asset = picked.assets[0];
       if (!asset?.uri) throw new Error('UNSUPPORTED_AVATAR');
-      const mimeType = inferAvatarMime(asset);
-      if (!mimeType || (asset.fileSize !== undefined && asset.fileSize > AVATAR_MAX_BYTES)) throw new Error('UNSUPPORTED_AVATAR');
+      if (asset.fileSize !== undefined && asset.fileSize > AVATAR_MAX_BYTES) throw new Error('UNSUPPORTED_AVATAR');
+      const mimeType = await inferAvatarMime(asset);
+      if (!mimeType) throw new Error('UNSUPPORTED_AVATAR');
       const { mediaId } = await uploadLocalMedia({
         uri: asset.uri,
         mimeType,
@@ -147,6 +195,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
       setAvatarPreviewUri(asset.uri);
       setAvatarMediaId(mediaId);
       setSelectedPreset(null);
+      setAvatarPickerOpen(false);
       setNotice('Avatar importe. Enregistre le profil pour le publier.');
     } catch {
       setNotice('Upload avatar impossible. Formats acceptes : JPG, PNG ou WebP, 10 Mo maximum.');
@@ -170,7 +219,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
           now_playing_artist: nowPlayingArtist.trim().slice(0, 120) || null,
           bio: bio.trim().slice(0, 500) || null,
           accent_color: accentColor,
-          avatar_url: selectedPreset ? presetAvatarValue(selectedPreset) : avatarMediaId ? `media:${avatarMediaId}` : avatar,
+          avatar_url: selectedPreset ? encodeAvatarConfig(selectedPreset) : avatarMediaId ? `media:${avatarMediaId}` : avatar,
           avatar_media_id: avatarMediaId,
           updated_at: new Date().toISOString(),
         })
@@ -257,7 +306,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
         <Text style={styles.label}>AVATAR</Text>
         <View style={styles.avatarRow}>
           {selectedPreset
-            ? <View style={styles.avatarPresetPreviewWrap}><PresetAvatarGlyph id={selectedPreset} size={78} /></View>
+            ? <View style={styles.avatarPresetPreviewWrap}><AvatarGlyph config={selectedPreset} size={78} /></View>
             : avatarPreviewUri
             ? <Image source={{ uri: avatarPreviewUri }} style={styles.avatarPreview} />
             : <View style={styles.avatarPreview}><Text style={styles.avatarPreviewText}>{displayName[0]?.toUpperCase() ?? 'K'}</Text></View>}
@@ -265,8 +314,8 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
             <TouchableOpacity disabled={avatarBusy || busy} onPress={() => void pickAvatar()} style={[styles.avatarButton, (avatarBusy || busy) && styles.disabled]}>
               {avatarBusy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.avatarButtonText}>Choisir une photo</Text>}
             </TouchableOpacity>
-            <TouchableOpacity disabled={avatarBusy || busy} onPress={() => setAvatarPickerOpen((open) => !open)} style={styles.avatarSecondary}>
-              <Text style={styles.avatarSecondaryText}>{avatarPickerOpen ? 'Fermer la galerie' : 'Choisir un avatar'}</Text>
+            <TouchableOpacity disabled={avatarBusy || busy} onPress={openAvatarComposer} style={styles.avatarSecondary}>
+              <Text style={styles.avatarSecondaryText}>{avatarPickerOpen ? 'Fermer le créateur' : 'Créer mon avatar'}</Text>
             </TouchableOpacity>
             <TouchableOpacity disabled={avatarBusy || busy} onPress={clearAvatar} style={styles.avatarSecondary}>
               <Text style={styles.avatarSecondaryText}>Retirer</Text>
@@ -274,25 +323,10 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
           </View>
         </View>
         {avatarPickerOpen ? (
-          <View style={styles.avatarPresetGrid}>
-            {AVATAR_PRESET_IDS.map((id) => {
-              const selected = selectedPreset === id;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Avatar prédéfini ${id}`}
-                  onPress={() => choosePreset(id)}
-                  style={[styles.avatarPresetCell, selected && styles.avatarPresetCellSelected]}
-                >
-                  <PresetAvatarGlyph id={id} size={52} />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <AvatarComposer draft={draftAvatar} onChange={updateDraft} onConfirm={confirmAvatarComposer} />
         ) : null}
         <TextInput autoCapitalize="none" autoCorrect={false} value={avatarUrl} onChangeText={setHttpsAvatar} placeholder="URL HTTPS optionnelle" style={[styles.input, styles.stackedInput]} />
-        <Text style={[styles.hint, !avatarValid && styles.error]}>Photo stockee en media prive K-ssenger, avatar de la galerie, ou URL HTTPS pour les anciens profils.</Text>
+        <Text style={[styles.hint, !avatarValid && styles.error]}>Photo stockee en media prive K-ssenger, avatar composé, ou URL HTTPS pour les anciens profils.</Text>
 
         {!!notice && <Text style={styles.notice}>{notice}</Text>}
         <TouchableOpacity disabled={!canSave} onPress={() => void save()} accessibilityRole="button" accessibilityLabel="Enregistrer" style={[styles.primary, !canSave && styles.disabled]}>
@@ -311,6 +345,134 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function useAvatarComposerStyles() {
+  const { colors, type: typo } = useTheme();
+  return useMemo(() => StyleSheet.create({
+    card: { marginTop: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.hairline, borderRadius: radius.md, padding: spacing.md, gap: spacing.md },
+    heading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    previewWrap: { width: 84, height: 84, borderRadius: radius.xl, overflow: 'hidden', borderWidth: 4, borderColor: colors.azureSoft },
+    headingText: { flex: 1 },
+    title: { ...typo.heading },
+    lede: { ...typo.micro, fontWeight: '500', marginTop: 2 },
+    section: { gap: spacing.xs },
+    sectionLabel: { ...typo.label, textTransform: 'uppercase' },
+    swatchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    swatch: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
+    swatchSelected: { borderColor: colors.azure },
+    skinSwatch: { borderRadius: radius.pill },
+    skinSwatchInner: { width: 32, height: 32, borderRadius: radius.pill },
+    chip: { minHeight: 36, paddingHorizontal: spacing.md, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSunken, borderWidth: 1, borderColor: colors.hairline },
+    chipSelected: { backgroundColor: colors.azureSoft, borderColor: colors.azure },
+    chipText: { ...typo.micro, fontWeight: '800', color: colors.inkSoft },
+    chipTextSelected: { color: colors.azureDeep },
+    confirmBtn: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, backgroundColor: colors.azure },
+    confirmBtnText: { color: colors.white, fontWeight: '900' },
+  }), [colors, typo]);
+}
+
+/**
+ * A real Bitmoji-style avatar builder: skin, hair, outfit and build are each
+ * chosen independently with a live composed preview, instead of picking one
+ * fixed image from a gallery. `draft` is only committed to the profile when
+ * "Valider mon avatar" is pressed.
+ */
+function AvatarComposer({
+  draft,
+  onChange,
+  onConfirm,
+}: {
+  draft: AvatarConfig;
+  onChange: <K extends keyof AvatarConfig>(key: K, value: AvatarConfig[K]) => void;
+  onConfirm: () => void;
+}) {
+  const styles = useAvatarComposerStyles();
+  return (
+    <View style={styles.card}>
+      <View style={styles.heading}>
+        <View style={styles.previewWrap}>
+          <AvatarGlyph config={draft} size={84} />
+        </View>
+        <View style={styles.headingText}>
+          <Text style={styles.title}>Créer mon avatar</Text>
+          <Text style={styles.lede}>Compose ton personnage : peau, cheveux, tenue, silhouette.</Text>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Peau</Text>
+        <View style={styles.swatchRow}>
+          {SKIN_TONES.map((tone) => (
+            <TouchableOpacity
+              key={tone.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Peau ${tone.label}`}
+              onPress={() => onChange('skin', tone.id as SkinId)}
+              style={[styles.swatch, styles.skinSwatch, draft.skin === tone.id && styles.swatchSelected]}
+            >
+              <View style={[styles.skinSwatchInner, { backgroundColor: tone.color }]} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Cheveux</Text>
+        <View style={styles.swatchRow}>
+          {HAIR_STYLES.map((h) => (
+            <TouchableOpacity
+              key={h.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Cheveux ${h.label}`}
+              onPress={() => onChange('hair', h.id as HairId)}
+              style={[styles.chip, draft.hair === h.id && styles.chipSelected]}
+            >
+              <Text style={[styles.chipText, draft.hair === h.id && styles.chipTextSelected]}>{h.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Tenue</Text>
+        <View style={styles.swatchRow}>
+          {OUTFIT_STYLES.map((o) => (
+            <TouchableOpacity
+              key={o.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Tenue ${o.label}`}
+              onPress={() => onChange('outfit', o.id as OutfitId)}
+              style={[styles.chip, draft.outfit === o.id && styles.chipSelected]}
+            >
+              <Text style={[styles.chipText, draft.outfit === o.id && styles.chipTextSelected]}>{o.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Silhouette</Text>
+        <View style={styles.swatchRow}>
+          {BODY_TYPES.map((b) => (
+            <TouchableOpacity
+              key={b.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Silhouette ${b.label}`}
+              onPress={() => onChange('body', b.id as BodyId)}
+              style={[styles.chip, draft.body === b.id && styles.chipSelected]}
+            >
+              <Text style={[styles.chipText, draft.body === b.id && styles.chipTextSelected]}>{b.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Valider mon avatar" onPress={onConfirm} style={styles.confirmBtn}>
+        <Text style={styles.confirmBtnText}>Valider mon avatar</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
