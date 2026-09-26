@@ -98,6 +98,20 @@ export const contactSearchSchema = z.object({
   query: z.string().trim().min(2).max(32),
 }).strict();
 
+export const groupStickerListSchema = z.object({
+  conversationId: z.string().uuid(),
+}).strict();
+
+export const groupStickerAddSchema = z.object({
+  conversationId: z.string().uuid(),
+  mediaId: z.string().uuid(),
+}).strict();
+
+export const groupStickerRemoveSchema = z.object({
+  conversationId: z.string().uuid(),
+  stickerId: z.string().uuid(),
+}).strict();
+
 export const wizzSchema = z.object({
   recipientId: z.string().uuid(),
   variant: z.enum(['classic', 'love', 'fire', 'troll']).default('classic'),

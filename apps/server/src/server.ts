@@ -42,6 +42,7 @@ import {
 } from './groupStore.js';
 import { banGroupMember, setGroupMute, unbanGroupMember } from './groupModerationStore.js';
 import { registerGroupBanListHandler } from './groupModerationSocket.js';
+import { registerGroupStickerHandlers } from './groupStickerSocket.js';
 import { registerMediaHandlers } from './mediaSocket.js';
 import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { registerDeviceLinkHandlers } from './deviceLinkSocket.js';
@@ -173,6 +174,13 @@ io.on('connection', (socket) => {
     socket,
     userId,
     consumeRateLimit: () => socialLimiter.consume(`${userId}:group:bans-list`),
+  });
+
+  registerGroupStickerHandlers({
+    io,
+    socket,
+    userId,
+    consumeRateLimit: (action) => socialLimiter.consume(`${userId}:group:${action}`),
   });
 
   // CRITICAL FIX (2026-09-05): mediaSocket.ts's handlers (media:prepare-upload,

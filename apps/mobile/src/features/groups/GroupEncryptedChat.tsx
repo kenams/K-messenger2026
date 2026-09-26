@@ -35,7 +35,10 @@ export type GroupEncryptedMessage = {
 type GroupContent =
   | { v: 1; type: 'text'; text: string }
   | { v: 1; type: 'media'; mediaId: string; mimeType: SupportedMediaMime; caption?: string }
-  | { v: 1; type: 'voice'; mediaId: string; mimeType: SupportedMediaMime; durationMs: number };
+  | { v: 1; type: 'voice'; mediaId: string; mimeType: SupportedMediaMime; durationMs: number }
+  | { v: 1; type: 'sticker'; mediaId: string; mimeType: SupportedMediaMime };
+
+export type GroupStickerSummary = { id: string; conversationId: string; uploaderId: string; mediaId: string; createdAt: string };
 
 type Props = {
   socket: Socket;
@@ -90,6 +93,14 @@ function parseGroupContent(value: string): GroupContent {
       && parsed.durationMs > 0 && parsed.durationMs <= GROUP_MAX_VOICE_DURATION_MS
     ) {
       return { v: 1, type: 'voice', mediaId: parsed.mediaId, mimeType: parsed.mimeType as SupportedMediaMime, durationMs: parsed.durationMs };
+    }
+    if (
+      parsed.v === 1 && parsed.type === 'sticker'
+      && typeof parsed.mediaId === 'string'
+      && typeof parsed.mimeType === 'string'
+      && GROUP_MEDIA_MIMES.has(parsed.mimeType as SupportedMediaMime)
+    ) {
+      return { v: 1, type: 'sticker', mediaId: parsed.mediaId, mimeType: parsed.mimeType as SupportedMediaMime };
     }
   } catch {
     // Plain string message — show it as text.
@@ -147,6 +158,40 @@ function GroupMedia({ content }: { content: Extract<GroupContent, { type: 'media
   );
 }
 
+function GroupStickerImage({ mediaId }: { mediaId: string }) {
+  const { styles } = useThemedStyles();
+  const [uri, setUri] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setUri(null);
+    setFailed(false);
+    void getMediaDownload(mediaId)
+      .then((download) => { if (active) setUri(download.url); })
+      .catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [mediaId]);
+
+  if (failed) return <Text style={styles.mediaError}>⚠️ Sticker indisponible.</Text>;
+  if (!uri) return <ActivityIndicator />;
+  return <Image source={{ uri }} style={styles.stickerBubble} resizeMode="contain" />;
+}
+
+function StickerTrayThumb({ mediaId }: { mediaId: string }) {
+  const { styles } = useThemedStyles();
+  const [uri, setUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void getMediaDownload(mediaId).then((download) => { if (active) setUri(download.url); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [mediaId]);
+
+  if (!uri) return <View style={styles.stickerThumb} />;
+  return <Image source={{ uri }} style={styles.stickerThumb} resizeMode="contain" />;
+}
+
 export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, groupKey, onReact, onDelete }: Props) {
   const { styles, colors } = useThemedStyles();
   const [composer, setComposer] = useState('');
@@ -156,6 +201,9 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [recordingVoice, setRecordingVoice] = useState(false);
+  const [stickers, setStickers] = useState<GroupStickerSummary[]>([]);
+  const [stickerTrayOpen, setStickerTrayOpen] = useState(false);
+  const [uploadingSticker, setUploadingSticker] = useState(false);
   const deviceIdRef = useRef('');
   const [deviceReady, setDeviceReady] = useState(false);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
@@ -206,6 +254,64 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
       }
     };
   }, [socket, groupId, currentUserId]);
+
+  useEffect(() => {
+    let active = true;
+    void emitAck<{ ok: boolean; stickers?: GroupStickerSummary[] }>(socket, 'group:sticker-list', { conversationId: groupId })
+      .then((res) => { if (active && res.ok && res.stickers) setStickers(res.stickers); })
+      .catch(() => undefined);
+
+    const onAdded = (payload: { conversationId?: string; sticker?: GroupStickerSummary }) => {
+      if (payload.conversationId !== groupId || !payload.sticker) return;
+      setStickers((prev) => (prev.some((s) => s.id === payload.sticker!.id) ? prev : [...prev, payload.sticker!]));
+    };
+    const onRemoved = (payload: { conversationId?: string; stickerId?: string }) => {
+      if (payload.conversationId !== groupId || !payload.stickerId) return;
+      setStickers((prev) => prev.filter((s) => s.id !== payload.stickerId));
+    };
+    socket.on('group:sticker-added', onAdded);
+    socket.on('group:sticker-removed', onRemoved);
+    return () => {
+      active = false;
+      socket.off('group:sticker-added', onAdded);
+      socket.off('group:sticker-removed', onRemoved);
+    };
+  }, [socket, groupId]);
+
+  const sendSticker = async (mediaId: string, mimeType: SupportedMediaMime) => {
+    if (sending || !deviceReady) return;
+    setStickerTrayOpen(false);
+    await sendContent({ v: 1, type: 'sticker', mediaId, mimeType });
+  };
+
+  const removeSticker = async (stickerId: string) => {
+    await emitAck(socket, 'group:sticker-remove', { conversationId: groupId, stickerId }).catch(() => undefined);
+  };
+
+  const uploadSticker = async () => {
+    if (uploadingSticker || stickers.length >= 8) return;
+    setUploadingSticker(true);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setNotice('Autorise l’accès aux photos pour ajouter un sticker.');
+        return;
+      }
+      const picked = await launchImageLibrarySafe({ mediaTypes: ['images'], quality: 0.9 });
+      if (picked.canceled) return;
+      const asset = picked.assets[0];
+      if (!asset?.uri) throw new Error('GROUP_STICKER_UNSUPPORTED');
+      const mimeType = inferGroupMime(asset);
+      if (!mimeType || !mimeType.startsWith('image/')) throw new Error('GROUP_STICKER_UNSUPPORTED');
+      const { mediaId } = await uploadLocalMedia({ uri: asset.uri, mimeType, byteSize: asset.fileSize ?? undefined, purpose: 'chat', conversationId: groupId });
+      const res = await emitAck<{ ok: boolean; sticker?: GroupStickerSummary; error?: string }>(socket, 'group:sticker-add', { conversationId: groupId, mediaId });
+      if (!res.ok) throw new Error(res.error ?? 'GROUP_STICKER_ADD_FAILED');
+    } catch {
+      setNotice('Sticker non ajouté. Formats acceptés : JPG, PNG, WebP · 8 par groupe max.');
+    } finally {
+      setUploadingSticker(false);
+    }
+  };
 
   const notifyTyping = (isTyping: boolean) => {
     if (isTyping === typingSentRef.current) return;
@@ -391,6 +497,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
             >
               {content.type === 'media' ? <GroupMedia content={content} />
                 : content.type === 'voice' ? <VoiceMessageBubble mediaId={content.mediaId} durationMs={content.durationMs} mine={mine} colors={colors} />
+                : content.type === 'sticker' ? <GroupStickerImage mediaId={content.mediaId} />
                 : <Text style={big ? styles.bigEmoji : styles.body}>{content.text}</Text>}
               <Text style={styles.meta}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
             </TouchableOpacity>
@@ -438,7 +545,42 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
             <Text style={styles.quickEmoji}>{emoji}</Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity
+          onPress={() => setStickerTrayOpen((open) => !open)}
+          accessibilityRole="button"
+          accessibilityLabel="Stickers du groupe"
+          style={[styles.quickBtn, stickerTrayOpen && styles.quickBtnActive]}
+        >
+          <Text style={styles.quickEmoji}>🖼️</Text>
+        </TouchableOpacity>
       </View>
+      {stickerTrayOpen && (
+        <View style={styles.stickerTray}>
+          {stickers.length === 0 && <Text style={styles.stickerTrayEmpty}>Aucun sticker dans ce groupe pour l’instant.</Text>}
+          {stickers.map((sticker) => (
+            <TouchableOpacity
+              key={sticker.id}
+              onPress={() => void sendSticker(sticker.mediaId, 'image/jpeg')}
+              onLongPress={() => { if (sticker.uploaderId === currentUserId) void removeSticker(sticker.id); }}
+              accessibilityRole="button"
+              accessibilityLabel="Envoyer ce sticker"
+              disabled={sending || !deviceReady}
+              style={styles.stickerTrayItem}
+            >
+              <StickerTrayThumb mediaId={sticker.mediaId} />
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            onPress={() => void uploadSticker()}
+            disabled={uploadingSticker || stickers.length >= 8}
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter un sticker au groupe"
+            style={[styles.stickerTrayItem, styles.stickerTrayAdd, (uploadingSticker || stickers.length >= 8) && styles.disabled]}
+          >
+            {uploadingSticker ? <ActivityIndicator /> : <Text style={styles.stickerTrayAddText}>＋</Text>}
+          </TouchableOpacity>
+        </View>
+      )}
       {showEmoji && <EmojiPanel onPick={(emoji) => setComposer((c) => (c + emoji).slice(0, 12000))} />}
       <View style={styles.composer}>
         {!recordingVoice && (
@@ -520,8 +662,16 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   body: { color: palette.ink, fontSize: 14, lineHeight: 20 },
   bigEmoji: { fontSize: 40, lineHeight: 48 },
   quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 4, marginTop: spacing.xs, borderTopWidth: 1, borderTopColor: palette.hairline },
-  quickBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  quickBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  quickBtnActive: { backgroundColor: palette.azureSoft },
   quickEmoji: { fontSize: 19 },
+  stickerBubble: { width: 120, height: 120 },
+  stickerTray: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, borderTopWidth: 1, borderTopColor: palette.hairline },
+  stickerTrayEmpty: { color: palette.inkFaint, fontSize: 11.5, fontWeight: '600', paddingVertical: spacing.sm },
+  stickerTrayItem: { width: 56, height: 56, borderRadius: radius.md, borderWidth: 1, borderColor: palette.hairline, backgroundColor: palette.surfaceSunken, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  stickerThumb: { width: 52, height: 52 },
+  stickerTrayAdd: { backgroundColor: palette.azureSoft, borderColor: palette.azure, borderStyle: 'dashed' },
+  stickerTrayAddText: { color: palette.azureDeep, fontSize: 22, fontWeight: '900' },
   attachActive: { backgroundColor: palette.azure, borderColor: palette.azure },
   meta: { color: palette.inkFaint, fontSize: 9, marginTop: 5, textAlign: 'right' },
   mediaPreview: { width: 230, height: 230, borderRadius: radius.md, backgroundColor: palette.hairline, marginBottom: 6 },
