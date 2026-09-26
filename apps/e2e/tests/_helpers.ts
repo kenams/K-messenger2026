@@ -59,14 +59,11 @@ export async function signOut(page: Page): Promise<void> {
 }
 
 export async function openTab(page: Page, tab: TabName): Promise<void> {
-  // Same mobile-vs-desktop testid split as onAppShell above.
-  const mobile = page.getByTestId(`tab-${tab}`);
-  const desktop = page.getByTestId(`desktop-tab-${tab}`);
-  if (await desktop.count()) {
-    await desktop.click();
-  } else {
-    await mobile.click();
-  }
+  // Same mobile-vs-desktop testid split as onAppShell above. `.or()` gives a
+  // single auto-waiting/auto-retrying locator instead of a one-shot `.count()`
+  // race (which flaked here: right after a save/redirect the layout can be
+  // mid-transition when checked, permanently committing to the wrong branch).
+  await page.getByTestId(`tab-${tab}`).or(page.getByTestId(`desktop-tab-${tab}`)).first().click();
 }
 
 /** Fails the test if the page logged an uncaught error / console error. */
