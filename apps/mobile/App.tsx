@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -8,6 +8,9 @@ import { MomentsScreen } from './src/features/moments/MomentsScreen';
 import { KMapScreen } from './src/features/map/KMapScreen';
 import { MsnContactsScreen, type Contact } from './src/features/contacts/MsnContactsScreen';
 import { ChatsHubScreen } from './src/features/chats/ChatsHubScreen';
+import { ChatsListPane } from './src/features/chats/ChatsListPane';
+import { KStatusStrip } from './src/features/status/KStatusStrip';
+import { useIsDesktopWeb } from './src/lib/useIsDesktopWeb';
 import { DirectConversationScreen } from './src/features/chats/DirectConversationScreen';
 import { GroupsScreen } from './src/features/groups/GroupsScreen';
 import { LiveScreen } from './src/features/live/LiveScreen';
@@ -21,7 +24,7 @@ import { useNowPlayingSync } from './src/features/profile/useNowPlayingSync';
 import { unregisterPushForSignOut } from './src/features/push/usePushRegistration';
 import { getBackend, notifyAuthStateMayHaveChanged } from './src/lib/backend';
 import { getMediaDownload } from './src/lib/media';
-import { disconnectRealtimeSocket } from './src/lib/realtime';
+import { disconnectRealtimeSocket, emitAck, getAuthenticatedUserId, getRealtimeSocket } from './src/lib/realtime';
 import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, immersive, layout, radius, spacing, type Palette, type TypeTokens } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, SectionLabel, Segmented, useAndroidBack } from './src/theme/components';
@@ -94,16 +97,6 @@ function WebShell({ children }: { children: React.ReactNode }) {
       <View style={styles.shell}>{children}</View>
     </SafeAreaView>
   );
-}
-
-/** Web-only: viewport wide enough to earn the full-screen desktop
- * (MSN-style) shell — fixed buddy-list rail + a conversation pane that
- * fills the rest of the window — instead of the phone-shaped mobile
- * column. Native (Android/iOS) never takes this branch. */
-const DESKTOP_MIN_WIDTH = 900;
-function useIsDesktopWeb(): boolean {
-  const { width } = useWindowDimensions();
-  return Platform.OS === 'web' && width >= DESKTOP_MIN_WIDTH;
 }
 
 export default function App({ profile, onProfileChanged }: AppProps) {
@@ -417,9 +410,9 @@ type DesktopShellProps = {
   onProfileChanged: () => Promise<void>;
 };
 
-const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MIN_WIDTH = 300;
 const SIDEBAR_MAX_WIDTH = 480;
-const SIDEBAR_DEFAULT_WIDTH = 360;
+const SIDEBAR_DEFAULT_WIDTH = 392;
 const SIDEBAR_WIDTH_STORAGE_KEY = 'kssenger.desktop.sidebarWidth';
 
 function loadStoredSidebarWidth(): number {
@@ -489,21 +482,27 @@ function SidebarResizeHandle({ onResize, onResizeEnd }: { onResize: (deltaX: num
   );
 }
 
-const DESKTOP_NAV_ITEMS: { tab: TabName; icon: string; label: string }[] = [
+type DesktopNavItem = { tab: TabName; icon: string; label: string };
+const DESKTOP_PRIMARY_NAV: DesktopNavItem[] = [
   { tab: 'contacts', icon: '👥', label: 'Contacts' },
   { tab: 'chats', icon: '💬', label: 'Chats' },
-  { tab: 'feed', icon: '▶️', label: 'K-Feed' },
-  { tab: 'map', icon: '📍', label: 'K-Map' },
   { tab: 'moments', icon: '✨', label: 'Moments' },
   { tab: 'me', icon: '🙂', label: 'Moi' },
 ];
+/** Second-level "Découvrir" section — still one click away from anywhere,
+ * K-Map carries the Ghost Sync roadmap so it must never be buried. */
+const DESKTOP_DISCOVER_NAV: DesktopNavItem[] = [
+  { tab: 'feed', icon: '▶️', label: 'K-Feed' },
+  { tab: 'map', icon: '📍', label: 'K-Map' },
+];
+const LIST_TABS = new Set<TabName>(['contacts', 'chats']);
 
-/** Real full-screen "app" shell for wide web viewports — a fixed buddy-list
- * rail on the left and a conversation/content pane that fills every
- * remaining pixel of the browser window, MSN-Messenger-style. No page
- * scroll, no site margins: only the panes below scroll internally. Native
- * builds and narrow web never mount this — they keep the phone-shaped
- * single-column flow above untouched. */
+/** Real full-screen "app" shell for wide web viewports. Layout is constant
+ * for the messenger tabs: nav rail · list (contacts OR conversations) ·
+ * open conversation. Switching Contacts ↔ Chats only swaps the middle list —
+ * the conversation on the right stays open. Moments / Moi / Découvrir use
+ * the list + conversation area as one wide pane. No page scroll, only inner
+ * panes scroll. Native builds and narrow web never mount this. */
 function DesktopShell(props: DesktopShellProps) {
   const {
     profile, tab, setTab, selected, setSelected,
@@ -512,11 +511,17 @@ function DesktopShell(props: DesktopShellProps) {
     liveScreen, setLiveScreen, liveBroadcasts, userAge,
     nowPlayingOpen, setNowPlayingOpen, saveNowPlaying, onProfileChanged,
   } = props;
-  const { styles, colors } = useAppStyles();
+  const { styles } = useAppStyles();
   const { scheme } = useTheme();
   const [sidebarWidth, setSidebarWidth] = useState(loadStoredSidebarWidth);
   const sidebarWidthRef = React.useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
+  const [groupFocus, setGroupFocus] = useState<string | null>(null);
+  const [groupsManage, setGroupsManage] = useState(false);
+  const [listsMounted, setListsMounted] = useState<Set<TabName>>(() => new Set([tab]));
+  useEffect(() => {
+    if (LIST_TABS.has(tab) && !listsMounted.has(tab)) setListsMounted((prev) => new Set(prev).add(tab));
+  }, [tab, listsMounted]);
 
   const handleSidebarResize = useCallback((deltaX: number) => {
     setSidebarWidth((prev) => Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, prev + deltaX)));
@@ -541,38 +546,62 @@ function DesktopShell(props: DesktopShellProps) {
     setLiveScreen(null);
   };
 
-  const showBuddyList = tab === 'contacts' && !overlay;
+  const openContact = (contact: Contact) => {
+    closeOverlay();
+    setGroupFocus(null);
+    setGroupsManage(false);
+    setSelected(contact);
+  };
+  const openGroup = (groupId: string) => {
+    closeOverlay();
+    setSelected(null);
+    setGroupsManage(false);
+    setGroupFocus(groupId);
+  };
+  const manageGroups = () => {
+    closeOverlay();
+    setSelected(null);
+    setGroupFocus(null);
+    setGroupsManage(true);
+  };
+  const goTab = (next: TabName) => { closeOverlay(); setTab(next); };
 
-  let mainContent: React.ReactNode;
-  if (overlay === 'live') {
-    mainContent = <LiveScreen broadcasterId={liveScreen!.broadcasterId} onClose={closeOverlay} />;
-  } else if (overlay === 'editProfile') {
-    mainContent = <ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={closeOverlay} />;
-  } else if (overlay === 'accountData') {
-    mainContent = <AccountDataScreen profile={profile} onBack={closeOverlay} />;
-  } else if (overlay === 'privacy') {
-    mainContent = <PrivacySettingsScreen userId={profile.id} onBack={closeOverlay} />;
-  } else if (overlay === 'groups') {
-    mainContent = (
+  const listTab = LIST_TABS.has(tab);
+
+  let overlayContent: React.ReactNode = null;
+  if (overlay === 'live') overlayContent = <LiveScreen broadcasterId={liveScreen!.broadcasterId} onClose={closeOverlay} />;
+  else if (overlay === 'editProfile') overlayContent = <ProfileEditScreen profile={profile} onSaved={onProfileChanged} onBack={closeOverlay} />;
+  else if (overlay === 'accountData') overlayContent = <AccountDataScreen profile={profile} onBack={closeOverlay} />;
+  else if (overlay === 'privacy') overlayContent = <PrivacySettingsScreen userId={profile.id} onBack={closeOverlay} />;
+  else if (overlay === 'groups') overlayContent = (
+    <>
+      <ScreenHeader title="Groupes" subtitle="Connexion sécurisée" onBack={closeOverlay} />
+      <GroupsScreen />
+    </>
+  );
+
+  let conversationContent: React.ReactNode;
+  if (selected) {
+    conversationContent = <DirectConversationScreen key={selected.id} contact={selected} onBack={() => setSelected(null)} />;
+  } else if (groupFocus) {
+    conversationContent = <GroupsScreen key={groupFocus} focusGroupId={groupFocus} onCloseFocus={() => setGroupFocus(null)} />;
+  } else if (groupsManage) {
+    conversationContent = (
       <>
-        <ScreenHeader title="Groupes" subtitle="Connexion sécurisée" onBack={closeOverlay} />
+        <ScreenHeader title="Groupes" subtitle="Crée un salon ou gère tes groupes" onBack={() => setGroupsManage(false)} />
         <GroupsScreen />
       </>
     );
-  } else if (tab === 'contacts') {
-    mainContent = selected
-      ? <DirectConversationScreen key={selected.id} contact={selected} onBack={() => setSelected(null)} />
-      : <EmptyConversationPane profile={profile} />;
-  } else if (tab === 'chats') {
-    mainContent = <ChatsHubScreen />;
-  } else if (tab === 'feed') {
-    mainContent = <FeedScreen userAge={userAge} />;
-  } else if (tab === 'map') {
-    mainContent = <KMapScreen />;
-  } else if (tab === 'moments') {
-    mainContent = <MomentsScreen />;
   } else {
-    mainContent = (
+    conversationContent = <EmptyConversationPane profile={profile} tab={tab} />;
+  }
+
+  let wideContent: React.ReactNode = null;
+  if (!listTab) {
+    if (tab === 'feed') wideContent = <FeedScreen userAge={userAge} />;
+    else if (tab === 'map') wideContent = <KMapScreen />;
+    else if (tab === 'moments') wideContent = <DesktopMomentsHub />;
+    else wideContent = (
       <MeScreen
         profile={profile}
         userAge={userAge}
@@ -586,49 +615,75 @@ function DesktopShell(props: DesktopShellProps) {
     );
   }
 
+  const discoverActive = (tab === 'feed' || tab === 'map') && !overlay;
+  const renderNavItem = (item: DesktopNavItem, secondary = false) => {
+    const active = tab === item.tab && !overlay;
+    return (
+      <Pressable
+        key={item.tab}
+        testID={`desktop-tab-${item.label}`}
+        accessibilityRole="tab"
+        accessibilityLabel={item.label}
+        accessibilityState={{ selected: active }}
+        style={(state) => [
+          secondary ? styles.navRailItemSecondary : styles.navRailItem,
+          (state as { hovered?: boolean }).hovered && !active && styles.navRailItemHover,
+          active && styles.navRailItemActive,
+        ]}
+        onPress={() => goTab(item.tab)}
+      >
+        {active && <View style={styles.navRailActiveBar} />}
+        <Text style={[secondary ? styles.navRailIconSecondary : styles.navRailIcon, active && styles.navRailIconActive]}>{item.icon}</Text>
+        <Text style={[styles.navRailLabel, active && styles.navRailLabelActive]}>{item.label}</Text>
+      </Pressable>
+    );
+  };
+
   return (
     <View style={styles.desktopRoot}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.desktopBody}>
-        <View style={styles.navRail}>
-          <View style={styles.navRailBrand}>
+        <View style={styles.navRail} accessibilityRole="tablist">
+          <TouchableOpacity style={styles.navRailBrand} onPress={() => goTab('me')} accessibilityRole="button" accessibilityLabel="Mon profil">
             <Avatar profile={profile} />
-          </View>
-          {DESKTOP_NAV_ITEMS.map((item) => (
-            <TouchableOpacity
-              key={item.tab}
-              testID={`desktop-tab-${item.label}`}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: tab === item.tab && !overlay }}
-              style={[styles.navRailItem, tab === item.tab && !overlay && styles.navRailItemActive]}
-              onPress={() => { closeOverlay(); setTab(item.tab); }}
-            >
-              <Text style={styles.navRailIcon}>{item.icon}</Text>
-              <Text style={[styles.navRailLabel, tab === item.tab && !overlay && styles.navRailLabelActive]}>{item.label}</Text>
-              {item.tab === 'chats' && liveBroadcasts.size > 0 && <View style={styles.navRailDot} />}
-            </TouchableOpacity>
-          ))}
+            <View style={styles.navRailPresence}><PresenceBadge presence={profile.presence} size={12} /></View>
+          </TouchableOpacity>
+          {DESKTOP_PRIMARY_NAV.map((item) => renderNavItem(item))}
+          <View style={[styles.navRailDivider, discoverActive && styles.navRailDividerActive]} />
+          <Text style={[styles.navRailSection, discoverActive && styles.navRailSectionActive]}>DÉCOUVRIR</Text>
+          {DESKTOP_DISCOVER_NAV.map((item) => renderNavItem(item, true))}
           <View style={styles.flex} />
           {liveBroadcasts.size > 0 && (
             <TouchableOpacity
               style={styles.navRailLive}
               onPress={() => setLiveScreen({ broadcasterId: [...liveBroadcasts.keys()][0] })}
               accessibilityRole="button"
+              accessibilityLabel={`${[...liveBroadcasts.values()][0]} est en direct — rejoindre`}
             >
               <Text style={styles.navRailLiveText}>🔴 Live</Text>
             </TouchableOpacity>
           )}
         </View>
-        {showBuddyList && (
-          <>
-            <View style={[styles.sidebarPane, { width: sidebarWidth }]}>
-              <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />
-              <MsnContactsScreen onOpen={setSelected} />
+        <View style={[styles.sidebarPane, { width: sidebarWidth }, !listTab && styles.hiddenPane]}>
+          <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />
+          {listsMounted.has('contacts') && (
+            <View style={tab === 'contacts' ? styles.flex : styles.hiddenPane}>
+              <MsnContactsScreen onOpen={openContact} variant="desktop" selectedContactId={selected?.id ?? null} showStatusStrip={false} />
             </View>
-            <SidebarResizeHandle onResize={handleSidebarResize} onResizeEnd={handleSidebarResizeEnd} />
-          </>
-        )}
-        <View style={styles.mainPane}>{mainContent}</View>
+          )}
+          {listsMounted.has('chats') && (
+            <View style={tab === 'chats' ? styles.flex : styles.hiddenPane}>
+              <ChatsListPane
+                selection={selected ? { kind: 'direct', contactId: selected.id } : groupFocus ? { kind: 'group', groupId: groupFocus } : null}
+                onOpenContact={openContact}
+                onOpenGroup={openGroup}
+                onManageGroups={manageGroups}
+              />
+            </View>
+          )}
+        </View>
+        {listTab && <SidebarResizeHandle onResize={handleSidebarResize} onResizeEnd={handleSidebarResizeEnd} />}
+        <View style={styles.mainPane}>{overlayContent ?? (listTab ? conversationContent : wideContent)}</View>
       </View>
       <NowPlayingSheet
         visible={nowPlayingOpen}
@@ -641,13 +696,53 @@ function DesktopShell(props: DesktopShellProps) {
   );
 }
 
-function EmptyConversationPane({ profile }: { profile: MyProfile }) {
+/** Desktop "Moments" entry point: friends' 24h K-Statut on top, Moments below. */
+function DesktopMomentsHub() {
   const { styles } = useAppStyles();
+  const [userId, setUserId] = useState('');
+  const nicknamesRef = React.useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    let active = true;
+    void Promise.all([getRealtimeSocket(), getAuthenticatedUserId()]).then(async ([client, id]) => {
+      try {
+        const response = await emitAck<{ ok: boolean; contacts?: Array<{ profiles: { id: string; display_name: string; nickname: string | null } }> }>(client, 'contacts:list');
+        if (response.ok) {
+          nicknamesRef.current = new Map((response.contacts ?? []).map((row) => [row.profiles.id, row.profiles.nickname || row.profiles.display_name]));
+        }
+      } catch {
+        // names fall back to "K-ssenger"
+      }
+      if (active) setUserId(id);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+  return (
+    <View style={styles.momentsHub}>
+      <MomentsScreen
+        statusSlot={userId ? (
+          <View style={styles.momentsStatus}>
+            <KStatusStrip currentUserId={userId} nicknameByUserId={(id) => nicknamesRef.current.get(id) ?? 'K-ssenger'} />
+          </View>
+        ) : null}
+      />
+    </View>
+  );
+}
+
+function EmptyConversationPane({ profile, tab }: { profile: MyProfile; tab: TabName }) {
+  const { styles } = useAppStyles();
+  const first = profile.display_name.split(' ')[0];
   return (
     <View style={styles.emptyConvo}>
-      <Text style={styles.emptyConvoIcon}>💬</Text>
-      <Text style={styles.emptyConvoTitle}>Choisis un contact</Text>
-      <Text style={styles.emptyConvoCopy}>Sélectionne un ami dans ta liste pour ouvrir la conversation, {profile.display_name.split(' ')[0]}.</Text>
+      <View style={styles.emptyConvoMark}>
+        <Avatar profile={profile} size="large" />
+      </View>
+      <Text style={styles.emptyConvoTitle}>{tab === 'chats' ? 'Choisis une conversation' : 'Choisis un ami'}</Text>
+      <Text style={styles.emptyConvoCopy}>
+        {tab === 'chats'
+          ? `Reprends une discussion dans la liste, ${first}. Elle restera ouverte ici même si tu passes sur tes contacts.`
+          : `Clique sur un contact pour ouvrir la conversation, ${first}. ⚡ envoie un K-Pulse sans ouvrir le chat.`}
+      </Text>
     </View>
   );
 }
@@ -943,13 +1038,28 @@ function createStyles(palette: Palette, typo: TypeTokens) {
     width: 84, alignItems: 'center', paddingVertical: spacing.lg, gap: spacing.xs,
     backgroundColor: palette.navy, borderRightWidth: 1, borderRightColor: palette.hairlineStrong,
   },
-  navRailBrand: { marginBottom: spacing.md },
-  navRailItem: { width: 64, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.md, gap: 2 },
+  navRailBrand: { marginBottom: spacing.md, position: 'relative' },
+  navRailPresence: { position: 'absolute', right: -3, bottom: -3 },
+  navRailItem: {
+    width: 66, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.md, gap: 3,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer', transitionProperty: 'background-color', transitionDuration: '140ms' } as object) : null),
+  },
+  navRailItemSecondary: {
+    width: 62, alignItems: 'center', paddingVertical: 6, borderRadius: radius.sm, gap: 2,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer', transitionProperty: 'background-color', transitionDuration: '140ms' } as object) : null),
+  },
+  navRailItemHover: { backgroundColor: 'rgba(255,255,255,0.06)' },
   navRailItemActive: { backgroundColor: palette.navyGlow },
-  navRailIcon: { fontSize: 20, opacity: 0.75 },
-  navRailLabel: { color: palette.inkOnAzure, opacity: 0.55, fontSize: 9.5, fontWeight: '700' },
-  navRailLabelActive: { opacity: 1 },
-  navRailDot: { position: 'absolute', top: 6, right: 12, width: 8, height: 8, borderRadius: 4, backgroundColor: palette.danger },
+  navRailActiveBar: { position: 'absolute', left: -9, top: 10, bottom: 10, width: 3, borderRadius: 3, backgroundColor: palette.brass },
+  navRailIcon: { fontSize: 20, opacity: 0.72 },
+  navRailIconSecondary: { fontSize: 16, opacity: 0.66 },
+  navRailIconActive: { opacity: 1 },
+  navRailLabel: { color: palette.inkOnAzure, opacity: 0.58, fontSize: 9.5, fontWeight: '700' },
+  navRailLabelActive: { opacity: 1, fontWeight: '900' },
+  navRailDivider: { width: 36, height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginTop: spacing.md, marginBottom: spacing.sm },
+  navRailDividerActive: { backgroundColor: palette.brass },
+  navRailSection: { color: palette.inkOnAzure, opacity: 0.42, fontSize: 7.5, fontWeight: '900', letterSpacing: 1.2, marginBottom: 2 },
+  navRailSectionActive: { opacity: 0.85, color: palette.brass },
   navRailLive: { marginBottom: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: palette.danger },
   navRailLiveText: { color: palette.white, fontWeight: '900', fontSize: 10.5 },
 
@@ -967,8 +1077,10 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   sidebarResizeGrip: { width: 3, height: 36, borderRadius: radius.pill, backgroundColor: palette.hairlineStrong },
   sidebarResizeGripActive: { backgroundColor: palette.azure, height: 56 },
 
-  emptyConvo: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
-  emptyConvoIcon: { fontSize: 44, marginBottom: spacing.md },
+  emptyConvo: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, backgroundColor: palette.sky },
+  emptyConvoMark: { marginBottom: spacing.lg, opacity: 0.95 },
+  momentsHub: { flex: 1, width: '100%', maxWidth: 760, alignSelf: 'center' },
+  momentsStatus: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
   emptyConvoTitle: { ...typo.title, color: palette.ink },
   emptyConvoCopy: { ...typo.body, color: palette.inkSoft, marginTop: spacing.sm, textAlign: 'center', maxWidth: 320 },
   });

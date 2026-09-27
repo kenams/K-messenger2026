@@ -45,7 +45,9 @@ function inferMomentMime(asset: ImagePicker.ImagePickerAsset, kind: 'photo' | 'v
   return null;
 }
 
-export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void }) {
+/** `statusSlot` (desktop web): K-Statut rendered under the header so statuses
+ * and Moments share one entry point. Data stays separate server-side. */
+export function MomentsScreen({ onPinnedChange, statusSlot }: { onPinnedChange?: () => void; statusSlot?: React.ReactNode }) {
   const { styles, colors } = useThemedStyles();
   const [moments, setMoments] = useState<Moment[]>([]);
   const [caption, setCaption] = useState('');
@@ -210,7 +212,8 @@ export function MomentsScreen({ onPinnedChange }: { onPinnedChange?: () => void 
   if (loading) return <View style={styles.loading}><ActivityIndicator color={colors.azure} /><Text style={styles.muted}>Chargement des Moments…</Text></View>;
   return (
     <View style={styles.container}>
-      <ScreenHeader title="Moments" subtitle="Texte, photo ou vidéo · 24 h · média privé" />
+      <ScreenHeader title="Moments" subtitle={statusSlot ? 'Statuts 24 h de tes amis · tes Moments texte, photo ou vidéo' : 'Texte, photo ou vidéo · 24 h · média privé'} />
+      {statusSlot}
       <FlatList
         data={moments}
         keyExtractor={(item) => item.id}

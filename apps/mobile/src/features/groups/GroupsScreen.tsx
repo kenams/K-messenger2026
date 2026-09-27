@@ -45,7 +45,9 @@ type ContactsResponse = {
 };
 type HistoryResponse = { ok: boolean; messages?: GroupEncryptedMessage[]; error?: string };
 
-export function GroupsScreen() {
+/** `focusGroupId` (desktop web): open straight into that group's chat and
+ * hand "back" to `onCloseFocus` instead of showing the group list. */
+export function GroupsScreen({ focusGroupId, onCloseFocus }: { focusGroupId?: string | null; onCloseFocus?: () => void } = {}) {
   const { styles, colors } = useThemedStyles();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
@@ -239,7 +241,19 @@ export function GroupsScreen() {
     finally { setBusy(false); }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Chargement des groupes…</Text></View>;
+  const focusGroup = focusGroupId ? groups.find((group) => group.id === focusGroupId) ?? null : null;
+  useEffect(() => {
+    if (!focusGroup || !socket || !currentUserId || selectedGroup?.id === focusGroup.id) return;
+    void openGroup(focusGroup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusGroup?.id, socket, currentUserId]);
+
+  const closeGroup = () => {
+    setSelectedGroup(null); setHistory([]); setBans([]); setGroupKey(null);
+    onCloseFocus?.();
+  };
+
+  if (loading || (focusGroupId && !selectedGroup && (!!focusGroup || busy))) return <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Chargement des groupes…</Text></View>;
 
   if (selectedGroup && socket) {
     const existingIds = new Set(selectedGroup.members.map((member) => member.userId));
@@ -248,7 +262,7 @@ export function GroupsScreen() {
     return (
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
       <ScrollView style={styles.page} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <TouchableOpacity onPress={() => { setSelectedGroup(null); setHistory([]); setBans([]); setGroupKey(null); }}><Text style={styles.back}>‹ Groupes</Text></TouchableOpacity>
+        <TouchableOpacity onPress={closeGroup}><Text style={styles.back}>‹ {focusGroupId ? 'Fermer' : 'Groupes'}</Text></TouchableOpacity>
         <View style={styles.hero}>
           <View style={styles.avatar}><Text style={styles.avatarText}>{(selectedGroup.title || 'K').slice(0, 2).toUpperCase()}</Text></View>
           <View style={styles.flex}><Text style={styles.groupTitle}>{selectedGroup.title || 'Groupe K-ssenger'}</Text><Text style={styles.meta}>{selectedGroup.members.length} membres · {selectedGroup.role}</Text></View>

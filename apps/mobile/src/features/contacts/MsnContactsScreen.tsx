@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import { getBackend } from '../../lib/backend';
 import { getMediaDownload } from '../../lib/media';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
-import { elevation, presenceLabel, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { elevation, presenceColorFor, presenceLabel, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
+import { formatAgo } from '../../lib/timeFormat';
 import { useTheme } from '../../theme/ThemeProvider';
 import { Equalizer, PresenceBadge, SectionLabel, SkyBackground, useNudgeShake, usePulseUntilSeen, useReducedMotion } from '../../theme/components';
 import { accentOf } from '../../theme/accent';
@@ -33,6 +34,10 @@ export type Contact = {
   avatarUrl?: string;
   statusMessage?: string;
   nowPlaying?: string;
+  nowPlayingTitle?: string;
+  nowPlayingArtist?: string;
+  /** When the track was last written server-side — distinguishes "listening now" from "last listened". */
+  nowPlayingAt?: string | null;
   favorite?: boolean;
   group: string;
   accentColor?: string | null;
@@ -54,6 +59,7 @@ type ContactResponse = {
       presence: Presence;
       now_playing_title: string | null;
       now_playing_artist: string | null;
+      now_playing_at?: string | null;
       accent_color?: string | null;
     };
     last_message_at: string | null;
@@ -107,7 +113,7 @@ function httpsAvatar(value: string | null | undefined): string | null {
   return value && /^https:\/\//i.test(value) ? value : null;
 }
 
-function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: string; avatarUrl?: string | null; presence?: Presence }) {
+export function ContactAvatar({ displayName, avatarUrl, presence, size = 46 }: { displayName: string; avatarUrl?: string | null; presence?: Presence; size?: number }) {
   const { styles } = useThemedStyles();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => httpsAvatar(avatarUrl));
   const mediaId = mediaIdFromAvatar(avatarUrl);
@@ -128,14 +134,15 @@ function ContactAvatar({ displayName, avatarUrl, presence }: { displayName: stri
   }, [avatarUrl, mediaId]);
 
   const online = presence === 'online';
+  const sized = size === 46 ? null : { width: size, height: size, borderRadius: Math.round(size * 0.34) };
   return (
     <View style={styles.avatarWrap}>
       {presetConfig
-        ? <View style={[styles.avatar, styles.avatarPresetClip, online && styles.avatarOnline]}><AvatarGlyph config={presetConfig} size={46} /></View>
+        ? <View style={[styles.avatar, sized, styles.avatarPresetClip, online && styles.avatarOnline]}><AvatarGlyph config={presetConfig} size={size} /></View>
         : resolvedUrl
-        ? <Image source={{ uri: resolvedUrl }} style={[styles.avatar, online && styles.avatarOnline]} />
-        : <View style={[styles.avatar, online && styles.avatarOnline]}><Text style={styles.avatarText}>{displayName[0]?.toUpperCase() ?? '?'}</Text></View>}
-      {presence && <View style={styles.avatarBadge}><PresenceBadge presence={presence} size={13} /></View>}
+        ? <Image source={{ uri: resolvedUrl }} style={[styles.avatar, sized, online && styles.avatarOnline]} />
+        : <View style={[styles.avatar, sized, online && styles.avatarOnline]}><Text style={[styles.avatarText, size !== 46 && { fontSize: Math.round(size * 0.4) }]}>{displayName[0]?.toUpperCase() ?? '?'}</Text></View>}
+      {presence && <View style={styles.avatarBadge}><PresenceBadge presence={presence} size={size >= 50 ? 15 : 13} /></View>}
     </View>
   );
 }
@@ -297,6 +304,162 @@ function ContactRow({
   );
 }
 
+/** A track counts as "listening now" while its owner is connected and the
+ * server saw it written in the last 15 minutes; otherwise it is shown as the
+ * last thing they listened to. Without a server timestamp (older backend),
+ * presence alone decides. */
+const LIVE_MUSIC_WINDOW_MS = 15 * 60_000;
+export function musicState(contact: Pick<Contact, 'nowPlayingTitle' | 'nowPlaying' | 'nowPlayingAt' | 'presence'>): 'live' | 'stale' | null {
+  if (!contact.nowPlayingTitle && !contact.nowPlaying) return null;
+  if (contact.presence === 'offline') return 'stale';
+  if (contact.nowPlayingAt) {
+    const at = Date.parse(contact.nowPlayingAt);
+    if (Number.isFinite(at) && Date.now() - at > LIVE_MUSIC_WINDOW_MS) return 'stale';
+  }
+  return 'live';
+}
+
+type MenuItem = { key: string; label: string; icon: string; tone?: 'danger'; onPress: () => void };
+
+/** Desktop web buddy row: identity on line 1, mood on line 2, music alone on
+ * line 3. Secondary actions live behind "…" so they never eat the name. */
+function DesktopContactRow({
+  contact,
+  selected,
+  menuOpen,
+  myUserId,
+  toneOpen,
+  onOpen,
+  onToggleFavorite,
+  onSendPulse,
+  onToggleMenu,
+  onToggleTone,
+  onRemove,
+  onBlock,
+}: {
+  contact: Contact;
+  selected: boolean;
+  menuOpen: boolean;
+  myUserId: string;
+  toneOpen: boolean;
+  onOpen: (contact: Contact) => void;
+  onToggleFavorite: (contact: Contact) => void;
+  onSendPulse: (contact: Contact) => void;
+  onToggleMenu: () => void;
+  onToggleTone: () => void;
+  onRemove: () => void;
+  onBlock: () => void;
+}) {
+  const { styles, colors } = useThemedStyles();
+  const { unread, pulse } = useContactAttention(contact.id);
+  const reducedMotion = useReducedMotion();
+  const attention = unread > 0 || pulse;
+  const blink = useRef(new Animated.Value(1)).current;
+  const dotColor = presenceColorFor(colors)[contact.presence] ?? colors.offline;
+  const music = musicState(contact);
+  const track = contact.nowPlayingTitle
+    ? `${contact.nowPlayingArtist ? `${contact.nowPlayingArtist} — ` : ''}${contact.nowPlayingTitle}`
+    : contact.nowPlaying;
+
+  useEffect(() => {
+    if (!attention || reducedMotion) { blink.setValue(1); return; }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(blink, { toValue: 0.4, duration: 520, useNativeDriver: true }),
+      Animated.timing(blink, { toValue: 1, duration: 520, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [attention, reducedMotion, blink]);
+
+  const menu: MenuItem[] = [
+    { key: 'fav', icon: contact.favorite ? '★' : '☆', label: contact.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris', onPress: () => onToggleFavorite(contact) },
+    { key: 'tone', icon: '🔔', label: toneOpen ? 'Masquer le son personnalisé' : 'Son personnalisé', onPress: onToggleTone },
+    { key: 'remove', icon: '−', label: 'Retirer le contact', onPress: onRemove },
+    { key: 'block', icon: '⛔', label: 'Bloquer', tone: 'danger', onPress: onBlock },
+  ];
+
+  return (
+    <View style={[styles.dRowWrap, selected && styles.dRowWrapSelected]}>
+      <View style={styles.dRow}>
+        <Pressable
+          testID={`contact-row-${contact.id}`}
+          style={(state) => [styles.dRowMain, (state as { hovered?: boolean }).hovered && !selected && styles.dRowHover]}
+          onPress={() => { clearContactAttention(contact.id); onOpen(contact); }}
+          accessibilityRole="button"
+          accessibilityLabel={`Ouvrir la conversation avec ${contact.nickname}`}
+        >
+          {selected && <View style={styles.dSelectedBar} />}
+          <Animated.View style={{ opacity: attention ? blink : 1 }}>
+            <ContactAvatar displayName={contact.displayName} avatarUrl={contact.avatarUrl} presence={contact.presence} size={52} />
+          </Animated.View>
+          <View style={styles.flex}>
+            <View style={styles.dLine1}>
+              <Text style={[styles.dName, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]} numberOfLines={1}>{contact.nickname}</Text>
+              {contact.favorite && <Text style={styles.dFav} accessibilityLabel="Favori">★</Text>}
+              <View style={styles.dPresence}>
+                <View style={[styles.dPresenceDot, { backgroundColor: dotColor }]} />
+                <Text style={[styles.dPresenceText, contact.presence !== 'offline' && { color: dotColor }]} numberOfLines={1}>{presenceLabel[contact.presence]}</Text>
+              </View>
+              {pulse && <Text style={styles.attentionPulseIcon} accessibilityLabel={`${contact.displayName} t'a envoyé un K-Pulse`}>⚡</Text>}
+              {unread > 0 && (
+                <View style={styles.attentionBadge} accessibilityLabel={`${unread} message${unread > 1 ? 's' : ''} non lu${unread > 1 ? 's' : ''}`}>
+                  <Text style={styles.attentionBadgeText}>{unread > 9 ? '9+' : unread}</Text>
+                </View>
+              )}
+            </View>
+            {contact.statusMessage
+              ? <Text style={styles.dMood} numberOfLines={1}>{contact.statusMessage}</Text>
+              : <Text style={styles.dMoodEmpty} numberOfLines={1}>{contact.handle}</Text>}
+            {music === 'live' && !!track && (
+              <View style={styles.dMusicLive} accessibilityLabel={`En écoute : ${track}`}>
+                <Equalizer size={11} bars={3} />
+                <Text style={styles.dMusicLiveLabel}>EN ÉCOUTE</Text>
+                <Text style={styles.dMusicLiveText} numberOfLines={1}>{track}</Text>
+              </View>
+            )}
+            {music === 'stale' && !!track && (
+              <View style={styles.dMusicStale} accessibilityLabel={`Dernière écoute : ${track}`}>
+                <Text style={styles.dMusicStaleIcon}>♪</Text>
+                <Text style={styles.dMusicStaleLabel}>{contact.nowPlayingAt ? `ÉCOUTÉ ${formatAgo(contact.nowPlayingAt).toUpperCase()}` : 'DERNIÈRE ÉCOUTE'}</Text>
+                <Text style={styles.dMusicStaleText} numberOfLines={1}>{track}</Text>
+              </View>
+            )}
+          </View>
+        </Pressable>
+        <TouchableOpacity style={styles.dPulseBtn} onPress={() => onSendPulse(contact)} accessibilityRole="button" accessibilityLabel={`Envoyer un K-Pulse à ${contact.displayName}`}>
+          <Text style={styles.dPulseText}>⚡</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          testID={`contact-menu-${contact.id}`}
+          style={[styles.dMoreBtn, menuOpen && styles.dMoreBtnActive]}
+          onPress={onToggleMenu}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: menuOpen }}
+          accessibilityLabel={`Plus d’actions pour ${contact.displayName}`}
+        >
+          <Text style={styles.dMoreText}>…</Text>
+        </TouchableOpacity>
+      </View>
+      {menuOpen && (
+        <View style={styles.dMenu} accessibilityRole="menu">
+          {menu.map((item) => (
+            <Pressable
+              key={item.key}
+              accessibilityRole="menuitem"
+              onPress={item.onPress}
+              style={(state) => [styles.dMenuItem, (state as { hovered?: boolean }).hovered && styles.dMenuItemHover]}
+            >
+              <Text style={[styles.dMenuIcon, item.tone === 'danger' && styles.dMenuDanger]}>{item.icon}</Text>
+              <Text style={[styles.dMenuLabel, item.tone === 'danger' && styles.dMenuDanger]}>{item.label}</Text>
+            </Pressable>
+          ))}
+          {toneOpen && <KTonePanel myUserId={myUserId} contactId={contact.id} />}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function requestName(request: ContactRequest, currentUserId: string): { name: string; handle: string } {
   if (request.counterpart) {
     return { name: request.counterpart.display_name, handle: `@${request.counterpart.username}` };
@@ -305,7 +468,19 @@ function requestName(request: ContactRequest, currentUserId: string): { name: st
   return { name: 'Utilisateur K-ssenger', handle: `#${other.slice(0, 8)}` };
 }
 
-export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => void }) {
+export function MsnContactsScreen({
+  onOpen,
+  variant = 'mobile',
+  selectedContactId = null,
+  showStatusStrip = true,
+}: {
+  onOpen: (contact: Contact) => void;
+  /** 'desktop' = wide web buddy list (3-line rows, actions behind "…"). */
+  variant?: 'mobile' | 'desktop';
+  selectedContactId?: string | null;
+  showStatusStrip?: boolean;
+}) {
+  const desktop = variant === 'desktop';
   const { styles, colors } = useThemedStyles();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
@@ -357,6 +532,9 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
         avatarUrl: row.profiles.avatar_url ?? undefined,
         statusMessage: row.profiles.custom_status ?? undefined,
         nowPlaying,
+        nowPlayingTitle: row.profiles.now_playing_title ?? undefined,
+        nowPlayingArtist: row.profiles.now_playing_artist ?? undefined,
+        nowPlayingAt: row.profiles.now_playing_at ?? null,
         favorite: row.favorite,
         group: row.favorite ? 'Favoris' : (row.list_name || 'Amis'),
         accentColor: row.profiles.accent_color ?? null,
@@ -639,8 +817,8 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
   return (
     <SkyBackground>
       <Animated.View style={[styles.fill, shakeStyle]}>
-        <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-          {!!currentUserId && (
+        <ScrollView style={styles.page} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]}>
+          {!!currentUserId && showStatusStrip && (
             <KStatusStrip
               currentUserId={currentUserId}
               nicknameByUserId={(userId) => contactsRef.current.find((c) => c.id === userId)?.nickname ?? 'K-ssenger'}
@@ -744,7 +922,24 @@ export function MsnContactsScreen({ onOpen }: { onOpen: (contact: Contact) => vo
                   <Text style={styles.groupTitle}>{isCollapsed ? '▸' : '▾'} {group.toUpperCase()}</Text>
                   <Text style={styles.groupCount}>{onlineHere}/{items.length}</Text>
                 </TouchableOpacity>
-                {!isCollapsed && items.map((contact) => (
+                {!isCollapsed && desktop && items.map((contact) => (
+                  <DesktopContactRow
+                    key={contact.id}
+                    contact={contact}
+                    selected={selectedContactId === contact.id}
+                    menuOpen={managingContactId === contact.id}
+                    myUserId={currentUserId}
+                    toneOpen={toneOpenContactId === contact.id}
+                    onOpen={(c) => { setManagingContactId(null); onOpen(c); }}
+                    onToggleFavorite={(c) => { setManagingContactId(null); void toggleFavorite(c); }}
+                    onSendPulse={(c) => void sendKPulse(c)}
+                    onToggleMenu={() => setManagingContactId((id) => id === contact.id ? null : contact.id)}
+                    onToggleTone={() => setToneOpenContactId((id) => id === contact.id ? null : contact.id)}
+                    onRemove={() => void removeContact(contact)}
+                    onBlock={() => void blockContact(contact)}
+                  />
+                ))}
+                {!isCollapsed && !desktop && items.map((contact) => (
                   <ContactRow
                     key={contact.id}
                     contact={contact}
@@ -845,6 +1040,55 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   tonePreviewText: { color: palette.azure, fontSize: 11, fontWeight: '900' },
   toneResetBtn: { alignSelf: 'flex-start' },
   toneResetText: { color: palette.inkFaint, fontSize: 11, fontWeight: '800', textDecorationLine: 'underline' },
+
+  contentDesktop: { paddingHorizontal: spacing.sm + 2, paddingTop: spacing.md },
+
+  // Desktop web buddy rows
+  dRowWrap: { borderTopWidth: 1, borderTopColor: palette.hairlineSoft },
+  dRowWrapSelected: { backgroundColor: palette.azureSoft },
+  dRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: spacing.sm },
+  dRowMain: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingLeft: spacing.md, paddingRight: spacing.xs, paddingVertical: spacing.sm + 2,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer', transitionProperty: 'background-color', transitionDuration: '140ms' } as object) : null),
+  },
+  dRowHover: { backgroundColor: palette.surfaceSunken },
+  dSelectedBar: { position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 3, backgroundColor: palette.azure },
+  dLine1: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  dName: { ...typo.name, fontSize: 14.5, flexShrink: 1 },
+  dFav: { color: palette.favoriteBorder, fontSize: 11, fontWeight: '900' },
+  dPresence: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
+  dPresenceDot: { width: 7, height: 7, borderRadius: 4 },
+  dPresenceText: { fontSize: 10.5, fontWeight: '800', color: palette.inkFaint, letterSpacing: 0.2 },
+  dMood: { color: palette.inkSoft, fontSize: 12.5, fontWeight: '500', marginTop: 2, fontStyle: 'italic' },
+  dMoodEmpty: { color: palette.inkFaint, fontSize: 11.5, fontWeight: '600', marginTop: 2 },
+  dMusicLive: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', maxWidth: '100%',
+    marginTop: 5, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: palette.musicSoft,
+  },
+  dMusicLiveLabel: { color: palette.musicDeep, fontSize: 8.5, fontWeight: '900', letterSpacing: 0.8 },
+  dMusicLiveText: { color: palette.music, fontSize: 11.5, fontWeight: '800', flexShrink: 1 },
+  dMusicStale: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, maxWidth: '100%', paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', borderRadius: radius.pill, borderWidth: 1, borderColor: palette.hairline },
+  dMusicStaleIcon: { color: palette.inkFaint, fontSize: 11, fontWeight: '900' },
+  dMusicStaleText: { color: palette.inkSoft, fontSize: 11.5, fontWeight: '600', flexShrink: 1 },
+  dMusicStaleLabel: { color: palette.inkFaint, fontSize: 8.5, fontWeight: '900', letterSpacing: 0.8, flexShrink: 0 },
+  dPulseBtn: {
+    width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: palette.pulseSoft, borderWidth: 1, borderColor: palette.brass,
+  },
+  dPulseText: { fontSize: 15 },
+  dMoreBtn: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  dMoreBtnActive: { backgroundColor: palette.surfaceSunken, borderWidth: 1, borderColor: palette.hairline },
+  dMoreText: { color: palette.inkSoft, fontSize: 18, fontWeight: '900', lineHeight: 20, marginTop: -6 },
+  dMenu: {
+    marginHorizontal: spacing.md, marginBottom: spacing.sm, paddingVertical: 4, borderRadius: radius.sm,
+    backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hairline, ...elevation.card,
+  },
+  dMenuItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 9 },
+  dMenuItemHover: { backgroundColor: palette.surfaceSunken },
+  dMenuIcon: { width: 18, textAlign: 'center', color: palette.inkSoft, fontSize: 13, fontWeight: '900' },
+  dMenuLabel: { color: palette.ink, fontSize: 12.5, fontWeight: '700' },
+  dMenuDanger: { color: palette.danger },
 
   emptyState: { alignItems: 'center', marginTop: 60, paddingHorizontal: spacing.xl },
   emptyIcon: { fontSize: 40 },

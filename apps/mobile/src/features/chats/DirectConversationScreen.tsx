@@ -31,6 +31,10 @@ import { VoiceMessageBubble } from './VoiceMessageBubble';
 import { VOICE_MIME, type VoiceRecordingResult } from '../../lib/voiceRecording';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, waitForSocketReady } from '../../lib/realtime';
 import { onMessageReceivedFrom, onMessageSent } from '../../lib/soundKit';
+import { setPreview, summarizePayload } from '../../lib/lastMessagePreview';
+import { formatClock, formatDayLabel } from '../../lib/timeFormat';
+import { useIsDesktopWeb } from '../../lib/useIsDesktopWeb';
+import { ContactAvatar } from '../contacts/MsnContactsScreen';
 
 type ReceiptState = 'delivered' | 'read';
 type DirectResponse = { ok: boolean; conversationId?: string; error?: string };
@@ -204,14 +208,14 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
           disabled={!(mine && message.receiptState === 'read' && message.readAt)}
           onPress={() => setShowReadTime((v) => !v)}
           accessibilityRole={mine && message.receiptState === 'read' && message.readAt ? 'button' : undefined}
-          accessibilityLabel={mine && message.readAt ? `Vu à ${new Date(message.readAt).toLocaleTimeString()}` : undefined}
+          accessibilityLabel={mine && message.readAt ? `Vu à ${formatClock(message.readAt)}` : undefined}
         >
           <Text style={[styles.messageMeta, mine && styles.messageMetaMine]}>
-            {new Date(message.createdAt).toLocaleTimeString()}
+            {formatClock(message.createdAt)}
             {' '}
             {mine && message.receiptState
               ? (message.receiptState === 'read'
-                ? (showReadTime && message.readAt ? ` · Vu à ${new Date(message.readAt).toLocaleTimeString()}` : ' · ✓✓ Lu')
+                ? (showReadTime && message.readAt ? ` · Vu à ${formatClock(message.readAt)}` : ' · ✓✓ Lu')
                 : ' · ✓ Reçu')
               : ''}
           </Text>
@@ -260,6 +264,7 @@ function MessageRow({ message, mine, currentUserId, reactingOpen, onToggleReacti
 
 export function DirectConversationScreen({ contact, onBack }: { contact: Contact; onBack: () => void; onLinkPhone?: () => void }) {
   const { styles, colors, scheme } = useThemedStyles();
+  const desktop = useIsDesktopWeb();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [conversationId, setConversationId] = useState('');
@@ -469,6 +474,15 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     };
   }, [contact.id]);
 
+  // Feed the conversation list's last-message preview (in-memory only).
+  useEffect(() => {
+    const last = history[history.length - 1];
+    if (!last || !conversationId || last.conversationId !== conversationId) return;
+    const undecryptable = last.content?.type === 'text' && last.content.text === UNDECRYPTABLE_TEXT;
+    const text = last.deletedAt ? 'Message supprimé' : undecryptable ? '🔒 Message chiffré' : last.content ? summarizePayload(JSON.stringify(last.content)) : '';
+    if (text) setPreview(conversationId, last.id, text);
+  }, [history, conversationId]);
+
   const notifyTyping = (isTyping: boolean) => {
     const client = socketRef.current;
     const id = conversationIdRef.current;
@@ -660,7 +674,9 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={[styles.header, contact.accentColor ? { borderBottomColor: accentOf(contact.accentColor), borderBottomWidth: 2 } : null]}>
         <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹</Text></TouchableOpacity>
-        <View style={[styles.avatar, contact.accentColor ? { backgroundColor: accentOf(contact.accentColor) } : null]}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>
+        {desktop
+          ? <ContactAvatar displayName={contact.displayName} avatarUrl={contact.avatarUrl} presence={contact.presence} size={44} />
+          : <View style={[styles.avatar, contact.accentColor ? { backgroundColor: accentOf(contact.accentColor) } : null]}><Text style={styles.avatarText}>{contact.displayName[0] ?? '?'}</Text></View>}
         <View style={styles.flex}>
           <Text style={[styles.name, contact.accentColor ? { color: accentOf(contact.accentColor) } : null]}>{contact.nickname}</Text>
           {peerTyping
@@ -684,9 +700,12 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
           {!!notice && <Text style={styles.notice}>{notice}</Text>}
-          {!history.length ? <View style={styles.empty}><Text style={styles.emptyIcon}>💬</Text><Text style={styles.emptyTitle}>Conversation prête</Text><Text style={styles.muted}>Envoie ton premier message ou média.</Text></View> : history.map((message) => (
+          {!history.length ? <View style={styles.empty}><Text style={styles.emptyIcon}>💬</Text><Text style={styles.emptyTitle}>Conversation prête</Text><Text style={styles.muted}>Envoie ton premier message ou média.</Text></View> : history.map((message, index) => (
+            <React.Fragment key={message.id}>
+            {desktop && (index === 0 || formatDayLabel(history[index - 1].createdAt) !== formatDayLabel(message.createdAt)) && (
+              <View style={styles.daySep} accessibilityRole="header"><View style={styles.daySepLine} /><Text style={styles.daySepText}>{formatDayLabel(message.createdAt)}</Text><View style={styles.daySepLine} /></View>
+            )}
             <MessageRow
-              key={message.id}
               message={message}
               mine={message.senderUserId === currentUserId}
               currentUserId={currentUserId}
@@ -695,14 +714,15 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
               onReact={(emoji) => void react(message.id, emoji)}
               onDelete={() => void deleteMessageAction(message.id)}
             />
+            </React.Fragment>
           ))}
         </ScrollView>
       )}
 
-      <View style={styles.quickRow}>
+      <View style={[styles.quickRow, desktop && styles.quickRowCompact]}>
         {QUICK_REACTIONS.map((emoji) => (
-          <TouchableOpacity key={emoji} disabled={!canSend} onPress={() => void sendQuick(emoji)} accessibilityRole="button" accessibilityLabel={`Envoyer ${emoji}`} style={[styles.quickBtn, !canSend && styles.disabled]}>
-            <Text style={styles.quickEmoji}>{emoji}</Text>
+          <TouchableOpacity key={emoji} disabled={!canSend} onPress={() => void sendQuick(emoji)} accessibilityRole="button" accessibilityLabel={`Envoyer ${emoji}`} style={[styles.quickBtn, desktop && styles.quickBtnCompact, !canSend && styles.disabled]}>
+            <Text style={[styles.quickEmoji, desktop && styles.quickEmojiCompact]}>{emoji}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -801,6 +821,12 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline },
   quickBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   quickEmoji: { fontSize: 20 },
+  quickRowCompact: { justifyContent: 'flex-start', gap: 2, paddingHorizontal: spacing.md, paddingVertical: 3, borderTopWidth: 0, opacity: 0.85 },
+  quickBtnCompact: { width: 28, height: 26, borderRadius: radius.xs },
+  quickEmojiCompact: { fontSize: 15 },
+  daySep: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginVertical: spacing.md },
+  daySepLine: { flex: 1, height: 1, backgroundColor: palette.hairline },
+  daySepText: { ...typo.micro, color: palette.inkFaint, textTransform: 'uppercase', letterSpacing: 1 },
   composerWrap: { backgroundColor: palette.surface },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, padding: spacing.sm + 2, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.hairline },
   input: { flex: 1, maxHeight: 120, minHeight: 46, backgroundColor: palette.surfaceSunken, borderWidth: 1.5, borderColor: palette.hairline, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, color: palette.ink, fontSize: 15, fontWeight: '500', ...(Platform.OS === 'web' ? { outlineStyle: 'none' as never } : null) },
