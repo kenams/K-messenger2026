@@ -1,6 +1,6 @@
 # K-ssenger Project State
 
-Last verified: 2026-09-26
+Last verified: 2026-09-27
 
 ## Latest APK (test terrain)
 
@@ -44,7 +44,18 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
 
 ## Web desktop shell (new)
 
-- Web only, viewport >= 900px (`useIsDesktopWeb` in `apps/mobile/App.tsx`): full-screen "real app" layout instead of the phone-shaped centered column — fixed left nav rail, a persistent buddy-list sidebar (Contacts tab), and a conversation/content pane filling the rest of the browser window. No page scroll/margins, only inner panes scroll. Narrow web (<900px) and native Android/iOS are untouched, still the original bottom-tab single-column shell. Commit `362c2fa`.
+- Web only, viewport >= 900px (`useIsDesktopWeb`, now in `apps/mobile/src/lib/useIsDesktopWeb.ts`): full-screen "real app" layout instead of the phone-shaped centered column. No page scroll/margins, only inner panes scroll. Narrow web (<900px) and native Android/iOS are untouched, still the original bottom-tab single-column shell. First version commit `362c2fa`.
+- **Desktop UX pass (2026-09-27, commits `dfa6290` → `ada87d1`)** — MSN-spirit finish, desktop only:
+  - Constant layout for the messenger tabs: nav rail · middle list · open conversation. Contacts ↔ Chats only swaps the middle list (`MsnContactsScreen variant="desktop"` / new `features/chats/ChatsListPane.tsx`); the right-pane conversation stays open. Both lists stay mounted once visited (attention wiring keeps running).
+  - Nav: Contacts · Chats · Moments · Moi, then a "DÉCOUVRIR" section with K-Feed and K-Map — one click from anywhere (K-Map carries the Ghost Sync roadmap, must never be buried). testIDs `desktop-tab-<label>` unchanged, E2E helpers untouched.
+  - Buddy rows: line 1 name + presence label, line 2 mood, line 3 music alone — "EN ÉCOUTE" (equalizer, tinted) vs "Écouté il y a X" (muted, outlined). Favori / son perso / retirer / bloquer moved behind "…"; ⚡ K-Pulse stays visible.
+  - Music freshness: `contacts:list` now returns `profiles.now_playing_at` (= `profiles.updated_at`, null when music hidden by privacy). Live = contact connected AND track written < 15 min ago (`musicState` in `MsnContactsScreen.tsx`). Proxy caveat: any profile edit bumps `updated_at`; a dedicated column would be more exact (no migration done).
+  - Server bug fixed in the same commit: `listContacts` computed `unread_count` but dropped it in the row mapping, so unread badges were never seeded after a reload. Now returned.
+  - Chats list: unified direct + groups, search + filters, unread badge, stamps `22:35` / `Hier` / `12 sept.`, last-message preview decrypted on-device (`lib/lastMessagePreview.ts`, memory only, never persisted/logged; groups show a neutral "message de groupe chiffré"). A group opens in the right pane (`GroupsScreen focusGroupId`). Total unread badge on the Chats rail item.
+  - Moments hub (desktop): K-Statut card on top of Moments (single entry point, data/backends unchanged); the strip is no longer on the desktop contacts list (still there on mobile).
+  - Conversations: `HH:MM` times everywhere (DM + groups, `lib/timeFormat.ts`), day separators and compact quick-emoji row on desktop, real avatar/Bitmoji in the DM header, soft pane fade (reduced-motion aware). K-Pulse button untouched.
+  - Verified locally with Playwright against prod backend: 6 skins (light) + dark mode, Contacts↔Chats↔Moments↔Moi, K-Map/K-Feed, search, K-Pulse, group open, narrow 390px web (original mobile shell intact).
+  - Render `kssenger-server` auto-deploys from `feature/device-linking-scaffold`; if a push doesn't trigger it, `POST /v1/services/srv-dacuus5g1s2s73d8lck0/deploys` does.
 
 ## Other active surfaces
 
