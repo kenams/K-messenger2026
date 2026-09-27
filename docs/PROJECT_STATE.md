@@ -55,6 +55,8 @@ Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repo
   - Moments hub (desktop): K-Statut card on top of Moments (single entry point, data/backends unchanged); the strip is no longer on the desktop contacts list (still there on mobile).
   - Conversations: `HH:MM` times everywhere (DM + groups, `lib/timeFormat.ts`), day separators and compact quick-emoji row on desktop, real avatar/Bitmoji in the DM header, soft pane fade (reduced-motion aware). K-Pulse button untouched.
   - Verified locally with Playwright against prod backend: 6 skins (light) + dark mode, Contacts↔Chats↔Moments↔Moi, K-Map/K-Feed, search, K-Pulse, group open, narrow 390px web (original mobile shell intact).
+  - E2EE fixes found during this pass (`eccb7ff`, `1d583f0` K-Statut): passive surfaces must never call `ensureIdentityKeyPair` (it generates AND republishes the public key). Chat-list previews and K-Statut reading now use read-only `loadExistingSecretKey` (`lib/e2ee.ts`); only opening a conversation/group or posting a status may create/publish a key.
+  - `npm run ship:web` final: deploy OK, 24/24 E2E green (incl. `kpulse-attention` + `voice-notes`) on `--skip-deploy` rerun. Trap: every push triggers the GitHub "Web E2E (journeys)" workflow against prod, whose setup re-keys Kenams/Léa — running a local E2E at the same time makes `chats.spec`/`voice-notes.spec` fail with "clé indisponible". Never run local ship:web E2E while that workflow is running.
   - Render `kssenger-server` auto-deploys from `feature/device-linking-scaffold`; if a push doesn't trigger it, `POST /v1/services/srv-dacuus5g1s2s73d8lck0/deploys` does.
 
 ## Other active surfaces
