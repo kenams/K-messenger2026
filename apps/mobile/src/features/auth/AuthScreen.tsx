@@ -73,7 +73,7 @@ export function AuthScreen() {
   const { width } = useWindowDimensions();
   const compact = width < 480;
   const [emailTouched, setEmailTouched] = useState(false);
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode] = useState<Mode>('signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -139,35 +139,6 @@ export function AuthScreen() {
     }
   };
 
-  // TEMPORARY convenience while Kenams drives the app day-to-day — remove once
-  // the team is done onboarding testers. Fixed credentials for his main
-  // working account (kahdigital42@gmail.com, @kah), never shown as plaintext
-  // in the UI. Switched from the old kenams_app account on 2026-09-17 — Kenams
-  // picked @kah as his principal account.
-  const quickLoginKenams = async () => {
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      const backend = getBackend();
-      const { data, error: authError } = await backend.auth.signInWithPassword({
-        email: 'kahdigital42@gmail.com',
-        password: 'Kah-Digital-2026-Secure!42',
-      });
-      if (authError) setError('Connexion rapide indisponible pour le moment.');
-      else if (data.session && Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.location.reload();
-        return;
-      }
-      if (data.session && !authError && Platform.OS !== 'web') notifyAuthStateMayHaveChanged();
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      setError(`K-ssenger ne peut pas joindre le service de connexion pour le moment.\n[détail: ${detail}]`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const forgotPassword = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!emailValid) {
@@ -225,7 +196,7 @@ export function AuthScreen() {
             <Text style={styles.lede}>La messagerie qui remet tes contacts au centre. Présence en direct, K-Pulse, moments — connexion sécurisée.</Text>
 
             <View style={styles.segment}>
-              {(['login', 'signup'] as Mode[]).map((m) => (
+              {(['signup', 'login'] as Mode[]).map((m) => (
                 <Pressable
                   key={m}
                   accessibilityRole="tab"
@@ -329,17 +300,6 @@ export function AuthScreen() {
                 </LinearGradient>
               </TouchableOpacity>
 
-              {mode === 'login' && (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  activeOpacity={0.8}
-                  disabled={busy}
-                  onPress={() => void quickLoginKenams()}
-                  style={styles.quickLogin}
-                >
-                  <Text style={styles.quickLoginText}>🔑 Connexion rapide — Kah</Text>
-                </TouchableOpacity>
-              )}
             </View>
 
             <View style={styles.trust}>
@@ -446,9 +406,6 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   ctaPressed: { opacity: 0.9, transform: [{ scale: 0.995 }] },
   cta: { minHeight: 54, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
   ctaText: { color: palette.white, fontWeight: '900', fontSize: 15, letterSpacing: 0.3 },
-
-  quickLogin: { marginTop: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center' },
-  quickLoginText: { color: palette.inkSoft, fontWeight: '700', fontSize: 13 },
 
   trust: {
     flexDirection: 'row',
