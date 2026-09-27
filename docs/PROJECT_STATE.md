@@ -1,6 +1,54 @@
 # K-ssenger Project State
 
-Last verified: 2026-09-27 (session 2)
+Last verified: 2026-09-27 (session 3)
+
+## Session 3 — public groups discovery feed (2026-09-27/28, shipped)
+
+- **New "Découvrir" groups feed**: browse public, join-without-invite groups by
+  category (musique/sport/boxe/course_a_pied/danse/dev/gaming/ia/foot/basket/droit/informatique),
+  TikTok-"Pour Toi"-style category chips + card list, instant "Rejoindre".
+  `apps/mobile/src/features/discover/DiscoverGroupsScreen.tsx`, wired into the
+  existing DÉCOUVRIR nav section on desktop web (new "Groupes" item, `App.tsx`)
+  and a new bottom tab on mobile.
+- **Schema**: `neon/migrations/0033_public_groups.sql` — `conversations.is_public`
+  (bool, default false) + `conversations.category` (text), group-only check
+  constraint, applied to the live Neon DB.
+- **Server**: `apps/server/src/groupStore.ts` — `listPublicGroups` and
+  `joinPublicGroup` (self-join; every other `addGroupMember` safety check still
+  applies — not-already-member, not-banned, not-blocked-by-any-current-member —
+  except the "inviter must have you as a contact" rule, which doesn't apply to a
+  public join). New sockets `groups:public-list` / `group:join-public` in
+  `server.ts`. Membership is written to `conversation_members` exactly like any
+  other join, so the existing real E2EE flow (`group_keys` wrap-per-member,
+  `wrapForMissingMembers` on `group:updated`) picks new members up unchanged —
+  no parallel/unencrypted join path was introduced.
+- **Seed**: `scripts/seed-public-groups.mjs` (idempotent, matched on category) —
+  run against the live DB, created all 12 category groups owned by Kenams's
+  account.
+- **Verified live with Playwright against `https://k-ssenger.expo.app`**: signed
+  in as a second real account ("QA Themes", different user id from Kenams),
+  opened Découvrir, joined the "Musique" public group instantly, confirmed it
+  appeared in "Mes groupes" (2 membres · member, Kenams as owner), opened it,
+  sent a message, saw it render in plaintext client-side under the "🔒 Chiffré
+  de bout en bout" banner. Cross-checked directly in the Neon DB: the stored
+  row is opaque (`algorithm: kssenger-group-secretbox-v1`, ciphertext blob),
+  never plaintext. Zero console errors during the whole flow.
+- One bug found and fixed during that verification: the `group:join-public`
+  catch-all always returned the generic `{error:'REJECTED'}`, so a
+  best-effort double-join correctly rejected server-side as
+  `GROUP_MEMBER_ALREADY_PRESENT` still showed the generic "impossible de
+  rejoindre" message client-side instead of "tu es déjà dans ce groupe" — fixed
+  by passing through the store's own named, safe reason codes.
+- Deployed: server pushed to Render `kssenger-server` (redeployed twice, both
+  `live`); web export + `eas deploy --prod --alias kssenger` shipped via
+  `npm run ship:web`. The final prod E2E run of that pipeline hit the
+  documented "concurrent GH Web-E2E workflow re-keying accounts" race (see
+  below) rather than a regression from this change — confirmed the base
+  commit (before this session) hit the exact same failure mode independently.
+- Not done this session: no dedicated Playwright spec added for the Découvrir
+  flow to `apps/e2e` (verification above was manual/live only) — worth adding
+  a `discover-groups.spec.ts` next session so it's covered by `ship:web`'s
+  automated gate too.
 
 ## Session 2 fixes (2026-09-27, web-only, shipped)
 
