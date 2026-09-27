@@ -1,6 +1,12 @@
 # K-ssenger Project State
 
-Last verified: 2026-09-27
+Last verified: 2026-09-27 (session 2)
+
+## Session 2 fixes (2026-09-27, web-only, shipped)
+
+- **Group message previews now decrypt in the Chats hub.** `loadGroupPreview` added to `apps/mobile/src/lib/lastMessagePreview.ts`, reusing `ensureGroupKey`/`decryptGroupMessage` from `groupE2ee.ts` the same way `GroupEncryptedChat.tsx` already does. Wired into `ChatsListPane.tsx`'s prefetch; `GroupRow` now shows sender name + decrypted text instead of a neutral "message de groupe chiffré" placeholder. Server still never sees plaintext.
+- **Anthracite dark mode had invisible text on the desktop nav rail and every screen header.** Root cause: `navRailLabel`/`navRailSection` (`App.tsx`) and `ScreenHeader`'s `headerTitle` (`theme/components.tsx`) read `colors.inkOnAzure` for text that sits on `palette.navy` (theme-invariant, always dark) — but `inkOnAzure` means "ink for text on the skin's *azure accent* colour", and `anthraciteDark` legitimately sets it near-black (`#06181A`) to stay legible against its own bright cyan accent. That near-black value is invisible on navy. Fixed with a new fixed `onNavy` token (`theme/tokens.ts`, `#FFF8EC`) used in all three spots instead. Verified visually (Playwright) on all 6 skins × dark mode; only Anthracite was affected, everything else was already fine.
+- Both fixed, typecheck clean, shipped via `npm run ship:web` (export + eas deploy + 24/24 E2E green vs prod). No server change, no APK rebuild needed (client/web-only, no AuthScreen or native-only file touched).
 
 ## Latest APK (test terrain)
 
