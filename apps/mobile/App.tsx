@@ -673,7 +673,9 @@ function DesktopShell(props: DesktopShellProps) {
           )}
         </View>
         <View style={[styles.sidebarPane, { width: sidebarWidth }, !listTab && styles.hiddenPane]}>
-          <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />
+          {/* Only rendered while visible: a hidden duplicate of my own status
+              would sit first in the DOM and shadow the visible one. */}
+          {listTab && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
           {listsMounted.has('contacts') && (
             <View style={tab === 'contacts' ? styles.flex : styles.hiddenPane}>
               <MsnContactsScreen onOpen={openContact} variant="desktop" selectedContactId={selected?.id ?? null} showStatusStrip={false} />
