@@ -29,6 +29,7 @@ export async function listContacts(userId: string) {
     presence: string;
     now_playing_title: string | null;
     now_playing_artist: string | null;
+    now_playing_at: string | null;
     accent_color: string | null;
     last_message_at: string | null;
     unread_count: number;
@@ -56,6 +57,10 @@ export async function listContacts(userId: string) {
               when coalesce(ps.show_music, 'contacts') = 'nobody' then null
               else p.now_playing_artist
             end as now_playing_artist,
+            case
+              when coalesce(ps.show_music, 'contacts') = 'nobody' or p.now_playing_title is null then null
+              else p.updated_at
+            end as now_playing_at,
             last_dm.created_at as last_message_at,
             coalesce(unread_dm.unread, 0) as unread_count
        from public.contacts c
@@ -105,9 +110,11 @@ export async function listContacts(userId: string) {
       presence: row.presence,
       now_playing_title: row.now_playing_title,
       now_playing_artist: row.now_playing_artist,
+      now_playing_at: row.now_playing_at,
       accent_color: row.accent_color,
     },
     last_message_at: row.last_message_at,
+    unread_count: row.unread_count,
   }));
 }
 
