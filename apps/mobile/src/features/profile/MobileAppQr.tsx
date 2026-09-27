@@ -4,8 +4,16 @@ import QRCode from 'react-native-qrcode-svg';
 import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
-/** Stable link regardless of beta build number — GitHub always resolves this to the latest release asset. */
-export const APK_DOWNLOAD_URL = 'https://github.com/kenams/K-messenger2026/releases/latest/download/K-ssenger-latest.apk';
+/**
+ * Stable link regardless of beta build number. Served straight from the same
+ * web deployment (apps/mobile/public/kssenger-latest.apk) instead of a GitHub
+ * Releases "latest" redirect: that redirect 404s whenever the newest release's
+ * asset filename doesn't exactly match (it drifted to kssenger-preview-*.apk),
+ * and GitHub's release-asset CDN is also flakier on mobile in-app browsers.
+ * To ship a new build: copy the APK to apps/mobile/public/kssenger-latest.apk
+ * before running `npm run ship:web` — no code change needed after that.
+ */
+export const APK_DOWNLOAD_URL = 'https://k-ssenger.expo.app/kssenger-latest.apk';
 
 /** Web-only "scan to get the Android app" panel. Shown both on the sign-in screen
  * and, once logged in, from the Me screen — no need to sign out to find it again. */
