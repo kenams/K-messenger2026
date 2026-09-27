@@ -4,13 +4,14 @@ Last verified: 2026-09-27
 
 ## Latest APK (test terrain)
 
-- Built locally 2026-09-26 (EAS Android free-tier quota exhausted, resets 2026-10-01) at `C:\kssenger` (short path, per the CMake path-length trap below), `apps/mobile/android`, `./gradlew.bat assembleRelease`.
-- Commit included: `c1cbea893d40bd4a42eadaae51135c46fb2cbca8` (HEAD of `feature/device-linking-scaffold` at build time) — includes typing indicator, K-Tone, group stickers, K-Statut, K-Map, voice notes fix, K-Pulse fix, music+controls, desktop web layout, themes (Anthracite), avatar presets.
-- `versionCode` bumped to 6 in `apps/mobile/app.json` (not committed to the tracked repo from this session's build tree — only built locally).
-- **Signed with the local debug keystore** (`android/app/debug.keystore`), NOT the EAS remote release keystore used for prior distributed builds (last one 2026-09-07). Signature mismatch is certain — anyone with the old APK installed must uninstall it first or the install will fail/be rejected.
+- Built locally 2026-09-27 (EAS Android free-tier quota still exhausted, resets 2026-10-01) at `C:\kssenger` (short path, per the CMake path-length trap below), `apps/mobile/android`, `./gradlew.bat assembleRelease`.
+- Commit included: `d228e2706b2e598c8a15755cb4826103bacb1fdc` (HEAD of `feature/device-linking-scaffold` at build time) — adds on top of the 2026-09-26 build: avatar upload security hardening (`eba95d8`), MSN desktop refonte (frozen layout, presence/music, Chats hub, simplified nav, E2EE key-regeneration fix, unread badge fix).
+- `versionCode` bumped to 8 in `apps/mobile/app.json` (local build tree only, not committed to the tracked repo — same convention as the previous build).
+- **Signed with the local debug keystore** (`android/app/debug.keystore`), SAME keystore as the 2026-09-26 build → **no signature change since yesterday**, testers who already installed yesterday's APK can update in place without uninstalling. Still different from the EAS remote release keystore used before 2026-09-07.
 - Published as a GitHub Release (public repo) for direct download:
-  `https://github.com/kenams/K-messenger2026/releases/download/kssenger-preview-20260926-2221/app-release.apk`
-- Not validated on a physical device this session (no device/emulator in this environment) — only confirmed `BUILD SUCCESSFUL`, gradle produced a valid signed APK. Physical-device smoke test (open without crash, login, DM, E2EE round-trip) is still owed — see Next steps.
+  `https://github.com/kenams/K-messenger2026/releases/download/kssenger-preview-20260927-1249/kssenger-preview-20260927.apk`
+- QR code for that link: `C:\kssenger\kssenger-apk-qr-20260927.png`.
+- Not validated on a physical device this session (no device/emulator in this environment) — only confirmed `BUILD SUCCESSFUL`, gradle produced a valid signed APK. Physical-device smoke test (open without crash, login, DM, E2EE round-trip, MSN desktop hub) is still owed — see Next steps.
 
 Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repository root is only a pointer.
 
