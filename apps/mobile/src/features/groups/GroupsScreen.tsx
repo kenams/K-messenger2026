@@ -260,7 +260,7 @@ export function GroupsScreen({ focusGroupId, onCloseFocus }: { focusGroupId?: st
     const inviteCandidates = contacts.filter((contact) => !existingIds.has(contact.id));
     const canManage = selectedGroup.role === 'owner' || selectedGroup.role === 'admin';
     return (
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
       <ScrollView style={styles.page} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <TouchableOpacity onPress={closeGroup}><Text style={styles.back}>‹ {focusGroupId ? 'Fermer' : 'Groupes'}</Text></TouchableOpacity>
         <View style={styles.hero}>
@@ -313,7 +313,7 @@ export function GroupsScreen({ focusGroupId, onCloseFocus }: { focusGroupId?: st
   }
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
     <ScrollView style={styles.page} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}><View><Text style={styles.eyebrow}>MES GROUPES</Text><Text style={styles.title}>Salons K-ssenger</Text></View><TouchableOpacity style={styles.new} onPress={() => setCreating((value) => !value)}><Text style={styles.newText}>{creating ? '×' : '＋'}</Text></TouchableOpacity></View>
       {!!notice && <Text style={styles.notice}>{notice}</Text>}

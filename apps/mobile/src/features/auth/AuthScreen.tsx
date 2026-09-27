@@ -10,10 +10,6 @@ import { MobileAppQr } from '../profile/MobileAppQr';
 
 type Mode = 'login' | 'signup';
 
-function normalizeUsername(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24);
-}
-
 function BrandMark({ size = 76 }: { size?: number }) {
   const { styles } = useThemedStyles();
   return (
@@ -76,17 +72,13 @@ export function AuthScreen() {
   const [mode, setMode] = useState<Mode>('signup');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
 
-  const normalizedUsername = normalizeUsername(username);
-  const signupIdentityValid = mode === 'login' || (normalizedUsername.length >= 3 && displayName.trim().length >= 1);
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const canSubmit = emailValid && password.length >= 8 && signupIdentityValid && !busy && isBackendConfigured;
+  const canSubmit = emailValid && password.length >= 8 && !busy && isBackendConfigured;
 
   const setModeSafe = (next: Mode) => { setMode(next); setError(''); setNotice(''); setEmailTouched(false); };
 
@@ -127,12 +119,8 @@ export function AuthScreen() {
           notifyAuthStateMayHaveChanged();
         }
       } else {
-        const { data, error: authError } = await backend.auth.signUp({
-          email: normalizedEmail,
-          password,
-          options: { data: { username: normalizedUsername, display_name: displayName.trim().slice(0, 64) } },
-        });
-        if (authError) setError('Création du compte impossible. Essaie un autre pseudo ou réessaie dans un instant.' + authErrorDetailSuffix(authError));
+        const { data, error: authError } = await backend.auth.signUp({ email: normalizedEmail, password });
+        if (authError) setError('Création du compte impossible. Réessaie dans un instant.' + authErrorDetailSuffix(authError));
         else if (!data.session) setNotice('Compte créé. Confirme ton e-mail pour te connecter.');
         else if (Platform.OS === 'web' && typeof window !== 'undefined') {
           window.location.reload();
@@ -204,7 +192,13 @@ export function AuthScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.wash} pointerEvents="none" />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* AndroidManifest already sets windowSoftInputMode="adjustResize", which
+       * shrinks this screen itself when the keyboard opens. Also applying RN's
+       * own 'height' resize on top of that double-handles the same keyboard
+       * event with two independent height calculations, fighting each other —
+       * fields end up misplaced/covered instead of scrolling into view. Let
+       * the native resize do the job alone on Android (undefined behavior). */}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={[styles.card, compact && styles.cardCompact]}>
             <BrandMark size={compact ? 52 : 76} />
@@ -229,28 +223,6 @@ export function AuthScreen() {
             </View>
 
             <View style={styles.form}>
-              {mode === 'signup' && (
-                <>
-                  <AuthField
-                    icon="@"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    placeholder="pseudo (3 caractères min.)"
-                    value={username}
-                    onChangeText={(value) => setUsername(normalizeUsername(value))}
-                    maxLength={24}
-                  />
-                  <AuthField
-                    icon="🙂"
-                    autoCorrect={false}
-                    placeholder="Nom affiché / surnom"
-                    value={displayName}
-                    onChangeText={setDisplayName}
-                    maxLength={64}
-                  />
-                </>
-              )}
-
               <AuthField
                 icon="✉️"
                 autoCapitalize="none"
@@ -295,10 +267,7 @@ export function AuthScreen() {
               {emailTouched && email.length > 0 && !emailValid && (
                 <Text accessibilityRole="alert" style={styles.hint}>Saisis une adresse e-mail valide, par exemple nom@exemple.fr.</Text>
               )}
-              {mode === 'signup' && normalizedUsername.length > 0 && normalizedUsername.length < 3 && (
-                <Text style={styles.hint}>Le pseudo doit contenir au moins 3 caractères.</Text>
-              )}
-              {!!error && <View style={styles.banner}><Text style={styles.bannerText}>{error}</Text></View>}
+              {!!error &&<View style={styles.banner}><Text style={styles.bannerText}>{error}</Text></View>}
               {!!notice && <View style={[styles.banner, styles.bannerOk]}><Text style={[styles.bannerText, styles.bannerTextOk]}>{notice}</Text></View>}
 
               <TouchableOpacity

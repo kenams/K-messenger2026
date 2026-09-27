@@ -267,7 +267,7 @@ export function ProfileEditScreen({ profile, onSaved, onBack }: { profile: MyPro
           </Text>
         </View>
       ) : null}
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>PSEUDO</Text>
         <TextInput autoCapitalize="none" autoCorrect={false} value={username} onChangeText={(value) => setUsername(normalizeUsername(value))} maxLength={32} placeholder="@pseudo" style={styles.input} />

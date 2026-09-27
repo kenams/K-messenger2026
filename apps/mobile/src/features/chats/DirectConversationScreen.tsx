@@ -688,7 +688,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
       <View style={styles.security}><Text style={styles.securityText}>{e2eeActive ? '🔒 Chiffré de bout en bout — même K-ssenger ne peut pas lire ces messages.' : '🔒 Connexion sécurisée (TLS). Le chiffrement de bout en bout s’active dès que les deux appareils l’ont initialisé.'}</Text></View>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}
       >
       {loading ? <View style={styles.center}><ActivityIndicator /><Text style={styles.muted}>Ouverture de la conversation…</Text></View> : (
