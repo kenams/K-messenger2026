@@ -92,16 +92,27 @@ export function AuthScreen() {
 
   /**
    * A blank "réessaie dans un instant" made every real cause (pseudo taken,
-   * email already registered, weak password rejected server-side, rate
-   * limit, genuine outage) look identical and cost real time chasing the
-   * wrong one blind. Auth error messages are never secrets — surface them.
+   * weak password rejected server-side, rate limit, genuine outage) look
+   * identical and cost real time chasing the wrong one blind. Usernames are
+   * already public/searchable by design in this app (contacts search by
+   * @pseudo), so "pseudo taken" is safe to surface — but whether a given
+   * EMAIL already has an account is exactly the classic account-enumeration
+   * leak (usable for phishing/targeted lookups), so that one specific class
+   * of message stays generic no matter what the backend says.
    */
   const authErrorDetailSuffix = (authError: unknown): string => {
     if (!authError || typeof authError !== 'object') return '';
     const message = 'message' in authError && typeof (authError as { message?: unknown }).message === 'string'
       ? (authError as { message: string }).message
       : null;
-    return message ? `\n[détail: ${message}]` : '';
+    if (!message) return '';
+    const indicatesAlreadyExists = /exist|already|taken|in use|duplicate|registered/i.test(message);
+    const explicitlyAboutUsername = /username|pseudo/i.test(message);
+    // Safe-by-default: any "already exists"-shaped message is redacted unless
+    // it explicitly names the username, since that's the one identifier this
+    // app already treats as public (searchable by @pseudo).
+    if (indicatesAlreadyExists && !explicitlyAboutUsername) return '';
+    return `\n[détail: ${message}]`;
   };
 
   const submit = async () => {
