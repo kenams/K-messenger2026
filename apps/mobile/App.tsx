@@ -6,6 +6,7 @@ import Constants from 'expo-constants';
 import { FeedScreen } from './src/features/feed/FeedScreen';
 import { MomentsScreen } from './src/features/moments/MomentsScreen';
 import { KMapScreen } from './src/features/map/KMapScreen';
+import { DiscoverGroupsScreen } from './src/features/discover/DiscoverGroupsScreen';
 import { MsnContactsScreen, type Contact } from './src/features/contacts/MsnContactsScreen';
 import { ChatsHubScreen } from './src/features/chats/ChatsHubScreen';
 import { ChatsListPane } from './src/features/chats/ChatsListPane';
@@ -46,7 +47,7 @@ function appVersionLabel(): string {
   return `K-ssenger V2 ${isBeta ? 'Beta' : ''} · ${APP_VERSION} · build ${APP_BUILD}`.replace(/\s+/g, ' ').trim();
 }
 
-type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'moments' | 'me';
+type TabName = 'contacts' | 'chats' | 'feed' | 'map' | 'discover' | 'moments' | 'me';
 
 type AppProps = {
   profile: MyProfile;
@@ -329,7 +330,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
     <SafeAreaView style={styles.safe}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <View style={[styles.shell, immersive && styles.shellImmersive]}>
-        {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
+        {tab !== 'feed' && tab !== 'moments' && tab !== 'map' && tab !== 'discover' && <ProfileHeader profile={profile} onEdit={() => setEditingProfile(true)} onNowPlaying={() => setNowPlayingOpen(true)} />}
         {liveBroadcasts.size > 0 && tab !== 'feed' && Platform.OS === 'web' && (
           <TouchableOpacity
             style={styles.liveBanner}
@@ -352,6 +353,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
         )}
         {tab === 'feed' && <FeedScreen userAge={userAge} />}
         {tab === 'map' && <KMapScreen />}
+        {tab === 'discover' && <DiscoverGroupsScreen onOpenGroup={() => setGroupsScreen(true)} />}
         {tab === 'moments' && <MomentsScreen />}
         {visitedTabs.has('me') && (
           <View style={tab === 'me' ? styles.flex : styles.hiddenPane}>
@@ -372,6 +374,7 @@ export default function App({ profile, onProfileChanged }: AppProps) {
           <Tab active={tab === 'chats'} icon="💬" label="Chats" onPress={() => setTab('chats')} />
           <Tab active={tab === 'feed'} icon="▶️" label="K-Feed" onPress={() => setTab('feed')} />
           <Tab active={tab === 'map'} icon="📍" label="K-Map" onPress={() => setTab('map')} />
+          <Tab active={tab === 'discover'} icon="🧭" label="Découvrir" onPress={() => setTab('discover')} />
           <Tab active={tab === 'moments'} icon="✨" label="Moments" onPress={() => setTab('moments')} />
           <Tab active={tab === 'me'} icon="🙂" label="Moi" onPress={() => setTab('me')} />
         </View>
@@ -495,6 +498,7 @@ const DESKTOP_PRIMARY_NAV: DesktopNavItem[] = [
 const DESKTOP_DISCOVER_NAV: DesktopNavItem[] = [
   { tab: 'feed', icon: '▶️', label: 'K-Feed' },
   { tab: 'map', icon: '📍', label: 'K-Map' },
+  { tab: 'discover', icon: '🧭', label: 'Groupes' },
 ];
 const LIST_TABS = new Set<TabName>(['contacts', 'chats']);
 
@@ -603,6 +607,7 @@ function DesktopShell(props: DesktopShellProps) {
   if (!listTab) {
     if (tab === 'feed') wideContent = <FeedScreen userAge={userAge} />;
     else if (tab === 'map') wideContent = <KMapScreen />;
+    else if (tab === 'discover') wideContent = <DiscoverGroupsScreen onOpenGroup={openGroup} />;
     else if (tab === 'moments') wideContent = <DesktopMomentsHub />;
     else wideContent = (
       <MeScreen
@@ -618,7 +623,7 @@ function DesktopShell(props: DesktopShellProps) {
     );
   }
 
-  const discoverActive = (tab === 'feed' || tab === 'map') && !overlay;
+  const discoverActive = (tab === 'feed' || tab === 'map' || tab === 'discover') && !overlay;
   const renderNavItem = (item: DesktopNavItem, secondary = false) => {
     const active = tab === item.tab && !overlay;
     return (
