@@ -50,6 +50,17 @@ import { registerAccountDeletionHandler } from './accountDeletionSocket.js';
 import { registerDeviceLinkHandlers } from './deviceLinkSocket.js';
 import { sendConversationPush, sendContactRequestPush, sendGroupInvitePush, sendKPulsePush } from './push.js';
 import { deleteMessage, listEncryptedMessages, persistEncryptedMessage, setMessageReaction } from './messageStore.js';
+import {
+  bootstrapTestBot,
+  buildBotReplyEnvelope,
+  decryptFromKenams,
+  getBotDeviceId,
+  getBotState,
+  isBotConversationFromKenams,
+  isBotUser,
+  randomReplyDelayMs,
+} from './botStore.js';
+import { randomUUID } from 'node:crypto';
 import { endLiveRoom, isLiveConfigured, liveRoomName, mintLiveToken } from './live.js';
 import { markMessageReceipt } from './receiptStore.js';
 import {
@@ -63,6 +74,7 @@ import {
 import { logger } from './logger.js';
 import { PresenceRuntime } from './presenceRuntime.js';
 import { listConversations } from './conversationStore.js';
+import { query } from './db.js';
 import {
   acceptContact,
   blockUser,
@@ -114,6 +126,64 @@ const io = new Server(httpServer, {
 
 const presenceRuntime = new PresenceRuntime();
 
+void bootstrapTestBot();
+
+/**
+ * K-Bot auto-reply: only ever fires for the exact (Kenams -> K-Bot) direct
+ * conversation direction — see botStore.ts for the full scoping/security
+ * rationale. Fire-and-forget from the caller so the human sender's own
+ * message:send ack is never delayed by the bot's artificial "typing" pause.
+ */
+async function maybeAutoReplyAsBot(conversationId: string, senderUserId: string, ciphertext: string) {
+  const bot = getBotState();
+  if (!bot) return;
+  if (!(await isBotConversationFromKenams(conversationId, senderUserId))) return;
+
+  const { rows } = await query<{ e2e_public_key: string | null }>(
+    `select e2e_public_key from public.profiles where id = $1 limit 1`,
+    [senderUserId],
+  );
+  const kenamsPublicKey = rows[0]?.e2e_public_key;
+  if (!kenamsPublicKey) return;
+
+  const plaintext = decryptFromKenams(ciphertext, kenamsPublicKey);
+  if (plaintext === null) return;
+
+  await new Promise((resolve) => setTimeout(resolve, randomReplyDelayMs()));
+
+  const replyCrypto = await buildBotReplyEnvelope(plaintext);
+  const deviceId = getBotDeviceId();
+  if (!replyCrypto || !deviceId) return;
+
+  const envelope = {
+    clientMessageId: randomUUID(),
+    conversationId,
+    senderDeviceId: deviceId,
+    algorithm: replyCrypto.algorithm,
+    ciphertext: replyCrypto.ciphertext,
+    createdAt: new Date().toISOString(),
+  };
+  const stored = await persistEncryptedMessage(bot.userId, envelope);
+  if (stored.duplicate) return;
+
+  io.to(`conversation:${conversationId}`).emit('message:new', {
+    ...envelope,
+    id: stored.id,
+    senderUserId: bot.userId,
+    createdAt: stored.createdAt,
+  });
+  void sendConversationPush(conversationId, bot.userId, stored.id).catch(() => undefined);
+}
+
+/** K-Pulse echo: if Kenams sends a K-Pulse to K-Bot, K-Bot sends one back shortly after. */
+async function maybeEchoKPulse(senderUserId: string, recipientId: string, variant: string) {
+  const bot = getBotState();
+  if (!bot || recipientId !== bot.userId || senderUserId !== bot.kenamsUserId) return;
+  await new Promise((resolve) => setTimeout(resolve, randomReplyDelayMs()));
+  const payload = { senderId: bot.userId, variant, sentAt: new Date().toISOString() };
+  io.to(`user:${senderUserId}`).emit('kpulse:receive', payload);
+}
+
 async function broadcastPresence(userId: string, status: 'online' | 'busy' | 'away' | 'invisible' | 'offline') {
   const { visibleStatus, becameVisible } = presenceRuntime.noteStatus(userId, status);
   const audience = await getContactAudience(userId);
@@ -149,6 +219,9 @@ async function handleKPulseSend(
     // Fire-and-forget: push delivery failure must never fail the K-Pulse itself.
     void sendKPulsePush(recipientId, userId).catch((error) =>
       logger.warn('kpulse_push_failed', { recipientId, error: error instanceof Error ? error.message : 'unknown' })
+    );
+    void maybeEchoKPulse(userId, recipientId, variant).catch((error) =>
+      logger.warn('bot_kpulse_echo_failed', { error: error instanceof Error ? error.message : 'unknown' })
     );
     ack?.({ ok: true });
   } catch {
@@ -462,6 +535,12 @@ io.on('connection', (socket) => {
         void sendConversationPush(envelope.conversationId, userId, stored.id).catch((error) =>
           logger.warn('message_push_failed', { conversationId: envelope.conversationId, error: error instanceof Error ? error.message : 'unknown' })
         );
+
+        if (!isBotUser(userId)) {
+          void maybeAutoReplyAsBot(envelope.conversationId, userId, envelope.ciphertext).catch((error) =>
+            logger.warn('bot_auto_reply_failed', { error: error instanceof Error ? error.message : 'unknown' })
+          );
+        }
       }
 
       ack?.({ ok: true, id: stored.id, duplicate: stored.duplicate, clientMessageId: envelope.clientMessageId });
