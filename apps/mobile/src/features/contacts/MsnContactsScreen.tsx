@@ -420,7 +420,7 @@ function DesktopContactRow({
             {music === 'stale' && !!track && (
               <View style={styles.dMusicStale} accessibilityLabel={`Dernière écoute : ${track}`}>
                 <Text style={styles.dMusicStaleIcon}>♪</Text>
-                <Text style={styles.dMusicStaleLabel}>{contact.nowPlayingAt ? `ÉCOUTÉ ${formatAgo(contact.nowPlayingAt).toUpperCase()}` : 'DERNIÈRE ÉCOUTE'}</Text>
+                <Text style={styles.dMusicStaleLabel}>{contact.nowPlayingAt ? `Écouté ${formatAgo(contact.nowPlayingAt)}` : 'Écouté'}</Text>
                 <Text style={styles.dMusicStaleText} numberOfLines={1}>{track}</Text>
               </View>
             )}
@@ -1071,7 +1071,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   dMusicStale: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, maxWidth: '100%', paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', borderRadius: radius.pill, borderWidth: 1, borderColor: palette.hairline },
   dMusicStaleIcon: { color: palette.inkFaint, fontSize: 11, fontWeight: '900' },
   dMusicStaleText: { color: palette.inkSoft, fontSize: 11.5, fontWeight: '600', flexShrink: 1 },
-  dMusicStaleLabel: { color: palette.inkFaint, fontSize: 8.5, fontWeight: '900', letterSpacing: 0.8, flexShrink: 0 },
+  dMusicStaleLabel: { color: palette.inkFaint, fontSize: 10.5, fontWeight: '700', fontStyle: 'italic', flexShrink: 0 },
   dPulseBtn: {
     width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center',
     backgroundColor: palette.pulseSoft, borderWidth: 1, borderColor: palette.brass,
