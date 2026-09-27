@@ -4,14 +4,14 @@ Last verified: 2026-09-27
 
 ## Latest APK (test terrain)
 
-- Built locally 2026-09-27 (EAS Android free-tier quota still exhausted, resets 2026-10-01) at `C:\kssenger` (short path, per the CMake path-length trap below), `apps/mobile/android`, `./gradlew.bat assembleRelease`.
-- Commit included: `d228e2706b2e598c8a15755cb4826103bacb1fdc` (HEAD of `feature/device-linking-scaffold` at build time) — adds on top of the 2026-09-26 build: avatar upload security hardening (`eba95d8`), MSN desktop refonte (frozen layout, presence/music, Chats hub, simplified nav, E2EE key-regeneration fix, unread badge fix).
-- `versionCode` bumped to 8 in `apps/mobile/app.json` (local build tree only, not committed to the tracked repo — same convention as the previous build).
-- **Signed with the local debug keystore** (`android/app/debug.keystore`), SAME keystore as the 2026-09-26 build → **no signature change since yesterday**, testers who already installed yesterday's APK can update in place without uninstalling. Still different from the EAS remote release keystore used before 2026-09-07.
+- Built locally 2026-09-27 (13:07, second build of the day — EAS Android free-tier quota still exhausted, resets 2026-10-01) at `C:\kssenger` (short path, per the CMake path-length trap below), `apps/mobile/android`, `./gradlew.bat assembleRelease`.
+- Commit included: `8450ccb9a41bb998e07e1d16d446a0ed19eba557` (HEAD of `feature/device-linking-scaffold`) — "Remove quick-login shortcut and lead with signup for public launch": the login screen no longer shows a "Connexion rapide" demo shortcut, signup is the default screen. Verified absent by grepping the release JS bundle (`index.android.bundle`) for `Connexion rapide` — zero matches.
+- `versionCode` bumped to 9 in `apps/mobile/app.json` (local build tree only, not committed to the tracked repo — same convention as previous builds).
+- **Signed with the local debug keystore** (`android/app/debug.keystore`), SAME keystore as all previous local builds (SHA-256 `FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C`, confirmed via `apksigner verify --print-certs`) → **no signature change**, testers who already installed a previous local build can update in place without uninstalling. Still different from the EAS remote release keystore used before 2026-09-07 (that one still requires uninstall if a tester has it).
 - Published as a GitHub Release (public repo) for direct download:
-  `https://github.com/kenams/K-messenger2026/releases/download/kssenger-preview-20260927-1249/kssenger-preview-20260927.apk`
-- QR code for that link: `C:\kssenger\kssenger-apk-qr-20260927.png`.
-- Not validated on a physical device this session (no device/emulator in this environment) — only confirmed `BUILD SUCCESSFUL`, gradle produced a valid signed APK. Physical-device smoke test (open without crash, login, DM, E2EE round-trip, MSN desktop hub) is still owed — see Next steps.
+  `https://github.com/kenams/K-messenger2026/releases/download/kssenger-preview-20260927-1327/kssenger-preview-20260927b.apk`
+- QR code for that link: `C:\kssenger\kssenger-apk-qr-20260927b.png`.
+- Not validated on a physical device this session (no device/emulator in this environment) — only confirmed `BUILD SUCCESSFUL`, gradle produced a valid signed APK, and the release JS bundle carries the "vierge" login screen. Physical-device smoke test (open without crash, login, DM, E2EE round-trip, MSN desktop hub) is still owed — see Next steps.
 
 Canonical current state for `kenams/K-messenger2026`. `PROJECT_STATE.md` at repository root is only a pointer.
 
