@@ -1,22 +1,23 @@
 import { expect, type Page } from '@playwright/test';
 
 /** Web-test population created by scripts/web-test-populate-runner.mjs (prod). */
-export const KENAMS = { email: 'kenams42+kssenger@gmail.com', password: 'Kss--f4BAds_-26', name: 'Kenams' };
+export const KENAMS = { email: 'kenams42+kssenger@gmail.com', username: 'kenamz', password: 'Kss--f4BAds_-26', name: 'Kenams' };
 export const BOTS = {
-  lea: { email: 'kenams42+kss-lea@gmail.com', password: 'KssBot2026!', name: 'Léa Martin' },
-  karim: { email: 'kenams42+kss-karim@gmail.com', password: 'KssBot2026!', name: 'Karim Benali' },
-  chloe: { email: 'kenams42+kss-chloe@gmail.com', password: 'KssBot2026!', name: 'Chloé Dubois' },
+  lea: { email: 'kenams42+kss-lea@gmail.com', username: 'lea_m', password: 'KssBot2026!', name: 'Léa Martin' },
+  karim: { email: 'kenams42+kss-karim@gmail.com', username: 'karim_b', password: 'KssBot2026!', name: 'Karim Benali' },
+  chloe: { email: 'kenams42+kss-chloe@gmail.com', username: 'chloe_d', password: 'KssBot2026!', name: 'Chloé Dubois' },
 };
 
 const TABS = ['Contacts', 'Chats', 'K-Feed', 'K-Map', 'Moments', 'Moi'] as const;
 export type TabName = (typeof TABS)[number];
 
 /** Sign in and wait until a main tab is on screen. Only auth.setup / auth.spec use this. */
-export async function signIn(page: Page, who: { email: string; password: string }): Promise<void> {
+export async function signIn(page: Page, who: { username: string; password: string }): Promise<void> {
   await page.goto('/');
   if (await onAppShell(page)) return;
 
-  await page.getByPlaceholder('E-mail').fill(who.email);
+  await page.getByRole('tab', { name: 'Connexion' }).click();
+  await page.getByPlaceholder('Pseudo').fill(who.username);
   await page.getByPlaceholder(/Mot de passe/).fill(who.password);
   await page.getByRole('button', { name: 'Se connecter' }).click();
 
