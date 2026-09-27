@@ -89,6 +89,14 @@ export const groupConversationSchema = z.object({
   conversationId: z.string().uuid(),
 }).strict();
 
+export const publicGroupsListSchema = z.object({
+  category: z.string().trim().min(1).max(40).optional(),
+}).strict();
+
+export const publicGroupJoinSchema = z.object({
+  conversationId: z.string().uuid(),
+}).strict();
+
 export const contactTargetSchema = z.object({
   userId: z.string().uuid(),
 }).strict();

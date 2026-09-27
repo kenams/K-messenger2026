@@ -28,6 +28,8 @@ import {
   receiptSchema,
   messageReactSchema,
   messageDeleteSchema,
+  publicGroupJoinSchema,
+  publicGroupsListSchema,
   typingSchema,
   usernameLoginSchema,
   wizzSchema,
@@ -37,7 +39,9 @@ import {
   addGroupMember,
   createGroup,
   getGroupTitle,
+  joinPublicGroup,
   leaveGroup,
+  listPublicGroups,
   removeGroupMember,
   setGroupMemberRole,
 } from './groupStore.js';
@@ -602,6 +606,39 @@ io.on('connection', (socket) => {
       ack?.({ ok: true, ...result });
     } catch (error) {
       logger.warn('group_leave_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('groups:public-list', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:groups:public-list`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = publicGroupsListSchema.parse(raw ?? {});
+      const groups = await listPublicGroups(request.category);
+      ack?.({ ok: true, groups });
+    } catch (error) {
+      logger.warn('groups_public_list_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
+      ack?.({ ok: false, error: 'REJECTED' });
+    }
+  });
+
+  socket.on('group:join-public', async (raw, ack) => {
+    try {
+      if (!socialLimiter.consume(`${userId}:group:join-public`)) return ack?.({ ok: false, error: 'RATE_LIMITED' });
+      const request = publicGroupJoinSchema.parse(raw);
+      const result = await joinPublicGroup(userId, request.conversationId);
+      socket.join(`conversation:${result.conversationId}`);
+      io.to(`user:${userId}`).emit('group:invited', { conversationId: result.conversationId, memberId: userId, role: result.role, actorId: userId });
+      io.to(`conversation:${result.conversationId}`).emit('group:updated', {
+        conversationId: result.conversationId,
+        memberId: userId,
+        role: result.role,
+        action: 'member-added',
+        actorId: userId,
+      });
+      ack?.({ ok: true, conversationId: result.conversationId });
+    } catch (error) {
+      logger.warn('group_join_public_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
       ack?.({ ok: false, error: 'REJECTED' });
     }
   });

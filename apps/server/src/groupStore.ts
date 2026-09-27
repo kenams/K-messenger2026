@@ -219,3 +219,100 @@ export async function getGroupTitle(conversationId: string): Promise<string | nu
   );
   return rows[0]?.title ?? null;
 }
+
+export type PublicGroupSummary = {
+  conversationId: string;
+  title: string;
+  category: string | null;
+  memberCount: number;
+};
+
+/** Discovery feed: every joinable public group, optionally filtered by category. */
+export async function listPublicGroups(category?: string): Promise<PublicGroupSummary[]> {
+  const { rows } = await query<{ id: string; title: string | null; category: string | null; member_count: string }>(
+    `select c.id, c.title, c.category, count(cm.user_id) as member_count
+       from public.conversations c
+       join public.conversation_members cm on cm.conversation_id = c.id
+      where c.kind = 'group'
+        and c.is_public = true
+        and ($1::text is null or c.category = $1)
+      group by c.id, c.title, c.category
+      order by c.created_at desc`,
+    [category ?? null],
+  );
+  return rows.map((row) => ({
+    conversationId: row.id,
+    title: row.title ?? 'Groupe',
+    category: row.category,
+    memberCount: Number(row.member_count),
+  }));
+}
+
+/**
+ * Self-join a public group — the one case in this codebase where a user adds
+ * themselves to a group without an admin/owner inviting them. Every other
+ * safety rule from addGroupMember still applies (must not already be a
+ * member, must not be banned, must not be blocked by/blocking any current
+ * member) except the "inviter must have you as a contact" check, which
+ * doesn't make sense for a public, discover-by-category join. Membership
+ * itself is stored exactly the same way (conversation_members insert), so
+ * the existing group E2EE flow (group_keys wrap-per-member, wrapForMissingMembers
+ * on the client after `group:updated`) picks the new member up unchanged.
+ */
+export async function joinPublicGroup(userId: string, conversationId: string) {
+  return transaction(async (client) => {
+    const { rows: groupRows } = await client.query<{ is_public: boolean; title: string | null }>(
+      `select is_public, title from public.conversations where id = $1 and kind = 'group' for update`,
+      [conversationId],
+    );
+    const group = groupRows[0];
+    if (!group) throw new Error('GROUP_NOT_FOUND');
+    if (!group.is_public) throw new Error('GROUP_NOT_PUBLIC');
+
+    const { rowCount: existingCount } = await client.query(
+      `select 1 from public.conversation_members where conversation_id = $1 and user_id = $2`,
+      [conversationId, userId],
+    );
+    if ((existingCount ?? 0) > 0) throw new Error('GROUP_MEMBER_ALREADY_PRESENT');
+
+    const { rowCount: banCount } = await client.query(
+      `select 1 from public.group_bans where conversation_id = $1 and user_id = $2 limit 1`,
+      [conversationId, userId],
+    );
+    if ((banCount ?? 0) > 0) throw new Error('GROUP_MEMBER_BANNED');
+
+    const { rowCount: blockCount } = await client.query(
+      `select 1
+         from public.blocks b
+        where (
+          b.blocker_id = $2
+          and b.blocked_id in (select user_id from public.conversation_members where conversation_id = $1)
+        ) or (
+          b.blocked_id = $2
+          and b.blocker_id in (select user_id from public.conversation_members where conversation_id = $1)
+        )
+        limit 1`,
+      [conversationId, userId],
+    );
+    if ((blockCount ?? 0) > 0) throw new Error('GROUP_MEMBER_BLOCKED');
+
+    await client.query(
+      `insert into public.conversation_members (conversation_id, user_id, role)
+       values ($1, $2, 'member')`,
+      [conversationId, userId],
+    );
+
+    const { rows: memberRows } = await client.query<{ user_id: string }>(
+      `select user_id from public.conversation_members where conversation_id = $1`,
+      [conversationId],
+    );
+
+    return {
+      conversationId,
+      memberId: userId,
+      role: 'member' as const,
+      title: group.title ?? 'Groupe',
+      memberIds: memberRows.map((row) => row.user_id),
+    };
+  });
+}
