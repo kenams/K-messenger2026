@@ -29,6 +29,7 @@ import {
   messageReactSchema,
   messageDeleteSchema,
   typingSchema,
+  usernameLoginSchema,
   wizzSchema,
 } from './validation.js';
 import { createOrGetDirectConversation } from './directConversationStore.js';
@@ -69,6 +70,8 @@ import {
   presenceLimiter,
   socialLimiter,
   typingLimiter,
+  usernameLoginIpLimiter,
+  usernameLoginNameLimiter,
   wizzLimiter,
 } from './rateLimit.js';
 import { logger } from './logger.js';
@@ -97,10 +100,100 @@ import {
 
 const app = express();
 app.disable('x-powered-by');
+// Render terminates TLS in front of this service (a single reverse-proxy
+// hop) and sets X-Forwarded-For accordingly. Without this, req.ip is always
+// Render's proxy address, which would silently defeat the per-IP limiter on
+// the login-resolution endpoint below (every caller would share one bucket).
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: config.CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '64kb' }));
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'k-ssenger-server' }));
+
+/**
+ * Username -> password login gate.
+ *
+ * Neon Auth (better-auth) only knows accounts by email; usernames live in
+ * `public.profiles`, joined to `neon_auth."user"` by id. The mobile login tab
+ * wants "@pseudo + password" instead of retyping an email every time, which
+ * needs a pseudo -> email resolution *somewhere* before the real sign-in call.
+ *
+ * That resolution must never become a public "does this username exist"
+ * oracle (a much worse leak than the already-accepted "is this email already
+ * registered" signup message: this one would work against arbitrary targets
+ * with zero proof of ownership). So this endpoint does the actual password
+ * check itself, server-side, direct to Neon Auth with the resolved email —
+ * and only on a *verified* successful sign-in does it hand the email back to
+ * the caller, who by then has already proven they know the account's
+ * password. Every other case (unknown username, wrong password, rate
+ * limited) returns the same generic shape.
+ *
+ * The client then re-runs the normal `signInWithPassword({ email, password })`
+ * call itself with that email — the exact same code path the email-based
+ * login already uses — so the resulting session is byte-identical, not a
+ * hand-rolled one. (A full server-side session mint + relay was considered
+ * and ruled out: Neon Auth's session cookie is HttpOnly and host-bound to
+ * the neon.tech auth domain by the browser's own cookie model, confirmed
+ * live — a cookie our server relays from its own Render origin cannot make
+ * a browser attach it to requests toward a different origin afterward. The
+ * only place that cookie can legitimately get set is a response that really
+ * comes from the auth domain, which is what the client's follow-up call
+ * does.)
+ */
+const LOGIN_GUARD_DUMMY_EMAIL = 'no-such-account+kssenger-login-guard@example.invalid';
+
+async function attemptNeonEmailSignIn(email: string, password: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${config.NEON_AUTH_BASE_URL}/sign-in/email`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://k-ssenger.expo.app' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!response.ok) return false;
+    const body = (await response.json().catch(() => null)) as { user?: { id?: unknown } } | null;
+    return typeof body?.user?.id === 'string';
+  } catch (error) {
+    logger.warn('username_login_upstream_error', { error: error instanceof Error ? error.message : 'unknown' });
+    return false;
+  }
+}
+
+app.post('/auth/login-with-username', express.json({ limit: '4kb' }), async (req, res) => {
+  const parsed = usernameLoginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'INVALID_CREDENTIALS' });
+    return;
+  }
+  const { username, password } = parsed.data;
+
+  if (!usernameLoginIpLimiter.consume(req.ip ?? 'unknown') || !usernameLoginNameLimiter.consume(username)) {
+    res.status(429).json({ error: 'INVALID_CREDENTIALS' });
+    return;
+  }
+
+  let email: string | null = null;
+  try {
+    const result = await query<{ email: string }>(
+      'select u.email from public.profiles p join neon_auth."user" u on u.id = p.id where p.username = $1',
+      [username],
+    );
+    email = result.rows[0]?.email ?? null;
+  } catch (error) {
+    logger.warn('username_login_lookup_failed', { error: error instanceof Error ? error.message : 'unknown' });
+  }
+
+  // Whether or not the username resolved, always perform one upstream
+  // sign-in attempt with *some* email — an unknown username short-circuiting
+  // straight to a 401 would make "known account, wrong password" and
+  // "unknown username" distinguishable purely by response latency.
+  const ok = await attemptNeonEmailSignIn(email ?? LOGIN_GUARD_DUMMY_EMAIL, password);
+  if (!ok || !email) {
+    res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+    return;
+  }
+
+  res.status(200).json({ ok: true, email });
+});
 
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {

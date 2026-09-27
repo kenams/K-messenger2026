@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getBackend, isBackendConfigured, notifyAuthStateMayHaveChanged } from '../../lib/backend';
+import { resolveEmailForUsernameLogin } from '../../lib/realtime';
 import { brandGradient, elevation, layout, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { MobileAppQr } from '../profile/MobileAppQr';
@@ -71,16 +72,29 @@ export function AuthScreen() {
   const [emailTouched, setEmailTouched] = useState(false);
   const [mode, setMode] = useState<Mode>('signup');
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
+  // Login is now username-based, but password reset still needs an email
+  // (Neon Auth only knows accounts by email) — this small field only
+  // appears once "Mot de passe oublié ?" is tapped, instead of always
+  // showing a second identifier field on the login tab.
+  const [showResetField, setShowResetField] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const canSubmit = emailValid && password.length >= 8 && !busy && isBackendConfigured;
+  // Mirrors the DB constraint (neon/migrations/0001_v1_core.sql:
+  // username ~ '^[a-z0-9._]{3,32}$'), applied after stripping a leading '@'
+  // and lowercasing so "@Pseudo" and "pseudo" both work.
+  const normalizedUsername = username.trim().replace(/^@+/, '').toLowerCase();
+  const usernameValid = /^[a-z0-9._]{3,32}$/.test(normalizedUsername);
+  const identifierValid = mode === 'login' ? usernameValid : emailValid;
+  const canSubmit = identifierValid && password.length >= 8 && !busy && isBackendConfigured;
 
-  const setModeSafe = (next: Mode) => { setMode(next); setError(''); setNotice(''); setEmailTouched(false); };
+  const setModeSafe = (next: Mode) => { setMode(next); setError(''); setNotice(''); setEmailTouched(false); setShowResetField(false); };
 
   /**
    * A prior version of this helper tried to text-match backend error
@@ -120,7 +134,9 @@ export function AuthScreen() {
 
   const submit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
-    if (!canSubmit || !normalizedEmail) return;
+    if (!canSubmit) return;
+    if (mode === 'signup' && !normalizedEmail) return;
+    if (mode === 'login' && !normalizedUsername) return;
 
     setBusy(true);
     setError('');
@@ -128,8 +144,15 @@ export function AuthScreen() {
     try {
       const backend = getBackend();
       if (mode === 'login') {
-        const { data, error: authError } = await backend.auth.signInWithPassword({ email: normalizedEmail, password });
-        if (authError) setError('Connexion impossible. Vérifie ton e-mail et ton mot de passe.' + authErrorDetailSuffix(authError));
+        let resolvedEmail: string;
+        try {
+          resolvedEmail = await resolveEmailForUsernameLogin(normalizedUsername, password);
+        } catch {
+          setError('Connexion impossible. Vérifie ton pseudo et ton mot de passe.');
+          return;
+        }
+        const { data, error: authError } = await backend.auth.signInWithPassword({ email: resolvedEmail, password });
+        if (authError) setError('Connexion impossible. Vérifie ton pseudo et ton mot de passe.' + authErrorDetailSuffix(authError));
         else if (data.session && Platform.OS === 'web' && typeof window !== 'undefined') {
           // The web auth adapter doesn't reliably emit onAuthStateChange; reload to enter the app.
           window.location.reload();
@@ -164,10 +187,13 @@ export function AuthScreen() {
   };
 
   const forgotPassword = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!emailValid) {
-      setEmailTouched(true);
-      setError('Saisis ton e-mail ci-dessus pour recevoir le lien de réinitialisation.');
+    if (!showResetField) {
+      setShowResetField(true);
+      return;
+    }
+    const normalizedEmail = resetEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setError('Saisis ton e-mail ci-dessous pour recevoir le lien de réinitialisation.');
       return;
     }
     setResetBusy(true);
@@ -242,18 +268,33 @@ export function AuthScreen() {
             </View>
 
             <View style={styles.form}>
-              <AuthField
-                icon="✉️"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                placeholder="E-mail"
-                value={email}
-                onChangeText={setEmail}
-                autoComplete="email"
-                onBlur={() => setEmailTouched(true)}
-              />
+              {mode === 'login' ? (
+                <AuthField
+                  icon="@"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="username"
+                  placeholder="Pseudo"
+                  accessibilityLabel="Pseudo"
+                  value={username}
+                  onChangeText={setUsername}
+                  autoComplete="username"
+                  onBlur={() => setEmailTouched(true)}
+                />
+              ) : (
+                <AuthField
+                  icon="✉️"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  placeholder="E-mail"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoComplete="email"
+                  onBlur={() => setEmailTouched(true)}
+                />
+              )}
               <AuthField
                 icon="🔒"
                 autoCapitalize="none"
@@ -270,6 +311,20 @@ export function AuthScreen() {
               />
 
               <Text style={styles.passwordHint}>8 caractères minimum.</Text>
+              {mode === 'login' && showResetField && (
+                <AuthField
+                  icon="✉️"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  placeholder="E-mail (pour réinitialiser le mot de passe)"
+                  accessibilityLabel="E-mail, pour réinitialiser le mot de passe"
+                  value={resetEmail}
+                  onChangeText={setResetEmail}
+                  autoComplete="email"
+                />
+              )}
               {mode === 'login' && (
                 <Pressable
                   accessibilityRole="button"
@@ -279,12 +334,15 @@ export function AuthScreen() {
                   hitSlop={6}
                 >
                   <Text style={styles.forgotLinkText}>
-                    {resetBusy ? 'Envoi en cours…' : 'Mot de passe oublié ?'}
+                    {resetBusy ? 'Envoi en cours…' : showResetField ? 'Envoyer le lien de réinitialisation' : 'Mot de passe oublié ?'}
                   </Text>
                 </Pressable>
               )}
-              {emailTouched && email.length > 0 && !emailValid && (
+              {mode === 'signup' && emailTouched && email.length > 0 && !emailValid && (
                 <Text accessibilityRole="alert" style={styles.hint}>Saisis une adresse e-mail valide, par exemple nom@exemple.fr.</Text>
+              )}
+              {mode === 'login' && emailTouched && username.length > 0 && !usernameValid && (
+                <Text accessibilityRole="alert" style={styles.hint}>Ton pseudo fait 3 à 32 caractères (lettres minuscules, chiffres, points, underscores).</Text>
               )}
               {!!error &&<View style={styles.banner}><Text style={styles.bannerText}>{error}</Text></View>}
               {!!notice && <View style={[styles.banner, styles.bannerOk]}><Text style={[styles.bannerText, styles.bannerTextOk]}>{notice}</Text></View>}

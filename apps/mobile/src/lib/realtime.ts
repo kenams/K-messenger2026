@@ -5,6 +5,33 @@ const socketUrl = process.env.EXPO_PUBLIC_KSSENGER_SOCKET_URL?.trim() ?? '';
 
 export const isRealtimeConfigured = socketUrl.startsWith('https://') || socketUrl.startsWith('http://');
 
+/**
+ * Resolves a K-ssenger username to the email needed for the real
+ * signInWithPassword() call, by having the K-ssenger server verify the
+ * password itself first (see POST /auth/login-with-username there for why:
+ * it's the only way to avoid turning "username -> email" into a public
+ * enumeration oracle). Throws with a generic message on any failure —
+ * unknown username, wrong password, or the server being unreachable are
+ * deliberately indistinguishable here.
+ */
+export async function resolveEmailForUsernameLogin(username: string, password: string): Promise<string> {
+  if (!isRealtimeConfigured) throw new Error('KSSENGER_SERVER_NOT_CONFIGURED');
+  let response: Response;
+  try {
+    response = await fetch(`${socketUrl}/auth/login-with-username`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+  } catch {
+    throw new Error('INVALID_CREDENTIALS');
+  }
+  if (!response.ok) throw new Error('INVALID_CREDENTIALS');
+  const body = (await response.json().catch(() => null)) as { ok?: boolean; email?: string } | null;
+  if (!body?.ok || typeof body.email !== 'string' || !body.email) throw new Error('INVALID_CREDENTIALS');
+  return body.email;
+}
+
 let socket: Socket | null = null;
 let connecting: Promise<Socket> | null = null;
 

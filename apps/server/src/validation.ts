@@ -39,6 +39,14 @@ export const messageDeleteSchema = z.object({
   messageId: z.string().uuid(),
 }).strict();
 
+// Mirrors the DB constraint in neon/migrations/0001_v1_core.sql
+// (username ~ '^[a-z0-9._]{3,32}$'). Kept in lockstep intentionally so a
+// malformed username is rejected before ever touching the database.
+export const usernameLoginSchema = z.object({
+  username: z.string().regex(/^[a-z0-9._]{3,32}$/),
+  password: z.string().min(1).max(200),
+}).strict();
+
 export const conversationJoinSchema = z.object({
   conversationId: z.string().uuid(),
 }).strict();

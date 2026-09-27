@@ -52,6 +52,14 @@ export const presenceLimiter = new FixedWindowRateLimiter(30, 60_000);
 export const joinLimiter = new FixedWindowRateLimiter(60, 60_000);
 export const socialLimiter = new FixedWindowRateLimiter(30, 60_000);
 export const wizzLimiter = new FixedWindowRateLimiter(6, 60_000);
+// Username->email login resolution (see server.ts POST /auth/login-with-username).
+// Two independent limiters are checked: one keyed by client IP (stops a single
+// source from sweeping many usernames), one keyed by the submitted username
+// (stops distributed/credential-stuffing attempts against one account). Both
+// are intentionally tight — this endpoint's only job is gating a password
+// check, so legitimate use never needs more than a handful of tries.
+export const usernameLoginIpLimiter = new FixedWindowRateLimiter(20, 5 * 60_000);
+export const usernameLoginNameLimiter = new FixedWindowRateLimiter(8, 5 * 60_000);
 // Typing pings are transient UI signals, not messages: generous but capped so a
 // misbehaving client can't spam a conversation room.
 export const typingLimiter = new FixedWindowRateLimiter(60, 60_000);
