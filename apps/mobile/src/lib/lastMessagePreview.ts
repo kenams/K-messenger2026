@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import { emitAck } from './realtime';
 import { readMessageText } from './chatTransport';
-import { ENCRYPTED_ALGO, decryptDirectMessage, ensureIdentityKeyPair, fetchPeerPublicKey } from './e2ee';
+import { ENCRYPTED_ALGO, decryptDirectMessage, fetchPeerPublicKey, loadExistingSecretKey } from './e2ee';
 
 /**
  * Last-message previews for the conversation list.
@@ -80,13 +80,15 @@ export function loadDirectPreview(client: Socket, userId: string, conversationId
       if (!last) return;
       if (last.deletedAt) { setPreview(conversationId, last.id, 'Message supprimé'); return; }
       if (last.algorithm !== ENCRYPTED_ALGO) { setPreview(conversationId, last.id, summarizePayload(readMessageText(last))); return; }
-      const mine = await ensureIdentityKeyPair(userId);
+      // Read-only: a preview must never create/publish a keypair.
+      const mySecretKey = await loadExistingSecretKey(userId);
       let peerKey = peerKeys.get(peerId) ?? null;
       if (!peerKey) {
         peerKey = await fetchPeerPublicKey(peerId);
         if (peerKey) peerKeys.set(peerId, peerKey);
       }
-      const opened = mine && peerKey ? decryptDirectMessage(last.ciphertext ?? '', mine.secretKey, peerKey) : null;
+      const opened = mySecretKey && peerKey ? decryptDirectMessage(last.ciphertext ?? '', mySecretKey, peerKey) : null;
+      if (!opened) peerKeys.delete(peerId); // peer may have rotated keys — refetch next time
       setPreview(conversationId, last.id, opened ? summarizePayload(opened) : '🔒 Message chiffré');
     } catch {
       // Preview is cosmetic — the row falls back to a neutral label.

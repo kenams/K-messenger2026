@@ -160,6 +160,21 @@ export async function ensureIdentityKeyPair(userId: string): Promise<{ publicKey
   return promise;
 }
 
+/**
+ * Read-only variant for passive surfaces (conversation-list previews):
+ * returns this device's existing secret key, or null. Never generates or
+ * publishes a keypair — merely viewing a list must not rotate the account's
+ * public key (that would make every other device's history undecryptable).
+ */
+export async function loadExistingSecretKey(userId: string): Promise<string | null> {
+  if (cachedKeyPair && cachedKeyPair.userId === userId) return cachedKeyPair.secretKey;
+  try {
+    return await readSecretKey(userId);
+  } catch {
+    return null;
+  }
+}
+
 /** The recipient's public key, or null if they have none yet (not upgraded / lookup failed). */
 export async function fetchPeerPublicKey(userId: string): Promise<string | null> {
   try {
