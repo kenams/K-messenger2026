@@ -99,6 +99,25 @@ export function AuthScreen() {
    */
   const authErrorDetailSuffix = (_authError: unknown): string => '';
 
+  /**
+   * Deliberately different from authErrorDetailSuffix above: this checks one
+   * EXACT, versioned error code from the auth library itself (verified via
+   * the live endpoint), not free-text prose we'd have to guess at parsing.
+   * Telling a user "that email is already registered" on signup is standard
+   * practice across virtually every account-based product — the earlier
+   * removal was about the fragile *mechanism* (regex over untrusted-shape
+   * messages), not a blanket ban on ever surfacing this.
+   */
+  const signupErrorMessage = (authError: unknown): string => {
+    const code = authError && typeof authError === 'object' && 'code' in authError
+      ? (authError as { code?: unknown }).code
+      : null;
+    if (code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL') {
+      return 'Cet e-mail est déjà utilisé. Connecte-toi plutôt, ou utilise "Mot de passe oublié" si besoin.';
+    }
+    return 'Création du compte impossible. Réessaie dans un instant.' + authErrorDetailSuffix(authError);
+  };
+
   const submit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!canSubmit || !normalizedEmail) return;
@@ -120,7 +139,7 @@ export function AuthScreen() {
         }
       } else {
         const { data, error: authError } = await backend.auth.signUp({ email: normalizedEmail, password });
-        if (authError) setError('Création du compte impossible. Réessaie dans un instant.' + authErrorDetailSuffix(authError));
+        if (authError) setError(signupErrorMessage(authError));
         else if (!data.session) setNotice('Compte créé. Confirme ton e-mail pour te connecter.');
         else if (Platform.OS === 'web' && typeof window !== 'undefined') {
           window.location.reload();
