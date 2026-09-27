@@ -8,6 +8,8 @@ import type { Socket } from 'socket.io-client';
 import { getMediaDownload, uploadLocalMedia, type SupportedMediaMime } from '../../lib/media';
 import { ensureChatDevice, encodePlaintext, readMessageText } from '../../lib/chatTransport';
 import { QUICK_REACTIONS, isBigEmoji, isSendKey, myReaction, summarizeReactions, type MessageReaction } from '../../lib/chatExtras';
+import { formatClock } from '../../lib/timeFormat';
+import { useIsDesktopWeb } from '../../lib/useIsDesktopWeb';
 import { GROUP_ENCRYPTED_ALGO, decryptGroupMessage, encryptGroupMessage } from '../../lib/groupE2ee';
 import { EmojiPanel } from '../chats/EmojiPanel';
 import { ComposerResizeHandle } from '../chats/ComposerResizeHandle';
@@ -196,6 +198,7 @@ function StickerTrayThumb({ mediaId }: { mediaId: string }) {
 
 export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, groupKey, onReact, onDelete }: Props) {
   const { styles, colors } = useThemedStyles();
+  const desktop = useIsDesktopWeb();
   const [composer, setComposer] = useState('');
   const { height: composerHeight, handleResize: handleComposerResize, handleResizeEnd: handleComposerResizeEnd } = useResizableComposerHeight();
   const [sending, setSending] = useState(false);
@@ -504,7 +507,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
                 : content.type === 'voice' ? <VoiceMessageBubble mediaId={content.mediaId} durationMs={content.durationMs} mine={mine} colors={colors} />
                 : content.type === 'sticker' ? <GroupStickerImage mediaId={content.mediaId} />
                 : <Text style={big ? styles.bigEmoji : styles.body}>{content.text}</Text>}
-              <Text style={styles.meta}>{new Date(message.createdAt).toLocaleTimeString()} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
+              <Text style={styles.meta}>{formatClock(message.createdAt)} {mine && message.receiptState ? (message.receiptState === 'read' ? ' · ✓✓ Lu' : ' · ✓ Reçu') : ''}</Text>
             </TouchableOpacity>
             {summary.length > 0 && (
               <View style={[styles.chips, mine ? styles.chipsMine : styles.chipsTheirs]}>
@@ -544,17 +547,17 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
           </View>
         );
       })}
-      <View style={styles.quickRow}>
+      <View style={[styles.quickRow, desktop && styles.quickRowCompact]}>
         {QUICK_REACTIONS.map((emoji) => (
-          <TouchableOpacity key={emoji} disabled={sending || !deviceReady} onPress={() => void sendQuick(emoji)} accessibilityRole="button" accessibilityLabel={`Envoyer ${emoji}`} style={[styles.quickBtn, (sending || !deviceReady) && styles.disabled]}>
-            <Text style={styles.quickEmoji}>{emoji}</Text>
+          <TouchableOpacity key={emoji} disabled={sending || !deviceReady} onPress={() => void sendQuick(emoji)} accessibilityRole="button" accessibilityLabel={`Envoyer ${emoji}`} style={[styles.quickBtn, desktop && styles.quickBtnCompact, (sending || !deviceReady) && styles.disabled]}>
+            <Text style={[styles.quickEmoji, desktop && styles.quickEmojiCompact]}>{emoji}</Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity
           onPress={() => setStickerTrayOpen((open) => !open)}
           accessibilityRole="button"
           accessibilityLabel="Stickers du groupe"
-          style={[styles.quickBtn, stickerTrayOpen && styles.quickBtnActive]}
+          style={[styles.quickBtn, desktop && styles.quickBtnCompact, stickerTrayOpen && styles.quickBtnActive]}
         >
           <Text style={styles.quickEmoji}>🖼️</Text>
         </TouchableOpacity>
@@ -680,6 +683,9 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   quickBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   quickBtnActive: { backgroundColor: palette.azureSoft },
   quickEmoji: { fontSize: 19 },
+  quickRowCompact: { justifyContent: 'flex-start', gap: 2, paddingVertical: 2, borderTopWidth: 0, opacity: 0.85 },
+  quickBtnCompact: { width: 28, height: 26, borderRadius: radius.xs },
+  quickEmojiCompact: { fontSize: 15 },
   stickerBubble: { width: 120, height: 120 },
   stickerTray: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, borderTopWidth: 1, borderTopColor: palette.hairline },
   stickerTrayEmpty: { color: palette.inkFaint, fontSize: 11.5, fontWeight: '600', paddingVertical: spacing.sm },

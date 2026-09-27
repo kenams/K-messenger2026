@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -9,6 +9,7 @@ import { KMapScreen } from './src/features/map/KMapScreen';
 import { MsnContactsScreen, type Contact } from './src/features/contacts/MsnContactsScreen';
 import { ChatsHubScreen } from './src/features/chats/ChatsHubScreen';
 import { ChatsListPane } from './src/features/chats/ChatsListPane';
+import { getTotalUnread, useAttentionTick } from './src/features/attention/contactAttention';
 import { KStatusStrip } from './src/features/status/KStatusStrip';
 import { useIsDesktopWeb } from './src/lib/useIsDesktopWeb';
 import { DirectConversationScreen } from './src/features/chats/DirectConversationScreen';
@@ -27,7 +28,7 @@ import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket, emitAck, getAuthenticatedUserId, getRealtimeSocket } from './src/lib/realtime';
 import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, elevation, immersive, layout, radius, spacing, type Palette, type TypeTokens } from './src/theme/tokens';
-import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, SectionLabel, Segmented, useAndroidBack } from './src/theme/components';
+import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, SectionLabel, Segmented, useAndroidBack, useReducedMotion } from './src/theme/components';
 import { useTheme, type ThemeMode, type ThemeSkin } from './src/theme/ThemeProvider';
 import { AvatarGlyph, decodeAvatarConfig } from './src/theme/avatarPresets';
 import { accentOf } from './src/theme/accent';
@@ -516,6 +517,8 @@ function DesktopShell(props: DesktopShellProps) {
   const [sidebarWidth, setSidebarWidth] = useState(loadStoredSidebarWidth);
   const sidebarWidthRef = React.useRef(sidebarWidth);
   sidebarWidthRef.current = sidebarWidth;
+  useAttentionTick();
+  const totalUnread = getTotalUnread();
   const [groupFocus, setGroupFocus] = useState<string | null>(null);
   const [groupsManage, setGroupsManage] = useState(false);
   const [listsMounted, setListsMounted] = useState<Set<TabName>>(() => new Set([tab]));
@@ -635,6 +638,11 @@ function DesktopShell(props: DesktopShellProps) {
         {active && <View style={styles.navRailActiveBar} />}
         <Text style={[secondary ? styles.navRailIconSecondary : styles.navRailIcon, active && styles.navRailIconActive]}>{item.icon}</Text>
         <Text style={[styles.navRailLabel, active && styles.navRailLabelActive]}>{item.label}</Text>
+        {item.tab === 'chats' && totalUnread > 0 && (
+          <View style={styles.navRailBadge} accessibilityLabel={`${totalUnread} message${totalUnread > 1 ? 's' : ''} non lu${totalUnread > 1 ? 's' : ''}`}>
+            <Text style={styles.navRailBadgeText}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
+          </View>
+        )}
       </Pressable>
     );
   };
@@ -683,7 +691,11 @@ function DesktopShell(props: DesktopShellProps) {
           )}
         </View>
         {listTab && <SidebarResizeHandle onResize={handleSidebarResize} onResizeEnd={handleSidebarResizeEnd} />}
-        <View style={styles.mainPane}>{overlayContent ?? (listTab ? conversationContent : wideContent)}</View>
+        <View style={styles.mainPane}>
+          <PaneFadeIn key={overlay ?? (listTab ? (selected ? `c:${selected.id}` : groupFocus ? `g:${groupFocus}` : groupsManage ? 'groups' : 'empty') : tab)}>
+            {overlayContent ?? (listTab ? conversationContent : wideContent)}
+          </PaneFadeIn>
+        </View>
       </View>
       <NowPlayingSheet
         visible={nowPlayingOpen}
@@ -717,6 +729,7 @@ function DesktopMomentsHub() {
     return () => { active = false; };
   }, []);
   return (
+    <View style={styles.momentsBackdrop}>
     <View style={styles.momentsHub}>
       <MomentsScreen
         statusSlot={userId ? (
@@ -726,6 +739,23 @@ function DesktopMomentsHub() {
         ) : null}
       />
     </View>
+    </View>
+  );
+}
+
+/** Soft fade + lift when the right pane switches conversation. Respects reduced motion. */
+function PaneFadeIn({ children }: { children: React.ReactNode }) {
+  const { styles } = useAppStyles();
+  const reduced = useReducedMotion();
+  const progress = React.useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduced) return;
+    Animated.timing(progress, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [progress, reduced]);
+  return (
+    <Animated.View style={[styles.fadeFill, { opacity: progress, transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }] }]}>
+      {children}
+    </Animated.View>
   );
 }
 
@@ -1056,6 +1086,11 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   navRailIconActive: { opacity: 1 },
   navRailLabel: { color: palette.inkOnAzure, opacity: 0.58, fontSize: 9.5, fontWeight: '700' },
   navRailLabelActive: { opacity: 1, fontWeight: '900' },
+  navRailBadge: {
+    position: 'absolute', top: 4, right: 8, minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9,
+    backgroundColor: palette.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: palette.navy,
+  },
+  navRailBadgeText: { color: palette.white, fontSize: 9.5, fontWeight: '900' },
   navRailDivider: { width: 36, height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginTop: spacing.md, marginBottom: spacing.sm },
   navRailDividerActive: { backgroundColor: palette.brass },
   navRailSection: { color: palette.inkOnAzure, opacity: 0.42, fontSize: 7.5, fontWeight: '900', letterSpacing: 1.2, marginBottom: 2 },
@@ -1079,8 +1114,16 @@ function createStyles(palette: Palette, typo: TypeTokens) {
 
   emptyConvo: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, backgroundColor: palette.sky },
   emptyConvoMark: { marginBottom: spacing.lg, opacity: 0.95 },
-  momentsHub: { flex: 1, width: '100%', maxWidth: 760, alignSelf: 'center' },
-  momentsStatus: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
+  momentsBackdrop: { flex: 1, backgroundColor: palette.surfaceSunken, alignItems: 'center' },
+  momentsHub: {
+    flex: 1, width: '100%', maxWidth: 820, backgroundColor: palette.sky,
+    borderLeftWidth: 1, borderRightWidth: 1, borderColor: palette.hairline,
+  },
+  momentsStatus: {
+    marginHorizontal: spacing.lg, marginTop: spacing.md, paddingHorizontal: spacing.md, paddingBottom: spacing.xs,
+    backgroundColor: palette.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: palette.hairline, ...elevation.hairline,
+  },
+  fadeFill: { flex: 1 },
   emptyConvoTitle: { ...typo.title, color: palette.ink },
   emptyConvoCopy: { ...typo.body, color: palette.inkSoft, marginTop: spacing.sm, textAlign: 'center', maxWidth: 320 },
   });

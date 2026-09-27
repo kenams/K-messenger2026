@@ -53,6 +53,13 @@ export function seedContactUnread(contactId: string, unread: number) {
  * buddy list to re-sort by recent activity ("who just pinged me should be
  * easy to find without scrolling", Kenams 2026-09-21) without polling.
  */
+/** Sum of unread direct messages across all contacts (desktop nav badge). */
+export function getTotalUnread(): number {
+  let total = 0;
+  state.forEach((entry) => { total += entry.unread; });
+  return total;
+}
+
 export function useAttentionTick(): number {
   const [tick, setTick] = useState(0);
   useEffect(() => {
