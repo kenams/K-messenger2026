@@ -91,29 +91,21 @@ export function AuthScreen() {
   const setModeSafe = (next: Mode) => { setMode(next); setError(''); setNotice(''); setEmailTouched(false); };
 
   /**
-   * A blank "réessaie dans un instant" made every real cause (pseudo taken,
-   * weak password rejected server-side, rate limit, genuine outage) look
-   * identical and cost real time chasing the wrong one blind. Usernames are
-   * already public/searchable by design in this app (contacts search by
-   * @pseudo), so "pseudo taken" is safe to surface — but whether a given
-   * EMAIL already has an account is exactly the classic account-enumeration
-   * leak (usable for phishing/targeted lookups), so that one specific class
-   * of message stays generic no matter what the backend says.
+   * A prior version of this helper tried to text-match backend error
+   * messages to decide which were "safe" to echo (e.g. allowing anything
+   * that mentioned "username" through). That's an allowlist built on
+   * unstructured prose from a system we don't control the wording of:
+   * any rephrasing on the backend side silently changes what leaks, and
+   * nothing stops a message that legitimately contains both "username" and
+   * account-existence info for a different, unrelated field from slipping
+   * through — a parser standing in for a real, structured trust boundary.
+   * Whether a given EMAIL already has an account is the classic
+   * account-enumeration leak (usable for phishing/targeted lookups), and
+   * there is no free-text pattern that reliably rules that out. So: never
+   * echo the backend's raw message here. Diagnosing a specific failure is
+   * a job for server-side logs, not user-facing UI text.
    */
-  const authErrorDetailSuffix = (authError: unknown): string => {
-    if (!authError || typeof authError !== 'object') return '';
-    const message = 'message' in authError && typeof (authError as { message?: unknown }).message === 'string'
-      ? (authError as { message: string }).message
-      : null;
-    if (!message) return '';
-    const indicatesAlreadyExists = /exist|already|taken|in use|duplicate|registered/i.test(message);
-    const explicitlyAboutUsername = /username|pseudo/i.test(message);
-    // Safe-by-default: any "already exists"-shaped message is redacted unless
-    // it explicitly names the username, since that's the one identifier this
-    // app already treats as public (searchable by @pseudo).
-    if (indicatesAlreadyExists && !explicitlyAboutUsername) return '';
-    return `\n[détail: ${message}]`;
-  };
+  const authErrorDetailSuffix = (_authError: unknown): string => '';
 
   const submit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
