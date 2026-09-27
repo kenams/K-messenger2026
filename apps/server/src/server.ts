@@ -638,8 +638,16 @@ io.on('connection', (socket) => {
       });
       ack?.({ ok: true, conversationId: result.conversationId });
     } catch (error) {
-      logger.warn('group_join_public_rejected', { userId, error: error instanceof Error ? error.message : 'unknown' });
-      ack?.({ ok: false, error: 'REJECTED' });
+      const reason = error instanceof Error ? error.message : 'unknown';
+      logger.warn('group_join_public_rejected', { userId, error: reason });
+      // These are the store's own named outcomes (see joinPublicGroup), not
+      // leaked internals — safe to hand back so the client can show an
+      // accurate message instead of a generic one.
+      const knownReasons = new Set([
+        'GROUP_NOT_FOUND', 'GROUP_NOT_PUBLIC', 'GROUP_MEMBER_ALREADY_PRESENT',
+        'GROUP_MEMBER_BANNED', 'GROUP_MEMBER_BLOCKED',
+      ]);
+      ack?.({ ok: false, error: knownReasons.has(reason) ? reason : 'REJECTED' });
     }
   });
 
