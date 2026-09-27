@@ -19,7 +19,7 @@
 import nacl from 'tweetnacl';
 import naclUtil from 'tweetnacl-util';
 import { getBackend } from './backend';
-import { ensureIdentityKeyPair, fetchPeerPublicKey } from './e2ee';
+import { ensureIdentityKeyPair, fetchPeerPublicKey, loadExistingSecretKey } from './e2ee';
 import { emitAck, getRealtimeSocket } from './realtime';
 
 export const K_STATUS_MAX_CHARS = 200;
@@ -151,8 +151,11 @@ export function openStatus(status: VisibleKStatus, myUserId: string): OpenedKSta
 const statusKeyCache = new Map<string, string>(); // `${myUserId}:${statusId}` -> statusKeyB64
 
 export async function unwrapAllStatusKeys(statuses: VisibleKStatus[], myUserId: string): Promise<void> {
-  const myKeys = await ensureIdentityKeyPair(myUserId);
-  if (!myKeys) return;
+  // Reading friends' statuses is passive: never generate/publish a keypair
+  // here (that would rotate the account's public key and break decryption
+  // on its other sessions). No local key yet → statuses stay undecryptable.
+  const mySecretKey = await loadExistingSecretKey(myUserId);
+  if (!mySecretKey) return;
   for (const status of statuses) {
     if (!status.myWrappedKey) continue;
     const cacheKey = `${myUserId}:${status.id}`;
@@ -162,7 +165,7 @@ export async function unwrapAllStatusKeys(statuses: VisibleKStatus[], myUserId: 
         naclUtil.decodeBase64(status.myWrappedKey.wrappedKey),
         naclUtil.decodeBase64(status.myWrappedKey.wrappedNonce),
         naclUtil.decodeBase64(status.myWrappedKey.wrappedByPublicKey),
-        naclUtil.decodeBase64(myKeys.secretKey),
+        naclUtil.decodeBase64(mySecretKey),
       );
       if (opened) statusKeyCache.set(cacheKey, naclUtil.encodeBase64(opened));
     } catch {
