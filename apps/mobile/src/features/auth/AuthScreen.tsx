@@ -90,6 +90,20 @@ export function AuthScreen() {
 
   const setModeSafe = (next: Mode) => { setMode(next); setError(''); setNotice(''); setEmailTouched(false); };
 
+  /**
+   * A blank "réessaie dans un instant" made every real cause (pseudo taken,
+   * email already registered, weak password rejected server-side, rate
+   * limit, genuine outage) look identical and cost real time chasing the
+   * wrong one blind. Auth error messages are never secrets — surface them.
+   */
+  const authErrorDetailSuffix = (authError: unknown): string => {
+    if (!authError || typeof authError !== 'object') return '';
+    const message = 'message' in authError && typeof (authError as { message?: unknown }).message === 'string'
+      ? (authError as { message: string }).message
+      : null;
+    return message ? `\n[détail: ${message}]` : '';
+  };
+
   const submit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!canSubmit || !normalizedEmail) return;
@@ -101,7 +115,7 @@ export function AuthScreen() {
       const backend = getBackend();
       if (mode === 'login') {
         const { data, error: authError } = await backend.auth.signInWithPassword({ email: normalizedEmail, password });
-        if (authError) setError('Connexion impossible. Vérifie ton e-mail et ton mot de passe.');
+        if (authError) setError('Connexion impossible. Vérifie ton e-mail et ton mot de passe.' + authErrorDetailSuffix(authError));
         else if (data.session && Platform.OS === 'web' && typeof window !== 'undefined') {
           // The web auth adapter doesn't reliably emit onAuthStateChange; reload to enter the app.
           window.location.reload();
@@ -115,7 +129,7 @@ export function AuthScreen() {
           password,
           options: { data: { username: normalizedUsername, display_name: displayName.trim().slice(0, 64) } },
         });
-        if (authError) setError('Création du compte impossible. Essaie un autre pseudo ou réessaie dans un instant.');
+        if (authError) setError('Création du compte impossible. Essaie un autre pseudo ou réessaie dans un instant.' + authErrorDetailSuffix(authError));
         else if (!data.session) setNotice('Compte créé. Confirme ton e-mail pour te connecter.');
         else if (Platform.OS === 'web' && typeof window !== 'undefined') {
           window.location.reload();
