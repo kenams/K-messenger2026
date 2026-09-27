@@ -27,7 +27,7 @@ import { getBackend, notifyAuthStateMayHaveChanged } from './src/lib/backend';
 import { getMediaDownload } from './src/lib/media';
 import { disconnectRealtimeSocket, emitAck, getAuthenticatedUserId, getRealtimeSocket } from './src/lib/realtime';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brandGradient, elevation, immersive, layout, radius, spacing, type Palette, type TypeTokens } from './src/theme/tokens';
+import { brandGradient, elevation, immersive, layout, onNavy, radius, spacing, type Palette, type TypeTokens } from './src/theme/tokens';
 import { Equalizer, NowPlayingSheet, PresenceBadge, ScreenHeader, SectionLabel, Segmented, useAndroidBack, useReducedMotion } from './src/theme/components';
 import { useTheme, type ThemeMode, type ThemeSkin } from './src/theme/ThemeProvider';
 import { AvatarGlyph, decodeAvatarConfig } from './src/theme/avatarPresets';
@@ -1086,7 +1086,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   navRailIcon: { fontSize: 20, opacity: 0.72 },
   navRailIconSecondary: { fontSize: 16, opacity: 0.66 },
   navRailIconActive: { opacity: 1 },
-  navRailLabel: { color: palette.inkOnAzure, opacity: 0.58, fontSize: 9.5, fontWeight: '700' },
+  navRailLabel: { color: onNavy, opacity: 0.58, fontSize: 9.5, fontWeight: '700' },
   navRailLabelActive: { opacity: 1, fontWeight: '900' },
   navRailBadge: {
     position: 'absolute', top: 4, right: 8, minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9,
@@ -1095,7 +1095,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   navRailBadgeText: { color: palette.white, fontSize: 9.5, fontWeight: '900' },
   navRailDivider: { width: 36, height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginTop: spacing.md, marginBottom: spacing.sm },
   navRailDividerActive: { backgroundColor: palette.brass },
-  navRailSection: { color: palette.inkOnAzure, opacity: 0.42, fontSize: 7.5, fontWeight: '900', letterSpacing: 1.2, marginBottom: 2 },
+  navRailSection: { color: onNavy, opacity: 0.42, fontSize: 7.5, fontWeight: '900', letterSpacing: 1.2, marginBottom: 2 },
   navRailSectionActive: { opacity: 0.85, color: palette.brass },
   navRailLive: { marginBottom: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: palette.danger },
   navRailLiveText: { color: palette.white, fontWeight: '900', fontSize: 10.5 },

@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io-client';
 import { emitAck } from './realtime';
 import { readMessageText } from './chatTransport';
 import { ENCRYPTED_ALGO, decryptDirectMessage, fetchPeerPublicKey, loadExistingSecretKey } from './e2ee';
+import { GROUP_ENCRYPTED_ALGO, decryptGroupMessage, ensureGroupKey } from './groupE2ee';
 
 /**
  * Last-message previews for the conversation list.
@@ -90,6 +91,41 @@ export function loadDirectPreview(client: Socket, userId: string, conversationId
       const opened = mySecretKey && peerKey ? decryptDirectMessage(last.ciphertext ?? '', mySecretKey, peerKey) : null;
       if (!opened) peerKeys.delete(peerId); // peer may have rotated keys — refetch next time
       setPreview(conversationId, last.id, opened ? summarizePayload(opened) : '🔒 Message chiffré');
+    } catch {
+      // Preview is cosmetic — the row falls back to a neutral label.
+    } finally {
+      inFlight.delete(key);
+    }
+  })();
+  inFlight.set(key, job);
+  return job;
+}
+
+/**
+ * Fetch + decrypt the newest message of a group conversation, once per
+ * message id. Uses the same group-key wrapping (`ensureGroupKey`) the open
+ * chat screen relies on — a member opening the Chats hub is already a real
+ * member, so lazily creating/wrapping the group key here (if missing) is
+ * safe and matches `GroupEncryptedChat.tsx`'s own behaviour, unlike the
+ * direct-preview case above which must never touch identity-key publishing.
+ */
+export function loadGroupPreview(client: Socket, userId: string, conversationId: string, memberIds: string[], messageId: string): Promise<void> {
+  const existing = cache.get(conversationId);
+  if (existing && existing.messageId === messageId) return Promise.resolve();
+  const key = `${conversationId}:${messageId}`;
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+
+  const job = (async () => {
+    try {
+      const response = await emitAck<{ ok: boolean; messages?: HistoryMessage[] }>(client, 'conversation:history', { conversationId, limit: 1 });
+      const last = response.ok ? response.messages?.[response.messages.length - 1] : undefined;
+      if (!last) return;
+      if (last.deletedAt) { setPreview(conversationId, last.id, 'Message supprimé'); return; }
+      if (last.algorithm !== GROUP_ENCRYPTED_ALGO) { setPreview(conversationId, last.id, summarizePayload(readMessageText(last))); return; }
+      const groupKey = await ensureGroupKey(conversationId, userId, memberIds);
+      const opened = groupKey ? decryptGroupMessage(last.ciphertext ?? '', groupKey) : null;
+      setPreview(conversationId, last.id, opened ? summarizePayload(opened) : '🔒 Message de groupe chiffré');
     } catch {
       // Preview is cosmetic — the row falls back to a neutral label.
     } finally {

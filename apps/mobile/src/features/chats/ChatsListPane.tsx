@@ -5,7 +5,7 @@ import type { Contact, Presence } from '../contacts/MsnContactsScreen';
 import { ContactAvatar } from '../contacts/MsnContactsScreen';
 import { clearContactAttention, useAttentionTick, useContactAttention } from '../attention/contactAttention';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, isRealtimeConfigured } from '../../lib/realtime';
-import { getPreview, loadDirectPreview, usePreviewTick } from '../../lib/lastMessagePreview';
+import { getPreview, loadDirectPreview, loadGroupPreview, usePreviewTick } from '../../lib/lastMessagePreview';
 import { formatListStamp } from '../../lib/timeFormat';
 import { presenceColorFor, presenceLabel, radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -130,6 +130,14 @@ export function ChatsListPane({
         const peer = conversation.members.find((member) => member.userId !== currentUserId);
         if (peer && conversation.lastMessage) void loadDirectPreview(client, currentUserId, conversation.id, peer.userId, conversation.lastMessage.id);
       });
+    conversations
+      .filter((conversation) => conversation.kind === 'group' && conversation.lastMessage)
+      .slice(0, PREVIEW_PREFETCH)
+      .forEach((conversation) => {
+        if (!conversation.lastMessage) return;
+        const memberIds = conversation.members.map((member) => member.userId);
+        void loadGroupPreview(client, currentUserId, conversation.id, memberIds, conversation.lastMessage.id);
+      });
   }, [conversations, currentUserId]);
 
   const visible = useMemo(() => {
@@ -216,6 +224,7 @@ export function ChatsListPane({
               <GroupRow
                 key={conversation.id}
                 conversation={conversation}
+                currentUserId={currentUserId}
                 selected={selection?.kind === 'group' && selection.groupId === conversation.id}
                 onPress={() => onOpenGroup(conversation.id)}
               />
@@ -289,10 +298,20 @@ function DirectRow({ conversation, currentUserId, selected, onPress }: { convers
   );
 }
 
-function GroupRow({ conversation, selected, onPress }: { conversation: ConversationSummary; selected: boolean; onPress: () => void }) {
+function GroupRow({ conversation, currentUserId, selected, onPress }: { conversation: ConversationSummary; currentUserId: string; selected: boolean; onPress: () => void }) {
   const { styles } = useThemedStyles();
   const title = conversation.title || 'Groupe K-ssenger';
   const online = conversation.members.filter((member) => member.presence === 'online').length;
+  const preview = conversation.lastMessage ? getPreview(conversation.id) : undefined;
+  const mine = conversation.lastMessage?.senderUserId === currentUserId;
+  const sender = conversation.lastMessage && !mine
+    ? conversation.members.find((member) => member.userId === conversation.lastMessage?.senderUserId)
+    : undefined;
+  const previewText = !conversation.lastMessage
+    ? 'Aucun message pour l’instant'
+    : preview && preview.messageId === conversation.lastMessage.id
+      ? preview.text
+      : '🔒 Message de groupe chiffré';
   return (
     <RowShell selected={selected} onPress={onPress} label={`Groupe ${title}`} testID={`chat-row-${conversation.id}`}>
       <View style={styles.groupAvatar}><Text style={styles.groupAvatarText}>{title.slice(0, 2).toUpperCase()}</Text></View>
@@ -301,7 +320,11 @@ function GroupRow({ conversation, selected, onPress }: { conversation: Conversat
           <Text style={styles.name} numberOfLines={1}>{title}</Text>
           <Text style={styles.stamp}>{formatListStamp(conversation.lastMessage?.createdAt || conversation.createdAt)}</Text>
         </View>
-        <Text style={styles.preview} numberOfLines={1}>{conversation.lastMessage ? '🔒 Message de groupe chiffré' : 'Aucun message pour l’instant'}</Text>
+        <Text style={styles.preview} numberOfLines={1}>
+          {mine && <Text style={styles.previewYou}>Toi : </Text>}
+          {sender && <Text style={styles.previewYou}>{(sender.nickname || sender.displayName).split(' ')[0]} : </Text>}
+          {previewText}
+        </Text>
         <Text style={styles.presenceMuted} numberOfLines={1}>{conversation.members.length} membres{online ? ` · ${online} en ligne` : ''}</Text>
       </View>
     </RowShell>

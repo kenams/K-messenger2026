@@ -17,7 +17,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brandGradient, elevation, radius, spacing, thirdPartyBrand, type Palette, type TypeTokens } from './tokens';
+import { brandGradient, elevation, onNavy, radius, spacing, thirdPartyBrand, type Palette, type TypeTokens } from './tokens';
 import { useTheme } from './ThemeProvider';
 import {
   fetchSpotifyPlaybackStatus,
@@ -705,7 +705,10 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   headerBackText: { fontSize: 26, lineHeight: 26, color: palette.brass, fontWeight: '900', marginTop: -2 },
   headerText: { flex: 1 },
   headerBrand: { ...typo.brand, fontSize: 9.5, letterSpacing: 2.4, color: palette.brass },
-  headerTitle: { ...typo.title, fontSize: 20, marginTop: 2, color: palette.inkOnAzure },
+  // Header bar sits on `palette.navy`, theme-invariant across skins — never
+  // `palette.inkOnAzure` (that token is for text on the skin's azure accent
+  // colour, and anthracite's dark override of it went invisible here).
+  headerTitle: { ...typo.title, fontSize: 20, marginTop: 2, color: onNavy },
   headerSubtitle: { ...typo.meta, marginTop: 2, color: 'rgba(255,248,236,0.62)' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 

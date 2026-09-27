@@ -160,6 +160,17 @@ export const darkPalette: Palette = {
   pulseSoft: 'rgba(210,138,104,0.16)',
 };
 
+/**
+ * Text colour for the desktop nav rail, which always sits on `navy` (itself
+ * theme-invariant, see above) — never derive this from `colors.inkOnAzure`.
+ * That token means "ink for text on an *azure-accent-coloured* surface" and
+ * some skins (anthracite) legitimately make it dark to stay legible against
+ * their own bright cyan azure accent; used on the unrelated navy rail
+ * instead, that dark value went invisible on navy. Cream/white in every
+ * skin because the navy rail is dark in every skin, by design.
+ */
+export const onNavy = '#FFF8EC';
+
 /** Reserved brand gradient — logo mark and the primary CTA only. Never decoration. */
 export const brandGradient = ['#C9A24E', '#A67C3D', '#7F5D28'] as const;
 
