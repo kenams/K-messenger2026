@@ -58,11 +58,12 @@ import { deleteMessage, listEncryptedMessages, persistEncryptedMessage, setMessa
 import {
   bootstrapTestBot,
   buildBotReplyEnvelope,
-  decryptFromKenams,
+  decryptFromUser,
+  ensureBotContact,
   getBotDeviceId,
   getBotState,
-  isBotConversationFromKenams,
   isBotUser,
+  isDirectConversationWithBot,
   randomReplyDelayMs,
 } from './botStore.js';
 import { randomUUID } from 'node:crypto';
@@ -226,31 +227,31 @@ const presenceRuntime = new PresenceRuntime();
 void bootstrapTestBot();
 
 /**
- * K-Bot auto-reply: only ever fires for the exact (Kenams -> K-Bot) direct
- * conversation direction — see botStore.ts for the full scoping/security
- * rationale. Fire-and-forget from the caller so the human sender's own
- * message:send ack is never delayed by the bot's artificial "typing" pause.
+ * K-Bot auto-reply (help assistant): answers any user who writes to K-Bot in
+ * their 2-member direct conversation. Fire-and-forget from the caller so the
+ * human sender's own message:send ack is never delayed by the artificial
+ * "typing" pause. See botStore.ts / helpBot.ts for scope and honesty notes.
  */
 async function maybeAutoReplyAsBot(conversationId: string, senderUserId: string, ciphertext: string) {
   const bot = getBotState();
   if (!bot) return;
-  if (!(await isBotConversationFromKenams(conversationId, senderUserId))) return;
+  if (!(await isDirectConversationWithBot(conversationId, senderUserId))) return;
 
   const { rows } = await query<{ e2e_public_key: string | null }>(
     `select e2e_public_key from public.profiles where id = $1 limit 1`,
     [senderUserId],
   );
-  const kenamsPublicKey = rows[0]?.e2e_public_key;
-  if (!kenamsPublicKey) return;
+  const senderPublicKey = rows[0]?.e2e_public_key;
+  if (!senderPublicKey) return;
 
-  const plaintext = decryptFromKenams(ciphertext, kenamsPublicKey);
+  const plaintext = decryptFromUser(ciphertext, senderPublicKey);
   if (plaintext === null) return;
 
   await new Promise((resolve) => setTimeout(resolve, randomReplyDelayMs()));
 
-  const replyCrypto = await buildBotReplyEnvelope(plaintext);
+  const replyCrypto = await buildBotReplyEnvelope(plaintext, senderPublicKey);
   const deviceId = getBotDeviceId();
-  if (!replyCrypto || !deviceId) return;
+  if (!deviceId) return;
 
   const envelope = {
     clientMessageId: randomUUID(),
@@ -338,6 +339,7 @@ io.use(async (socket, next) => {
 
 io.on('connection', (socket) => {
   const userId = socket.data.userId as string;
+  void ensureBotContact(userId);
   socket.join(`user:${userId}`);
   const { firstSocket } = presenceRuntime.connect(userId, socket.id);
   logger.info('socket_connected', { userId, socketId: socket.id, firstSocket });

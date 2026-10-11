@@ -1,6 +1,11 @@
 /**
- * K-Bot: a personal test contact, visible and usable by Kenams's own account
- * only — never a contact suggested to, or added for, any other user.
+ * K-Bot: the in-app help assistant. Every account gets it as a contact and can
+ * ask it how the app works (Last.fm/Spotify, groups, privacy...). Answers come
+ * from a hand-written FAQ (helpBot.ts) — see the honesty note below.
+ *
+ * Privacy exception to be aware of: messages sent TO K-Bot are readable by the
+ * server (it holds the bot's secret key to decrypt and answer). The bot says
+ * so in its menu and privacy answer. Human-to-human chats are unaffected.
  *
  * Why this needs a server-side private key (the one exception in this app):
  * every real account's NaCl secret key lives only on-device (see
@@ -26,6 +31,7 @@ import nacl from 'tweetnacl';
 import naclUtil from 'tweetnacl-util';
 import { query } from './db.js';
 import { logger } from './logger.js';
+import { craftHelpReply } from './helpBot.js';
 
 export const BOT_USERNAME = 'k.bot';
 export const BOT_DISPLAY_NAME = 'K-Bot 🤖';
@@ -78,16 +84,13 @@ export async function bootstrapTestBot(): Promise<void> {
       `select id from neon_auth."user" where email = $1 limit 1`,
       [kenamsEmail],
     );
-    const kenamsUserId = kenamsRows[0]?.id;
-    if (!kenamsUserId) {
-      logger.warn('test_bot_bootstrap_failed', { reason: 'owner account not found', kenamsEmail });
-      return;
-    }
+    // Only used for the K-Pulse echo; the help bot works without it.
+    const kenamsUserId = kenamsRows[0]?.id ?? '';
 
     await query(
       `insert into public.profiles (id, username, display_name, nickname, bio, presence)
-       values ($1, $2, $3, $3, 'Contact de test — répond automatiquement, uniquement à toi.', 'online')
-       on conflict (id) do update set display_name = excluded.display_name, presence = 'online'`,
+       values ($1, $2, $3, $3, 'Assistant K-ssenger : pose-moi tes questions (Last.fm, groupes, confidentialité…). Tape « menu ».', 'online')
+       on conflict (id) do update set display_name = excluded.display_name, bio = excluded.bio, presence = 'online'`,
       [botUserId, BOT_USERNAME, BOT_DISPLAY_NAME],
     );
     await query(
@@ -118,12 +121,19 @@ export async function bootstrapTestBot(): Promise<void> {
 
     await query(`update public.profiles set e2e_public_key = $2 where id = $1`, [botUserId, publicKey]);
 
-    // Mutual contact — this exact pair only. Never touched for any other user.
+    // Everyone gets the help bot as a mutual contact (existing accounts here,
+    // new ones through ensureBotContact() on their first socket connection).
     await query(
       `insert into public.contacts (owner_id, contact_id, list_name)
-       values ($1, $2, 'Amis'), ($2, $1, 'Amis')
+       select u.id, $1::uuid, 'Amis' from neon_auth."user" u where u.id <> $1::uuid
        on conflict do nothing`,
-      [botUserId, kenamsUserId],
+      [botUserId],
+    );
+    await query(
+      `insert into public.contacts (owner_id, contact_id, list_name)
+       select $1::uuid, u.id, 'Amis' from neon_auth."user" u where u.id <> $1::uuid
+       on conflict do nothing`,
+      [botUserId],
     );
 
     const { rows: deviceRows } = await query<{ id: string }>(
@@ -151,44 +161,48 @@ export function getBotState(): BotState | null {
   return state;
 }
 
-/** True only for the exact (Kenams -> bot) direction this bot is scoped to. */
-export function isMessageToBot(senderUserId: string, recipientMemberIds: string[]): boolean {
-  if (!state) return false;
-  return senderUserId === state.kenamsUserId && recipientMemberIds.includes(state.userId);
+const botContactEnsured = new Set<string>();
+
+/** Idempotent: makes K-Bot a mutual contact of this user (cached per process). */
+export async function ensureBotContact(userId: string): Promise<void> {
+  if (!state || userId === state.userId || botContactEnsured.has(userId)) return;
+  botContactEnsured.add(userId);
+  try {
+    await query(
+      `insert into public.contacts (owner_id, contact_id, list_name)
+       values ($1, $2, 'Amis'), ($2, $1, 'Amis')
+       on conflict do nothing`,
+      [state.userId, userId],
+    );
+  } catch (error) {
+    botContactEnsured.delete(userId);
+    logger.warn('bot_contact_ensure_failed', { error: error instanceof Error ? error.message : 'unknown' });
+  }
 }
 
-/** Whether this conversation is Kenams <-> K-Bot's direct chat and this send came from Kenams. */
-export async function isBotConversationFromKenams(conversationId: string, senderUserId: string): Promise<boolean> {
-  if (!state || senderUserId !== state.kenamsUserId) return false;
+/** True when this is the 2-member direct chat between the sender and K-Bot. */
+export async function isDirectConversationWithBot(conversationId: string, senderUserId: string): Promise<boolean> {
+  if (!state || senderUserId === state.userId) return false;
   const { rows } = await query<{ user_id: string }>(
     `select user_id from public.conversation_members where conversation_id = $1`,
     [conversationId],
   );
   const memberIds = rows.map((row) => row.user_id);
-  return memberIds.length === 2 && memberIds.includes(state.userId) && memberIds.includes(state.kenamsUserId);
+  return memberIds.length === 2 && memberIds.includes(state.userId) && memberIds.includes(senderUserId);
 }
 
 export function isBotUser(userId: string): boolean {
   return state?.userId === userId;
 }
 
-async function fetchKenamsPublicKey(): Promise<string | null> {
-  if (!state) return null;
-  const { rows } = await query<{ e2e_public_key: string | null }>(
-    `select e2e_public_key from public.profiles where id = $1 limit 1`,
-    [state.kenamsUserId],
-  );
-  return rows[0]?.e2e_public_key ?? null;
-}
-
-export function decryptFromKenams(ciphertextJson: string, kenamsPublicKeyB64: string): string | null {
+export function decryptFromUser(ciphertextJson: string, senderPublicKeyB64: string): string | null {
   if (!state) return null;
   try {
     const { c, n } = JSON.parse(ciphertextJson) as { c: string; n: string };
     const opened = nacl.box.open(
       naclUtil.decodeBase64(c),
       naclUtil.decodeBase64(n),
-      naclUtil.decodeBase64(kenamsPublicKeyB64),
+      naclUtil.decodeBase64(senderPublicKeyB64),
       naclUtil.decodeBase64(state.secretKey),
     );
     if (!opened) return null;
@@ -198,13 +212,13 @@ export function decryptFromKenams(ciphertextJson: string, kenamsPublicKeyB64: st
   }
 }
 
-export function encryptToKenams(plaintext: string, kenamsPublicKeyB64: string): { algorithm: string; ciphertext: string } {
+export function encryptToUser(plaintext: string, recipientPublicKeyB64: string): { algorithm: string; ciphertext: string } {
   if (!state) throw new Error('BOT_NOT_READY');
   const nonce = nacl.randomBytes(nacl.box.nonceLength);
   const sealed = nacl.box(
     naclUtil.decodeUTF8(plaintext),
     nonce,
-    naclUtil.decodeBase64(kenamsPublicKeyB64),
+    naclUtil.decodeBase64(recipientPublicKeyB64),
     naclUtil.decodeBase64(state.secretKey),
   );
   return {
@@ -240,125 +254,25 @@ function serializeText(text: string): string {
   return JSON.stringify({ v: 1, type: 'text', text });
 }
 
-// ---- Scripted "feels attentive" reply engine (no paid AI, no real NLU) ----
-
-const KEYWORD_BANKS: { keywords: RegExp; lines: string[] }[] = [
-  {
-    keywords: /\b(taf|travail|boulot|projet|code|deploy|bug|client)\b/i,
-    lines: [
-      "Ah, ça sent le taf ! Ça avance comment de ton côté ?",
-      "Toujours à fond sur tes projets à ce que je vois. C'est quoi le morceau le plus chiant en ce moment ?",
-      "Un projet de plus sur la pile 😄 t'en es où concrètement ?",
-      "Ça bosse dur ! Qu'est-ce qui te prend le plus de temps là-dessus ?",
-    ],
-  },
-  {
-    keywords: /\b(fatigu|dodo|dormi|nuit|épuisé|crevé)\b/i,
-    lines: [
-      "Repose-toi un peu, sérieux. T'as dormi combien d'heures cette nuit ?",
-      "Ça se sent que t'es fatigué là. Journée chargée ?",
-      "Prends 5 minutes pour souffler, on n'est pas à ça près 😉",
-    ],
-  },
-  {
-    keywords: /\b(content|heureux|cool|nickel|génial|super|top)\b/i,
-    lines: [
-      "Ça fait plaisir de te lire comme ça ! Qu'est-ce qui t'a mis de bonne humeur ?",
-      "J'aime bien ce ton-là 😄 raconte-moi.",
-      "Content pour toi ! C'est quoi le déclic ?",
-    ],
-  },
-  {
-    keywords: /\b(énervé|colère|marre|chiant|galère|problème|souci)\b/i,
-    lines: [
-      "Ah ça, ça n'a pas l'air simple. Qu'est-ce qui s'est passé exactement ?",
-      "Je sens que ça t'agace. Raconte, qu'est-ce qui coince ?",
-      "Pas cool ça. T'as déjà une piste pour régler le souci ?",
-    ],
-  },
-  {
-    keywords: /\?\s*$/,
-    lines: [
-      "Bonne question ! Franchement je botte en touche, je suis juste un bot de test 😄 mais toi, t'en penses quoi ?",
-      "Haha, je suis pas assez futé pour ça — je suis un simple bot scripté. Mais dis-m'en plus, ça m'intéresse.",
-    ],
-  },
-];
-
-const FALLBACK_LINES = [
-  "Reçu 👍 Raconte-moi en plus, qu'est-ce qui t'a fait dire ça ?",
-  "Ok je vois. Et ça avance comment de ton côté en ce moment ?",
-  "Intéressant ! Tu peux développer un peu ?",
-  "Je note 📝 Et à part ça, quoi de neuf ?",
-  "Ha, dis m'en plus !",
-  "Je t'écoute, continue.",
-  "Ça me parle. Qu'est-ce qui t'amène à penser ça ?",
-  "D'accord, et sinon comment se passe ta journée ?",
-];
-
-const FOLLOWUPS = [
-  "Ça avance comment de ton côté ?",
-  "Qu'est-ce qui t'a fait dire ça ?",
-  "Raconte-moi en plus.",
-  "Et sinon, quoi de neuf ?",
-  "Tu en penses quoi, toi ?",
-  "Ça te fait quoi, tout ça ?",
-];
-
-// Short-term memory — last few turns, so the bot doesn't repeat the same
-// follow-up back to back or reply out of nowhere. Kept in-memory only
-// (not persisted): a restart just means the bot "forgets" mid-conversation,
-// same honesty limit as everything else about this being a script, not a mind.
-const recentReplies: string[] = [];
-const recentFollowups: string[] = [];
-
-function pick<T>(items: T[], exclude: T[] = []): T {
-  const pool = items.filter((item) => !exclude.includes(item));
-  const from = pool.length > 0 ? pool : items;
-  return from[Math.floor(Math.random() * from.length)];
-}
-
-function remember(list: string[], value: string, max = 3) {
-  list.push(value);
-  while (list.length > max) list.shift();
-}
-
-function craftTextReply(incoming: string): string {
-  const bank = KEYWORD_BANKS.find((entry) => entry.keywords.test(incoming));
-  const base = bank ? pick(bank.lines, recentReplies) : pick(FALLBACK_LINES, recentReplies);
-  remember(recentReplies, base);
-
-  // Avoid a double question mark when the picked line is already a question.
-  if (/\?\s*$/.test(base)) return base;
-
-  const followup = pick(FOLLOWUPS, recentFollowups);
-  remember(recentFollowups, followup);
-  return `${base} ${followup}`;
-}
+// ---- Help replies (hand-written FAQ, see helpBot.ts) ----
 
 /** Builds the plaintext reply to persist/encrypt for a decrypted incoming message. */
 export function craftReply(decryptedPlaintext: string): string {
   const content = parseChatContent(decryptedPlaintext);
   if (content.type === 'voice') {
-    return serializeText(pick([
-      "Message vocal bien reçu 🎧 (je ne peux pas encore répondre en vocal, je suis juste un bot scripté — mais je t'écoute en texte).",
-      "J'ai bien reçu ton vocal ! Je ne sais pas encore répondre en audio, mais raconte-moi la même chose à l'écrit si tu veux.",
-    ]));
+    return serializeText('Message vocal bien reçu 🎧 Je ne comprends que le texte : écris-moi ta question (ou tape « menu »).');
   }
   if (content.type === 'media') {
-    return serializeText(pick([
-      "Jolie image/vidéo, bien reçue 📎 Raconte-moi le contexte !",
-      "Media bien reçu 👍 c'est quoi l'histoire derrière ?",
-    ]));
+    return serializeText('Image bien reçue 📎 Je ne comprends que le texte : écris-moi ta question (ou tape « menu »).');
   }
-  return serializeText(craftTextReply(content.text));
+  return serializeText(craftHelpReply(content.text));
 }
 
-export async function buildBotReplyEnvelope(decryptedPlaintext: string): Promise<{ algorithm: string; ciphertext: string } | null> {
-  const kenamsPublicKey = await fetchKenamsPublicKey();
-  if (!kenamsPublicKey) return null;
-  const replyPlaintext = craftReply(decryptedPlaintext);
-  return encryptToKenams(replyPlaintext, kenamsPublicKey);
+export async function buildBotReplyEnvelope(
+  decryptedPlaintext: string,
+  recipientPublicKeyB64: string,
+): Promise<{ algorithm: string; ciphertext: string }> {
+  return encryptToUser(craftReply(decryptedPlaintext), recipientPublicKeyB64);
 }
 
 export function randomReplyDelayMs(): number {
