@@ -232,7 +232,7 @@ export async function listPublicGroups(category?: string): Promise<PublicGroupSu
   const { rows } = await query<{ id: string; title: string | null; category: string | null; member_count: string }>(
     `select c.id, c.title, c.category, count(cm.user_id) as member_count
        from public.conversations c
-       join public.conversation_members cm on cm.conversation_id = c.id
+       left join public.conversation_members cm on cm.conversation_id = c.id
       where c.kind = 'group'
         and c.is_public = true
         and ($1::text is null or c.category = $1)

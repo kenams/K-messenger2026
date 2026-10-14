@@ -130,7 +130,7 @@ export function DiscoverGroupsScreen({ onOpenGroup }: { onOpenGroup?: (groupId: 
         <Text style={styles.introSubtitle}>Rejoins un groupe public par centre d’intérêt — accès direct, pas d’invitation nécessaire.</Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chipsRow}>
         <TouchableOpacity
           testID="discover-category-all"
           accessibilityRole="button"
@@ -214,8 +214,10 @@ function createStyles(palette: Palette, typo: TypeTokens) {
     intro: { marginBottom: spacing.md },
     introTitle: { fontSize: 22, fontWeight: '900', color: palette.ink },
     introSubtitle: { marginTop: 4, fontSize: 13, color: palette.inkFaint, lineHeight: 18 },
-    chipsRow: { gap: spacing.sm, paddingVertical: spacing.sm, paddingRight: spacing.lg },
+    chipsScroll: { flexGrow: 0, flexShrink: 0 },
+    chipsRow: { gap: spacing.sm, paddingVertical: spacing.sm, paddingRight: spacing.lg, alignItems: 'flex-start' },
     chip: {
+      alignSelf: 'flex-start',
       paddingHorizontal: spacing.md,
       paddingVertical: 8,
       borderRadius: radius.pill,
