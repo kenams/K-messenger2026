@@ -31,6 +31,7 @@ import { VoiceMessageBubble } from './VoiceMessageBubble';
 import { VOICE_MIME, type VoiceRecordingResult } from '../../lib/voiceRecording';
 import { emitAck, getAuthenticatedUserId, getRealtimeSocket, waitForSocketReady } from '../../lib/realtime';
 import { onMessageReceivedFrom, onMessageSent } from '../../lib/soundKit';
+import { setActiveContact } from '../attention/contactAttention';
 import { setPreview, summarizePayload } from '../../lib/lastMessagePreview';
 import { formatClock, formatDayLabel } from '../../lib/timeFormat';
 import { useIsDesktopWeb } from '../../lib/useIsDesktopWeb';
@@ -267,6 +268,12 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
   const desktop = useIsDesktopWeb();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [currentUserId, setCurrentUserId] = useState('');
+
+  // While this conversation is open, its incoming messages are read live: no unread badge.
+  useEffect(() => {
+    setActiveContact(contact.id);
+    return () => setActiveContact(null);
+  }, [contact.id]);
   const [conversationId, setConversationId] = useState('');
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);

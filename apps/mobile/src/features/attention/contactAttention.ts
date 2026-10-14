@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 import type { Socket } from 'socket.io-client';
 
 export type ContactAttention = { unread: number; pulse: boolean; lastActivityAt?: number };
@@ -77,6 +78,18 @@ export function useAttentionTick(): number {
  * open it (that's not what "unread" means; it's what "no new activity since
  * someone else messaged" means).
  */
+let activeContactId: string | null = null;
+
+/**
+ * The contact whose direct conversation is currently open on screen. While it
+ * is open (and the app is in the foreground) their new messages are read live,
+ * so they must not raise an unread badge.
+ */
+export function setActiveContact(contactId: string | null) {
+  activeContactId = contactId;
+  if (contactId) clearContactAttention(contactId);
+}
+
 export function clearContactAttention(contactId: string) {
   const current = state.get(contactId);
   if (!current || (current.unread === 0 && !current.pulse)) return;
@@ -120,6 +133,7 @@ export function wireContactAttention(socket: Socket, myUserId: string, knownCont
   const onMessage = ({ senderUserId }: { senderUserId?: string }) => {
     if (!senderUserId || senderUserId === myUserId) return;
     if (!knownContactIds().has(senderUserId)) return;
+    if (senderUserId === activeContactId && AppState.currentState === 'active') return;
     const current = state.get(senderUserId) ?? { unread: 0, pulse: false };
     bump(senderUserId, { unread: current.unread + 1 });
   };

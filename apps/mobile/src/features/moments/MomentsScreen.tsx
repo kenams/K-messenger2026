@@ -213,13 +213,14 @@ export function MomentsScreen({ onPinnedChange, statusSlot }: { onPinnedChange?:
   return (
     <View style={styles.container}>
       <ScreenHeader title="Moments" subtitle={statusSlot ? 'Statuts 24 h de tes amis · tes Moments texte, photo ou vidéo' : 'Texte, photo ou vidéo · 24 h · média privé'} />
-      {statusSlot}
       <FlatList
         data={moments}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={colors.azure} />}
         ListHeaderComponent={
+          <View>
+          {statusSlot}
           <View style={styles.composer}>
             <Text style={styles.title}>Partager un moment</Text>
             <View style={styles.row}>
@@ -239,6 +240,7 @@ export function MomentsScreen({ onPinnedChange, statusSlot }: { onPinnedChange?:
               {publishing ? <ActivityIndicator color={colors.white} /> : <Text style={styles.publishText}>Publier le texte pour 24 h</Text>}
             </Pressable>
             {!!notice && <Text style={styles.notice}>{notice}</Text>}
+          </View>
           </View>
         }
         ListEmptyComponent={<EmptyState icon="✨" title="Aucun Moment visible" hint="Publie le premier moment : il disparaît au bout de 24 h." />}
