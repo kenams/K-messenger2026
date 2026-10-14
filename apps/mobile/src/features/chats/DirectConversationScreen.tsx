@@ -641,14 +641,19 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     }
   };
 
+  const pickingMediaRef = useRef(false);
   const pickAndSendMedia = async () => {
-    if (!canSend || !conversationId) return;
-    setSending(true);
+    if (!canSend || !conversationId || pickingMediaRef.current) return;
+    // Only lock the composer once a file has actually been chosen: locking it
+    // while the OS file dialog is open left the whole composer disabled (spinner,
+    // inactive "+") for as long as the dialog stayed open or hung.
+    pickingMediaRef.current = true;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) { setNotice('Autorise l’accès aux photos et vidéos pour envoyer un média.'); return; }
       const picked = await launchImageLibrarySafe({ mediaTypes: ['images', 'videos'], quality: 0.9, videoMaxDuration: 120 });
       if (picked.canceled) return;
+      setSending(true);
       const asset = picked.assets[0];
       const mimeType = asset ? inferChatMime(asset) : null;
       if (!asset?.uri || !mimeType || (asset.fileSize !== undefined && asset.fileSize > CHAT_MAX_BYTES)) throw new Error('CHAT_MEDIA_UNSUPPORTED');
@@ -659,7 +664,7 @@ export function DirectConversationScreen({ contact, onBack }: { contact: Contact
     } catch (err) {
       console.error('[media] pickAndSendMedia failed', err instanceof Error ? err.message : String(err));
       setNotice('Média non envoyé. Formats acceptés : JPG, PNG, WebP, MP4/MOV · 100 Mo max.');
-    } finally { setSending(false); }
+    } finally { pickingMediaRef.current = false; setSending(false); }
   };
 
   const sendVoiceNote = async (recording: VoiceRecordingResult) => {

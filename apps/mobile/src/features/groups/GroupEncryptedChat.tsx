@@ -417,9 +417,12 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
     }
   };
 
+  const pickingMediaRef = useRef(false);
   const pickAndSendMedia = async () => {
-    if (sending || !deviceReady) return;
-    setSending(true);
+    if (sending || !deviceReady || pickingMediaRef.current) return;
+    // Lock the composer only once a file is chosen, not while the OS file
+    // dialog is open (same fix as the direct-chat screen).
+    pickingMediaRef.current = true;
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
@@ -428,6 +431,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
       }
       const picked = await launchImageLibrarySafe({ mediaTypes: ['images', 'videos'], quality: 0.9, videoMaxDuration: 120 });
       if (picked.canceled) return;
+      setSending(true);
       const asset = picked.assets[0];
       if (!asset?.uri) throw new Error('GROUP_MEDIA_UNSUPPORTED');
       const mimeType = inferGroupMime(asset);
@@ -452,6 +456,7 @@ export function GroupEncryptedChat({ socket, groupId, currentUserId, messages, g
       console.error('[media] group pickAndSendMedia failed', err instanceof Error ? err.message : String(err));
       setNotice('Média non envoyé. Formats acceptés : JPG, PNG, WebP, MP4/MOV · 100 Mo max.');
     } finally {
+      pickingMediaRef.current = false;
       setSending(false);
     }
   };
