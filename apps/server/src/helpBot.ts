@@ -7,7 +7,7 @@
  * so and points to the support address instead of guessing.
  */
 
-export const SUPPORT_EMAIL = 'contact@kah-digital.ch';
+export const SUPPORT_EMAIL = 'kahdigital42@gmail.com';
 export const WEB_URL = 'https://k-ssenger.expo.app';
 export const APK_URL = 'https://k-ssenger.expo.app/kssenger-latest.apk';
 
