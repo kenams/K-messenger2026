@@ -162,8 +162,11 @@ export function AuthScreen() {
         let resolvedEmail: string;
         try {
           resolvedEmail = await resolveEmailForUsernameLogin(normalizedUsername, password);
-        } catch {
-          setError('Connexion impossible. Vérifie ton pseudo et ton mot de passe.');
+        } catch (loginError) {
+          const unreachable = loginError instanceof Error && loginError.message === 'SERVER_UNREACHABLE';
+          setError(unreachable
+            ? 'Le serveur K-ssenger met un moment à répondre. Réessaie dans quelques secondes.'
+            : 'Connexion impossible. Vérifie ton pseudo et ton mot de passe.');
           return;
         }
         const { data, error: authError } = await backend.auth.signInWithPassword({ email: resolvedEmail, password });

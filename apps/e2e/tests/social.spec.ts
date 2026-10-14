@@ -14,7 +14,7 @@ test.describe('Moments', () => {
 
     // V2 — react to my own Moment, the count shows, then toggle it back off
     await page.getByRole('button', { name: 'Réagir ❤️' }).first().click();
-    await expect(page.getByRole('button', { name: 'Réagir ❤️' }).first()).toContainText('1');
+    await expect(page.getByRole('button', { name: 'Réagir ❤️' }).first()).toContainText('1', { timeout: 25_000 });
     await page.getByRole('button', { name: 'Réagir ❤️' }).first().click();
 
     // V2 — pin then unpin (assert the durable state change, not just the toast)

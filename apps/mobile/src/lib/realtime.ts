@@ -16,16 +16,33 @@ export const isRealtimeConfigured = socketUrl.startsWith('https://') || socketUr
  */
 export async function resolveEmailForUsernameLogin(username: string, password: string): Promise<string> {
   if (!isRealtimeConfigured) throw new Error('KSSENGER_SERVER_NOT_CONFIGURED');
-  let response: Response;
-  try {
-    response = await fetch(`${socketUrl}/auth/login-with-username`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-  } catch {
-    throw new Error('INVALID_CREDENTIALS');
+
+  // The server runs on a plan that sleeps when idle: the first request after a
+  // quiet period can take up to ~60 s to be answered, or fail outright with a
+  // network error / 502-504 while it wakes. Those are NOT wrong credentials —
+  // retry them, and only report INVALID_CREDENTIALS for a real 4xx answer.
+  const attempts = 3;
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 30_000) : null;
+    try {
+      response = await fetch(`${socketUrl}/auth/login-with-username`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (timer) clearTimeout(timer);
+      if (response.status < 500) break;
+      response = null;
+    } catch {
+      if (timer) clearTimeout(timer);
+      response = null;
+    }
+    if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 2_000 * (attempt + 1)));
   }
+  if (!response) throw new Error('SERVER_UNREACHABLE');
   if (!response.ok) throw new Error('INVALID_CREDENTIALS');
   const body = (await response.json().catch(() => null)) as { ok?: boolean; email?: string } | null;
   if (!body?.ok || typeof body.email !== 'string' || !body.email) throw new Error('INVALID_CREDENTIALS');
