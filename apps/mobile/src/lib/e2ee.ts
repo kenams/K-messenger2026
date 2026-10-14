@@ -133,6 +133,7 @@ export async function ensureIdentityKeyPair(userId: string): Promise<{ publicKey
     try {
       ensurePRNG();
       let secretKeyB64 = await readSecretKey(userId);
+      const hadLocalSecret = Boolean(secretKeyB64);
       let publicKeyB64: string;
       if (secretKeyB64) {
         const secretKey = naclUtil.decodeBase64(secretKeyB64);
@@ -142,6 +143,23 @@ export async function ensureIdentityKeyPair(userId: string): Promise<{ publicKey
         secretKeyB64 = naclUtil.encodeBase64(kp.secretKey);
         publicKeyB64 = naclUtil.encodeBase64(kp.publicKey);
         await writeSecretKey(userId, secretKeyB64);
+      }
+
+      // Never overwrite a key another device already published: two devices
+      // used to re-upload their own public key on every launch, so the
+      // account's key flip-flopped and each device's history turned
+      // unreadable on the other. A device that holds a local secret whose
+      // public key is not the published one is a superseded device — it
+      // stays on the TLS transport instead of fighting over the key.
+      if (hadLocalSecret) {
+        const published = await getBackend().from('profiles').select('e2e_public_key').eq('id', userId).maybeSingle();
+        if (published.error) return null;
+        const current = (published.data as { e2e_public_key?: string | null } | null)?.e2e_public_key;
+        if (current && current.length > 0) {
+          if (current !== publicKeyB64) return null;
+          cachedKeyPair = { userId, publicKey: publicKeyB64, secretKey: secretKeyB64 };
+          return { publicKey: publicKeyB64, secretKey: secretKeyB64 };
+        }
       }
 
       const { error } = await getBackend().from('profiles').update({ e2e_public_key: publicKeyB64 }).eq('id', userId);

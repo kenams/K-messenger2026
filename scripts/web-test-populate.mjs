@@ -43,7 +43,7 @@ const BOTS = [
   { key: 'tom', email: 'kenams42+kss-tom@gmail.com', username: 'tom_b', displayName: 'Tom Bernard', status: '🌴 en congé, revient bientôt', presence: 'invisible', music: { title: 'Island in the Sun', artist: 'Weezer' } },
 ];
 
-const KENAMS = { key: 'kenams', email: KENAMS_EMAIL, username: 'kenams', displayName: 'Kenams', status: 'Je teste K-ssenger 👀', presence: 'online', music: { title: 'Simple comme MSN', artist: 'KAH' } };
+const KENAMS = { key: 'kenams', email: KENAMS_EMAIL, username: process.env.KENAMS_USERNAME || 'kenams', displayName: 'Kenams', status: 'Je teste K-ssenger 👀', presence: 'online', music: { title: 'Simple comme MSN', artist: 'KAH' } };
 
 function makeAuthClient() {
   return createClient({ auth: { adapter: SupabaseAuthAdapter(), url: AUTH_URL }, dataApi: { url: DATA_API_URL } });
@@ -70,13 +70,27 @@ function connectSocket(person) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Neon Auth now requires the e-mail code at sign-up. Two-pass seeding:
+//   pass 1 (SIGNUP_ONLY=1)  → sign up, a code is mailed to every address;
+//   pass 2 (KSS_CODES='{"email":"123456"}') → verify, then populate as usual.
+const ONLY = process.env.ONLY ? new Set(process.env.ONLY.split(',').map((x) => x.trim())) : null;
+const KSS_CODES = process.env.KSS_CODES ? JSON.parse(process.env.KSS_CODES) : {};
+
 async function ensureAccount(spec, password) {
   globalThis.__resetKssengerSmokeCookies?.();
   const auth = makeAuthClient();
   let session = null;
 
+  if (KSS_CODES[spec.email]) {
+    const v = await auth.auth.verifyOtp({ email: spec.email, token: KSS_CODES[spec.email], type: 'signup' });
+    if (v.error) console.log(`  ~ ${spec.key} verifyOtp: ${v.error.message}`);
+    const si = await auth.auth.signInWithPassword({ email: spec.email, password });
+    if (si.error) throw new Error(`${spec.key} signin after verify: ${si.error.message}`);
+    session = si.data?.session ?? null;
+  }
+
   let signup;
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 5 && !session; attempt++) {
     signup = await auth.auth.signUp({
       email: spec.email,
       password,
@@ -87,7 +101,12 @@ async function ensureAccount(spec, password) {
     console.log(`  … ${spec.key} rate-limited, pause ${wait / 1000}s`);
     await new Promise((r) => setTimeout(r, wait));
   }
-  if (signup.error) {
+  if (session) {
+    // already verified above
+  } else if (process.env.SIGNUP_ONLY === '1' && (!signup.error || /session|verif/i.test(signup.error.message)) && !signup.data?.session) {
+    console.log(`  ↦ ${spec.key} ${spec.email} : code envoyé (SIGNUP_ONLY)`);
+    return null;
+  } else if (signup.error) {
     const signin = await auth.auth.signInWithPassword({ email: spec.email, password });
     if (signin.error) throw new Error(`${spec.key}: signup(${signup.error.message}) + signin(${signin.error.message}) failed`);
     session = signin.data?.session ?? null;
@@ -165,8 +184,14 @@ async function main() {
   console.log('K-ssenger — populate test web\n');
   console.log('Comptes :');
   const bots = [];
-  for (const spec of BOTS) { bots.push(await ensureAccount(spec, BOT_PASSWORD)); await sleep(2500); }
+  for (const spec of BOTS) {
+    if (ONLY && !ONLY.has(spec.key)) continue;
+    const acc = await ensureAccount(spec, BOT_PASSWORD);
+    if (acc) bots.push(acc);
+    await sleep(2500);
+  }
   const kenams = await ensureAccount(KENAMS, KENAMS_PASSWORD);
+  if (process.env.SIGNUP_ONLY === '1') { console.log('SIGNUP_ONLY terminé.'); process.exit(0); }
   const everyone = [...bots, kenams];
 
   console.log('\nSockets temps réel :');
@@ -197,7 +222,7 @@ async function main() {
     const list = await ack(sockets[owner.key], 'conversations:list').catch(() => ({}));
     const existing = (list?.conversations ?? []).find((c) => c.kind === 'group' && c.title === title);
     if (existing) { console.log(`  = "${title}" déjà présent`); return; }
-    const memberIds = memberKeys.map((k) => (k === 'kenams' ? kenams.userId : bots.find((b) => b.key === k).userId));
+    const memberIds = memberKeys.map((k) => (k === 'kenams' ? kenams.userId : bots.find((b) => b.key === k)?.userId)).filter(Boolean);
     const g = await ack(sockets[owner.key], 'group:create', { title, memberIds }).catch((e) => ({ error: e.message }));
     if (!g?.ok || !g?.conversationId) { console.log(`  ! "${title}" création: ${g?.error ?? 'refusé'}`); return; }
     for (const k of [...memberKeys]) {
@@ -205,8 +230,10 @@ async function main() {
     }
     console.log(`  ✓ "${title}" (${owner.displayName} + ${memberKeys.length} membres)`);
   }
-  await ensureGroup(bots[0], 'K-ssenger — Test 🧪', ['karim', 'chloe', 'fatou', 'hugo', 'kenams']);
-  await ensureGroup(bots[5], 'KAH Digital 🌍', ['ines', 'malik', 'sofia', 'kenams']);
+  const leaOwner = bots.find((b) => b.key === 'lea') ?? bots[0];
+  await ensureGroup(leaOwner, 'K-ssenger — Test 🧪', ['karim', 'chloe', 'fatou', 'hugo', 'kenams']);
+  const hugoOwner = bots.find((b) => b.key === 'hugo');
+  if (hugoOwner) await ensureGroup(hugoOwner, 'KAH Digital 🌍', ['ines', 'malik', 'sofia', 'kenams']);
 
   console.log('\nWizz / K-Pulse :');
   const pulses = [
@@ -214,14 +241,15 @@ async function main() {
   ];
   for (const [from, to] of pulses) {
     if (!sockets[from]) continue;
-    const toId = to === 'kenams' ? kenams.userId : bots.find((b) => b.key === to).userId;
+    const toId = to === 'kenams' ? kenams.userId : bots.find((b) => b.key === to)?.userId;
+    if (!toId) continue;
     const r = await ack(sockets[from], 'kpulse:send', { recipientId: toId, variant: 'classic' }).catch((e) => ({ error: e.message }));
     console.log(r?.ok ? `  ✓ ${from} → ${to}` : `  ~ ${from} → ${to} (${r?.error ?? 'refusé'})`);
     await sleep(250);
   }
 
   console.log('\nMoments (best effort) :');
-  for (const b of [bots[0], bots[4], bots[5]]) {
+  for (const b of [bots[0], bots[1]].filter(Boolean)) {
     const m = await b.client.from('moments').insert({
       author_id: b.userId, kind: 'text',
       caption: `${b.displayName.split(' ')[0]} teste K-ssenger 🚀`,

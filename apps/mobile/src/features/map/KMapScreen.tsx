@@ -321,7 +321,7 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   pin: { fontSize: 44 },
   subtitle: { color: palette.inkSoft, textAlign: 'center', marginTop: spacing.sm, lineHeight: 19, maxWidth: 420 },
   ghost: { marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.md, backgroundColor: palette.ink },
-  ghostText: { color: palette.white, fontWeight: '900' },
+  ghostText: { color: palette.surface, fontWeight: '900' },
   disabled: { opacity: 0.45 },
   notice: { color: palette.azureDeep, fontWeight: '700', textAlign: 'center', marginTop: spacing.md },
   section: { marginTop: spacing.lg },

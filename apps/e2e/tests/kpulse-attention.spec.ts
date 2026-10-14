@@ -32,6 +32,10 @@ test('returning to the app restores the browser title after a K-Pulse', async ({
   await expect(page).toHaveTitle(originalTitle, { timeout: 2500 });
   await page.screenshot({ path: testInfo.outputPath('kpulse-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
+  // The notice lives in the Contacts screen state and the desktop→mobile
+  // switch remounts that screen, so the first notice may already be gone.
+  // Deliver a fresh pulse to assert the mobile layout renders it.
+  recipient!.send('42["kpulse:receive",{}]');
   await expect(page.getByText('⚡ K-Pulse reçu !', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('kpulse-mobile.png') });
   // Removing the notice's screen must also remove its title timer/listener.

@@ -543,7 +543,7 @@ export function AuthScreen() {
             <View style={styles.trust}>
               <Text style={styles.trustLock}>🔒</Text>
               <Text style={styles.trustText}>
-                Le chiffrement de bout en bout n’est pas encore disponible dans cette version.
+                Connexion sécurisée (TLS). Le chiffrement de bout en bout s’active entre deux appareils K-ssenger initialisés.
               </Text>
             </View>
 

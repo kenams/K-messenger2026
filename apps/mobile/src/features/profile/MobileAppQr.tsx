@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { radius, spacing, type Palette, type TypeTokens } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -19,6 +19,27 @@ export const APK_DOWNLOAD_URL = 'https://k-ssenger.expo.app/kssenger-latest.apk'
  * and, once logged in, from the Me screen — no need to sign out to find it again. */
 export function MobileAppQr() {
   const { styles, colors } = useThemedStyles();
+  const { width } = useWindowDimensions();
+  // On a phone-sized browser the QR code would have to be scanned by the very
+  // device that is showing it — offer the download directly instead.
+  if (width < 520) {
+    return (
+      <View style={styles.panel}>
+        <View style={styles.copy}>
+          <Text style={styles.title}>📱 App Android K-ssenger</Text>
+          <Text style={styles.text}>Télécharge l’app et connecte-toi avec le même e-mail et mot de passe pour retrouver tes conversations.</Text>
+          <TouchableOpacity
+            accessibilityRole="link"
+            accessibilityLabel="Télécharger l’app Android K-ssenger"
+            style={styles.download}
+            onPress={() => { void Linking.openURL(APK_DOWNLOAD_URL); }}
+          >
+            <Text style={styles.downloadText}>Télécharger l’app Android</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.panel}>
       <View style={styles.codeShell}>
@@ -41,6 +62,8 @@ function createStyles(palette: Palette, typo: TypeTokens) {
   copy: { flex: 1, gap: 4 },
   title: { ...typo.meta, fontWeight: '800', color: palette.ink },
   text: { ...typo.micro, color: palette.inkSoft, lineHeight: 15 },
+  download: { marginTop: spacing.sm, alignSelf: 'flex-start', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.md, backgroundColor: palette.azure },
+  downloadText: { ...typo.meta, fontWeight: '800', color: palette.inkOnAzure },
   });
 }
 
