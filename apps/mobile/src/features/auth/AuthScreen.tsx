@@ -9,7 +9,7 @@ import { brandGradient, elevation, layout, radius, spacing, type Palette, type T
 import { useTheme } from '../../theme/ThemeProvider';
 import { MobileAppQr } from '../profile/MobileAppQr';
 
-type Mode = 'login' | 'signup';
+type Mode = 'login' | 'signup' | 'verify';
 
 function BrandMark({ size = 76 }: { size?: number }) {
   const { styles } = useThemedStyles();
@@ -84,6 +84,19 @@ export function AuthScreen() {
   // showing a second identifier field on the login tab.
   const [showResetField, setShowResetField] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  // Set once signUp() reports verification is required (no session yet) —
+  // the code screen re-sends/verifies against this, not the live `email`
+  // field, so it can't be edited out from under an in-flight verification.
+  const [verifyEmail, setVerifyEmail] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  React.useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   // Mirrors the DB constraint (neon/migrations/0001_v1_core.sql:
@@ -93,6 +106,8 @@ export function AuthScreen() {
   const usernameValid = /^[a-z0-9._]{3,32}$/.test(normalizedUsername);
   const identifierValid = mode === 'login' ? usernameValid : emailValid;
   const canSubmit = identifierValid && password.length >= 8 && !busy && isBackendConfigured;
+  const codeValid = /^\d{4,8}$/.test(verifyCode.trim());
+  const canVerify = codeValid && !busy && isBackendConfigured;
 
   const setModeSafe = (next: Mode) => { setMode(next); setError(''); setNotice(''); setEmailTouched(false); setShowResetField(false); };
 
@@ -162,8 +177,25 @@ export function AuthScreen() {
         }
       } else {
         const { data, error: authError } = await backend.auth.signUp({ email: normalizedEmail, password });
-        if (authError) setError(signupErrorMessage(authError));
-        else if (!data.session) setNotice('Compte créé. Confirme ton e-mail pour te connecter.');
+        // The Neon Auth Supabase-compat adapter always fetches a session right
+        // after sign-up and THROWS "session_not_found" if none exists yet —
+        // it has no concept of "signed up, pending email verification" (unlike
+        // real Supabase, which returns data.session===null without an error
+        // in that case). With Verify at Sign-up ON, this is the ONLY way the
+        // adapter can report a successful sign-up that's awaiting a code, so
+        // this exact code is treated as success here, not a failure. Verified
+        // directly against the raw endpoint 2026-09-28: sign-up/email itself
+        // returns 200 with {token:null, user:{emailVerified:false,...}} —
+        // the account IS created, the adapter's own follow-up getSession()
+        // call is what throws.
+        const pendingVerification = authError && (authError as { code?: string }).code === 'session_not_found';
+        if (authError && !pendingVerification) setError(signupErrorMessage(authError));
+        else if (pendingVerification || !data.session) {
+          setVerifyEmail(normalizedEmail);
+          setVerifyCode('');
+          setResendCooldown(30);
+          setMode('verify');
+        }
         else if (Platform.OS === 'web' && typeof window !== 'undefined') {
           window.location.reload();
           return;
@@ -183,6 +215,56 @@ export function AuthScreen() {
       ) + `\n[détail: ${detail}]`);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const verifyEmailCode = async () => {
+    if (!canVerify) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const backend = getBackend();
+      const { data, error: authError } = await backend.auth.verifyOtp({
+        email: verifyEmail,
+        token: verifyCode.trim(),
+        type: 'signup',
+      });
+      if (authError) {
+        setError('Code incorrect ou expiré. Vérifie le code reçu par e-mail, ou renvoie-en un nouveau.');
+        return;
+      }
+      if (data.session && Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.reload();
+        return;
+      }
+      if (data.session) notifyAuthStateMayHaveChanged();
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      setError(`Vérification impossible pour le moment. Réessaie.\n[détail: ${detail}]`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resendVerificationCode = async () => {
+    if (resendBusy || resendCooldown > 0) return;
+    setResendBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const backend = getBackend();
+      const { error: authError } = await backend.auth.resend({ type: 'signup', email: verifyEmail });
+      if (authError) setError('Impossible de renvoyer le code pour le moment. Réessaie dans un instant.');
+      else {
+        setNotice('Nouveau code envoyé.');
+        setResendCooldown(30);
+      }
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      setError(`Impossible de renvoyer le code pour le moment.\n[détail: ${detail}]`);
+    } finally {
+      setResendBusy(false);
     }
   };
 
@@ -229,6 +311,79 @@ export function AuthScreen() {
             <Text style={styles.warning}>Aucune base d’un autre projet ne sera utilisée.</Text>
           </View>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (mode === 'verify') {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        <View style={styles.wash} pointerEvents="none" />
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={[styles.scroll, compact && styles.scrollCompact]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <View style={[styles.card, compact && styles.cardCompact]}>
+              <BrandMark size={compact ? 52 : 76} />
+              <Text style={styles.kicker}>K · SSENGER</Text>
+              <Text style={styles.title}>Confirme ton e-mail</Text>
+              <Text style={styles.lede}>On a envoyé un code à {verifyEmail}. Saisis-le ci-dessous pour activer ton compte.</Text>
+
+              <View style={styles.form}>
+                <AuthField
+                  icon="🔢"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  placeholder="Code reçu par e-mail"
+                  accessibilityLabel="Code de vérification"
+                  value={verifyCode}
+                  onChangeText={setVerifyCode}
+                  onSubmitEditing={() => void verifyEmailCode()}
+                  returnKeyType="go"
+                  maxLength={8}
+                />
+
+                {!!error && <View style={styles.banner}><Text style={styles.bannerText}>{error}</Text></View>}
+                {!!notice && <View style={[styles.banner, styles.bannerOk]}><Text style={[styles.bannerText, styles.bannerTextOk]}>{notice}</Text></View>}
+
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  activeOpacity={0.9}
+                  disabled={!canVerify}
+                  onPress={() => void verifyEmailCode()}
+                  style={[styles.ctaShell, !canVerify && styles.ctaDisabled]}
+                >
+                  <LinearGradient colors={brandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta} pointerEvents="none">
+                    {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.ctaText}>Confirmer</Text>}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={resendBusy || resendCooldown > 0}
+                  onPress={() => void resendVerificationCode()}
+                  style={styles.forgotLink}
+                  hitSlop={6}
+                >
+                  <Text style={styles.forgotLinkText}>
+                    {resendBusy ? 'Envoi en cours…' : resendCooldown > 0 ? `Renvoyer le code (${resendCooldown}s)` : 'Renvoyer le code'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => { setModeSafe('login'); setVerifyEmail(''); setVerifyCode(''); }}
+                  style={styles.forgotLink}
+                  hitSlop={6}
+                >
+                  <Text style={styles.forgotLinkText}>← Retour à la connexion</Text>
+                </Pressable>
+              </View>
+            </View>
+            <Text style={styles.foot}>K-ssenger — édition Lumière · une application KAH Digital</Text>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -340,6 +495,26 @@ export function AuthScreen() {
               )}
               {mode === 'signup' && emailTouched && email.length > 0 && !emailValid && (
                 <Text accessibilityRole="alert" style={styles.hint}>Saisis une adresse e-mail valide, par exemple nom@exemple.fr.</Text>
+              )}
+              {mode === 'signup' && (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setEmailTouched(true);
+                    if (!emailValid) {
+                      setError('Saisis d’abord l’adresse e-mail utilisée à l’inscription.');
+                      return;
+                    }
+                    setError('');
+                    setVerifyEmail(email.trim().toLowerCase());
+                    setVerifyCode('');
+                    setMode('verify');
+                  }}
+                  style={styles.forgotLink}
+                  hitSlop={6}
+                >
+                  <Text style={styles.forgotLinkText}>J’ai déjà un code de confirmation</Text>
+                </Pressable>
               )}
               {mode === 'login' && emailTouched && username.length > 0 && !usernameValid && (
                 <Text accessibilityRole="alert" style={styles.hint}>Ton pseudo fait 3 à 32 caractères (lettres minuscules, chiffres, points, underscores).</Text>
