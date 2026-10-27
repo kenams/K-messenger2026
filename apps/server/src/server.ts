@@ -1014,12 +1014,14 @@ setInterval(() => {
 }, 60_000).unref();
 
 // K-Statut TTL is a real deletion, not just a filtered read: hard-purge rows
-// past expires_at on the same cadence as the rate-limiter cleanup above.
+// past expires_at. Reads already filter on expires_at, so the purge is only
+// housekeeping: every 30 min, not every minute, so Neon can scale to zero
+// (a 60 s query kept compute awake 24/7 and exhausted the free 100 CU-hrs).
 setInterval(() => {
   void purgeExpiredKStatuses().catch((error) => {
     logger.warn('k_status_purge_failed', { error: error instanceof Error ? error.message : 'unknown' });
   });
-}, 60_000).unref();
+}, 30 * 60_000).unref();
 
 httpServer.listen(config.PORT, () => {
   logger.info('server_started', { port: config.PORT });
