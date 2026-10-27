@@ -933,7 +933,7 @@ function MeScreen({ profile, userAge, onEdit, onAccountData, onPrivacy, onGroups
       )}
       <Text style={styles.profileFoot}>Âge déclaré : {userAge} ans · contrôle de confidentialité actif</Text>
       <Text style={styles.profileFoot}>{appVersionLabel()}</Text>
-      <Text style={styles.profileFoot}>Une application KAH Digital</Text>
+      <Text style={styles.profileFoot}>Une application KAH Digital Studio</Text>
     </ScrollView>
   );
 }

@@ -384,7 +384,7 @@ export function AuthScreen() {
                 </Pressable>
               </View>
             </View>
-            <Text style={styles.foot}>K-ssenger — édition Lumière · une application KAH Digital</Text>
+            <Text style={styles.foot}>K-ssenger — édition Lumière · une application KAH Digital Studio</Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -557,7 +557,7 @@ export function AuthScreen() {
             )}
           </View>
 
-          <Text style={styles.foot}>K-ssenger — édition Lumière · une application KAH Digital</Text>
+          <Text style={styles.foot}>K-ssenger — édition Lumière · une application KAH Digital Studio</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

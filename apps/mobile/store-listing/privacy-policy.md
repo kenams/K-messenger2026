@@ -1,6 +1,6 @@
 # Politique de confidentialité — K-ssenger
 
-**Éditeur :** KAH Digital
+**Éditeur :** KAH Digital Studio
 **Contact :** contact@kah-digital.ch
 **Dernière mise à jour :** 24 septembre 2026
 
@@ -10,7 +10,7 @@ K-ssenger est une application de messagerie personnelle. Les conversations
 privées et de groupe sont chiffrées de bout en bout (protocole de type
 Signal) : le contenu de vos messages est chiffré sur votre appareil avant
 d'être transmis, et n'est déchiffré que sur l'appareil du ou des
-destinataires. KAH Digital n'a pas techniquement accès au contenu de vos
+destinataires. KAH Digital Studio n'a pas techniquement accès au contenu de vos
 messages.
 
 ## Données collectées
