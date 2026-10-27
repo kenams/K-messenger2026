@@ -13,7 +13,7 @@ export const LIVEKIT_THEME_STYLE_ID = 'kssenger-livekit-theme';
 
 export function buildLiveKitThemeCss(dark: boolean): string {
   // Pulled straight from theme/tokens.ts (darkPalette / lightPalette) so this
-  // never drifts from the app's own KAH Digital palette.
+  // never drifts from the app's own KAH Digital Studio palette.
   const c = dark
     ? {
         bg: '#090C14', // navyDeep

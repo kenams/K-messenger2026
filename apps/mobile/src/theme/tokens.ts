@@ -1,7 +1,7 @@
 /**
- * K-ssenger design tokens — "MSN-2026, édition KAH Digital".
+ * K-ssenger design tokens — "MSN-2026, édition KAH Digital Studio".
  *
- * The nostalgic buddy-list warmth, rebuilt in KAH Digital's own house
+ * The nostalgic buddy-list warmth, rebuilt in KAH Digital Studio's own house
  * palette: antique gold as the primary interactive colour (matching
  * kah-digital.ch's #d6b36a accent), a warm ivory-porcelain surface instead
  * of cool chalk-blue, KAH's teal as the secondary "now playing" signature,
@@ -29,7 +29,7 @@ export const lightPalette = {
   inkFaint: '#8C8172',
   inkOnAzure: '#FFF8EC',
 
-  // Deep navy-black — the KAH Digital emblem's own signature card colour.
+  // Deep navy-black — the KAH Digital Studio emblem's own signature card colour.
   // Used for header bars and the brand mark in both themes: it already
   // reads as "dark" against ivory, and stays exactly as dark against the
   // dark-mode background, so it never needs its own theme variant.
@@ -94,7 +94,7 @@ export type Palette = { [K in keyof typeof lightPalette]: string };
 /**
  * Dark mode — the ACTUAL kah-digital.ch dark theme, root CSS vars taken
  * directly from the live site: --background #0a0908, --foreground #f5f1e8,
- * --accent #d6b36a, --muted #b7b1a5. This is the reference KAH Digital
+ * --accent #d6b36a, --muted #b7b1a5. This is the reference KAH Digital Studio
  * identity, not an invented variant — the ivory "light" theme is the app's
  * own stylistic choice, but dark mode must match the brand exactly. Every
  * key mirrors `lightPalette` exactly (enforced by `Palette`).
